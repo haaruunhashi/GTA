@@ -1,0 +1,19 @@
+{
+  "name": "gta",
+  "version": "1.0.0",
+  "description": "A top-down, GTA-style open-world browser game where **every character is a faceless mannequin** — smooth blank beige heads, no eyes, no mouth, nothing. You, the pedestrians, the cops, the soldiers: nobody here has a face. But they're not all the same man — the streets are full of different faceless men: suits, hoodies, hi-vis workers, tracksuits, joggers, all with different builds and walks.",
+  "main": "game.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "http://local_proxy@127.0.0.1:41729/git/haaruunhashi/GTA"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "three": "^0.160.0"
+  }
+}

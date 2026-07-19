@@ -1,67 +1,77 @@
-# Faceless City
+# Faceless City 3D
 
-A top-down, GTA-style open-world browser game where **every character is a faceless mannequin** —
-smooth blank beige heads, no eyes, no mouth, nothing. You, the pedestrians, the cops, the
-soldiers: nobody here has a face. But they're not all the same man — the streets are full of
-different faceless men: suits, hoodies, hi-vis workers, tracksuits, joggers, all with different
-builds and walks.
+A third-person **3D open-world GTA-style game** (Three.js/WebGL) where **every character is a
+faceless mannequin** — smooth blank heads, no eyes, no mouth, nothing. Built as a full
+sandbox with PS3-era depth: free roam, missions, property, shops, a military base, an
+airport, underground tunnels, and a mountain guerrilla war. **Progress saves automatically**
+(localStorage): money, weapons, houses, vehicles, and mission history survive between sessions.
 
-No installation, no build step, no dependencies. Open `index.html` in a browser and play.
+Open `index.html` in a browser. The original top-down 2D version is kept at `classic.html`.
 
-## Three zones, one world
+## The world (6 km × 4 km)
 
-**The city (west)** — classic GTA free roam:
-- Do what you like: carjack traffic, punch civilians, outrun a 5-star wanted level, lose the heat.
-- Varied traffic — sedans, taxis, vans, pickups, muscle cars, sports coupes — each with its own
-  speed and handling.
-- **Regular GTA missions** from blue street markers: a timed *Courier Run*, a *Repo Man* car
-  theft (steal a marked coupe and deliver it unscratched), and a *Getaway Driver* job with the
-  law already on you.
+| Region | What's there |
+|---|---|
+| **Faceless City** | Downtown towers with lit windows, a grid of streets with traffic and varied faceless pedestrians, six shops, three buyable houses, mission givers |
+| **Fort Kubra** | Walled military base. Restricted: trespass draws an armed garrison; the heist mission sends you in to steal a T-80 |
+| **International Airport** | 1.5 km runway, terminal, hangars, and Skyline Aviation — buy your own helicopter or plane |
+| **The Outfield** | No-man's-land of camps and craters — wave-based tactical ops |
+| **Sierra Negra** | Real-elevation mountains (140 m+ peaks), pine forest, winding trails — the guerrilla war: gunships, tanks, Stinger lock-ons |
+| **Tunnels** | Two underground road tunnels. The law can't see you down there — wanted stars burn off fast |
 
-**The Outfield (middle)** — tactical wave-based operations at fortified camps: rifle combat,
-cover that actually blocks bullets, hostiles that flank between volleys. Three ops, rising pay.
+## The arsenal — every US weapon has its Soviet counterpart
 
-**Sierra Negra (east)** — the mountain war. Ridges, pine forest, rock crags, winding trails —
-and three guerrilla missions fought Afghan-style from the treeline:
-- ***Stinger Ridge*** — lock the Stinger launcher onto orbiting gunships and bring all three down.
-- ***Convoy Ambush*** — tanks with infantry escort. Rockets kill armor; rifles don't.
-- ***Mountain Storm*** — gunships, armor and infantry all at once.
+| Class | US | Soviet |
+|---|---|---|
+| Pistol | M1911 | Makarov PM |
+| Shotgun | SPAS-12 | Saiga-12 |
+| Rifle | M4A1 | AK-47 |
+| Sniper | M24 SWS | Dragunov SVD |
+| MG | M60 | PKM |
+| Rocket | M72 LAW | RPG-7 |
+| Anti-air | FIM-92 Stinger | 9K32 Strela-2 |
 
-Tanks track you with independent turrets and main-gun shells; helicopters orbit and strafe;
-the Stinger needs a held lock before it homes. Ammo crates at each site resupply rockets.
+The pairs trade off honestly (AK hits harder, M4 shoots straighter; SVD is faster, M24 hits
+harder). US arms sell at **Liberty Arms** in the city; Soviet arms at the **Sierra Black
+Market**. Higher tiers unlock as your reputation grows.
 
-## Driving
+## Missions (rep + cash, chains unlock)
 
-Hold **Shift** for **nitro**: flames, speed streaks, camera pull-back, and a speedometer that
-climbs past anything traffic can do. Handbrake (Space) lays skid marks through corners. Each
-car class accelerates and grips differently — the sports coupe is the one you want.
+- **City chain**: Courier Run → Repo Man → Getaway Driver → unlocks **Taxi Fares**
+  (repeatable) and the **Street GP** checkpoint race (repeatable, beat 95s)
+- **Outfield ops**: First Contact → Supply Raid → Ghost Protocol (wave combat, cover matters)
+- **Sierra war**: Stinger Ridge (down 3 gunships with locked AA) → Convoy Ambush (rockets
+  kill armor, rifles don't) → Mountain Storm (everything at once)
+- **The Kubra Job**: steal a T-80 from the base under maximum army response and deliver it
+  to the rebels — the tank becomes yours permanently
+- **Canyon Run**: aerial ring race over the mountains (aircraft required, repeatable)
+- **30 hidden cash stashes** scattered across the world (+rep each)
+
+## Economy & property
+
+Supermarket snacks and body armor; five outfits (same blank head, different cut); six car
+classes at Prestige Motors; aircraft at the airport; three houses (Eastside Apartment,
+Downtown Penthouse, Sierra Cabin) that heal you, act as respawn points, and pay rent while
+you play. Owned vehicles respawn with you.
 
 ## Controls
 
-| Input | Action |
-|---|---|
-| WASD / Arrows | Move / drive |
-| E | Enter, exit, or carjack a vehicle |
-| Shift | Sprint (on foot) / **nitro** (driving) |
-| Space | Punch / handbrake |
-| Mouse | Aim + shoot (east of the city limits) |
-| R | Reload |
-| Q | Switch rifle ↔ Stinger (mountains) |
+Click to capture the mouse (aim). **WASD** move/drive · **E** vehicles · **F** shops/houses ·
+**Shift** sprint/nitro · **Space** handbrake / heli up · **Ctrl** heli down · **LMB** fire ·
+**R** reload · **1-9 / wheel** weapons · hold aim on armor/gunships to lock AA rockets.
 
-## Design notes
+## Design constraints
 
-- Everyone is a faceless man — identical blank heads, different clothes, builds and jobs.
-- **No music** — by design. All audio is procedural WebAudio sound effects: engines, sirens,
-  gunfire, explosions, cash.
-- No drugs, no vice content — the city's crimes are cars, fists and chases; the war is fought
-  against armed soldiers, tanks and gunships.
-- Everything is drawn procedurally on one `<canvas>`: dusk-lit streets with lit windows and
-  fake-3D parallax buildings, crosswalks, headlight cones, body-sheen on cars, screen-shake
-  explosions, and elevation-shaded mountains.
-- The rifle stays holstered inside city limits — gunplay belongs to the war zones.
+No music (procedural SFX only), no female characters (every inhabitant is the same blank-faced
+man in different clothes and builds), no drugs or vice content. Fights are against armed
+combatants — soldiers, tanks, gunships — plus classic GTA chaos.
 
-## Files
+## Architecture
 
-- `index.html` — shell + intro screen
-- `game.js` — the whole engine (~2,000 lines: map gen, traffic AI, cops, ped variety,
-  missions, squad AI, tanks, helicopters, missiles, ballistics, HUD)
+- `core.js` — the entire simulation, dependency-free: world gen, physics, AI, ballistics,
+  missions, economy, saves. Runs in Node for testing: `node tests/test-core.js`
+  (63 behavior assertions: heli flight, tunnel evasion, AA locks, the tank heist, save
+  round-trips, weapon pairing…).
+- `game3d.js` — Three.js renderer, camera, input, HUD, shop menus.
+- `vendor/three.min.js` — Three.js r160, vendored.
+- `classic.html` + `game.js` — the original 2D top-down version, kept playable.

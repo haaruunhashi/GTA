@@ -1,0 +1,987 @@
+/* FACELESS CITY 3D — Three.js renderer + input + HUD over the FCCore simulation. */
+(() => {
+'use strict';
+const C = window.FCCore, S = C.S, U = C.utils;
+const T3 = window.THREE;
+const TAU = Math.PI * 2;
+const clamp = U.clamp;
+
+// ---------- renderer / scene ----------
+const canvas = document.getElementById('game');
+const renderer = new T3.WebGLRenderer({ canvas, antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.6));
+const scene = new T3.Scene();
+const DUSK = 0x1d2438;
+scene.background = new T3.Color(0x2a3352);
+scene.fog = new T3.Fog(0x2a3352, 180, 1500);
+const camera = new T3.PerspectiveCamera(70, 1, 0.1, 3000);
+function resize() {
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+}
+window.addEventListener('resize', resize); resize();
+
+scene.add(new T3.HemisphereLight(0x54689e, 0x38342c, 1.35));
+scene.add(new T3.AmbientLight(0x4a5470, 0.85));
+const moon = new T3.DirectionalLight(0x9fb2de, 1.15);
+moon.position.set(-0.4, 1, 0.3);
+scene.add(moon);
+
+// ---------- shared materials / textures ----------
+function canvasTex(w, h, fn) {
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  fn(c.getContext('2d'), w, h);
+  const t = new T3.CanvasTexture(c);
+  t.wrapS = t.wrapT = T3.RepeatWrapping;
+  return t;
+}
+const winTex = canvasTex(128, 256, (g, w, h) => {
+  g.fillStyle = '#353244'; g.fillRect(0, 0, w, h);
+  for (let y = 8; y < h - 8; y += 18) for (let x = 8; x < w - 8; x += 16) {
+    const lit = Math.random() < 0.32;
+    g.fillStyle = lit ? (Math.random() < 0.5 ? '#ffd9a0' : '#c8d8f0') : '#141824';
+    g.fillRect(x, y, 9, 11);
+  }
+});
+const winTex2 = canvasTex(128, 256, (g, w, h) => {
+  g.fillStyle = '#4a4438'; g.fillRect(0, 0, w, h);
+  for (let y = 10; y < h - 8; y += 22) for (let x = 8; x < w - 8; x += 18) {
+    g.fillStyle = Math.random() < 0.25 ? '#ffd9a0' : '#181c26';
+    g.fillRect(x, y, 11, 13);
+  }
+});
+const roadTex = canvasTex(64, 256, (g, w, h) => {
+  g.fillStyle = '#23262e'; g.fillRect(0, 0, w, h);
+  g.fillStyle = '#b8a94a';
+  for (let y = 0; y < h; y += 64) g.fillRect(w / 2 - 1.5, y, 3, 30);
+  g.fillStyle = 'rgba(255,255,255,0.25)';
+  g.fillRect(2, 0, 2, h); g.fillRect(w - 4, 0, 2, h);
+});
+const M = {
+  asphalt: new T3.MeshLambertMaterial({ color: 0x23262e }),
+  sidewalk: new T3.MeshLambertMaterial({ color: 0x3d414c }),
+  grass: new T3.MeshLambertMaterial({ color: 0x2e4331 }),
+  dirt: new T3.MeshLambertMaterial({ color: 0x4a4034 }),
+  concrete: new T3.MeshLambertMaterial({ color: 0x515560 }),
+  runway: new T3.MeshLambertMaterial({ color: 0x2b2e35 }),
+  wall: new T3.MeshLambertMaterial({ color: 0x565048 }),
+  roof: new T3.MeshLambertMaterial({ color: 0x2c2f3a }),
+  skin: new T3.MeshLambertMaterial({ color: 0xd9c6ad }),
+  dark: new T3.MeshLambertMaterial({ color: 0x1d2027 }),
+  glassDark: new T3.MeshLambertMaterial({ color: 0x141a26 }),
+  hazard: new T3.MeshLambertMaterial({ color: 0xb8a94a })
+};
+
+// ---------- ground ----------
+{
+  const g = new T3.PlaneGeometry(C.WORLD.W, C.WORLD.D);
+  const base = new T3.Mesh(g, M.dirt);
+  base.rotation.x = -Math.PI / 2;
+  base.position.set(C.WORLD.W / 2, -0.25, C.WORLD.D / 2);
+  scene.add(base);
+  // city base = asphalt
+  const cw = C.WORLD.CITY;
+  const cbase = new T3.Mesh(new T3.PlaneGeometry(cw.x1 - cw.x0 + 60, cw.z1 - cw.z0 + 60), M.asphalt);
+  cbase.rotation.x = -Math.PI / 2;
+  cbase.position.set((cw.x0 + cw.x1) / 2, -0.12, (cw.z0 + cw.z1) / 2);
+  scene.add(cbase);
+  // block sidewalks + parks
+  const blockGeo = new T3.PlaneGeometry(C.WORLD.P - C.WORLD.RW, C.WORLD.P - C.WORLD.RW);
+  for (let x = cw.x0 + C.WORLD.RW; x + (C.WORLD.P - C.WORLD.RW) <= cw.x1; x += C.WORLD.P)
+    for (let z = cw.z0 + C.WORLD.RW; z + (C.WORLD.P - C.WORLD.RW) <= cw.z1; z += C.WORLD.P) {
+      const isPark = C.parks.some(p => Math.abs(p.x0 - x) < 2 && Math.abs(p.z0 - z) < 2);
+      const m = new T3.Mesh(blockGeo, isPark ? M.grass : M.sidewalk);
+      m.rotation.x = -Math.PI / 2;
+      m.position.set(x + (C.WORLD.P - C.WORLD.RW) / 2, -0.05, z + (C.WORLD.P - C.WORLD.RW) / 2);
+      scene.add(m);
+    }
+  // road center-line strips
+  const roadMat = new T3.MeshLambertMaterial({ map: roadTex });
+  roadTex.repeat.set(1, 20);
+  for (let x = cw.x0; x <= cw.x1; x += C.WORLD.P) {
+    const m = new T3.Mesh(new T3.PlaneGeometry(C.WORLD.RW, cw.z1 - cw.z0), roadMat);
+    m.rotation.x = -Math.PI / 2;
+    m.position.set(x + C.WORLD.RW / 2, -0.02, (cw.z0 + cw.z1) / 2);
+    scene.add(m);
+  }
+  for (let z = cw.z0; z <= cw.z1; z += C.WORLD.P) {
+    const m = new T3.Mesh(new T3.PlaneGeometry(C.WORLD.RW, cw.x1 - cw.x0), roadMat);
+    m.rotation.x = -Math.PI / 2; m.rotation.z = Math.PI / 2;
+    m.position.set((cw.x0 + cw.x1) / 2, -0.02, z + C.WORLD.RW / 2);
+    scene.add(m);
+  }
+  // fort + airport pads
+  const f = C.WORLD.FORT;
+  const fpad = new T3.Mesh(new T3.PlaneGeometry(f.x1 - f.x0, f.z1 - f.z0), M.concrete);
+  fpad.rotation.x = -Math.PI / 2; fpad.position.set((f.x0 + f.x1) / 2, -0.05, (f.z0 + f.z1) / 2);
+  scene.add(fpad);
+  const a = C.WORLD.AIRPORT;
+  const apad = new T3.Mesh(new T3.PlaneGeometry(a.x1 - a.x0, a.z1 - a.z0), M.concrete);
+  apad.rotation.x = -Math.PI / 2; apad.position.set((a.x0 + a.x1) / 2, -0.06, (a.z0 + a.z1) / 2);
+  scene.add(apad);
+  const rw = new T3.Mesh(new T3.PlaneGeometry(1500, 40), M.runway);
+  rw.rotation.x = -Math.PI / 2; rw.position.set(2050, -0.03, 3550);
+  scene.add(rw);
+  for (let i = 0; i < 14; i++) {
+    const stripe = new T3.Mesh(new T3.PlaneGeometry(30, 2), new T3.MeshBasicMaterial({ color: 0xcfd4dd }));
+    stripe.rotation.x = -Math.PI / 2; stripe.position.set(1400 + i * 100, 0.02, 3550);
+    scene.add(stripe);
+  }
+  // Sierra heightfield
+  const seg = 110;
+  const tg = new T3.PlaneGeometry(2000, C.WORLD.D, seg, seg);
+  tg.rotateX(-Math.PI / 2);
+  const pos = tg.attributes.position;
+  const cols = [];
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i) + 5100, z = pos.getZ(i) + C.WORLD.D / 2;
+    const h = Math.max(0, C.groundY(clamp(x, 4105, 5995), clamp(z, 5, 3995)));
+    pos.setY(i, h - 0.3);
+    const c = new T3.Color();
+    if (h > 150) c.setHex(0xb2b7bf);
+    else if (h > 90) c.setHex(0x767a80);
+    else if (h > 35) c.setHex(0x565e4e);
+    else c.setHex(0x4a5244);
+    cols.push(c.r, c.g, c.b);
+  }
+  tg.setAttribute('color', new T3.Float32BufferAttribute(cols, 3));
+  tg.computeVertexNormals();
+  const terr = new T3.Mesh(tg, new T3.MeshLambertMaterial({ vertexColors: true }));
+  terr.position.set(5100, 0, C.WORLD.D / 2);
+  scene.add(terr);
+  // tunnels: trench + roof + portals
+  for (const t of C.TUNNELS) {
+    const len = t.x1 - t.x0;
+    const roof = new T3.Mesh(new T3.BoxGeometry(len, 1.6, t.w + 6), M.asphalt);
+    roof.position.set((t.x0 + t.x1) / 2, -0.8, t.z);
+    scene.add(roof);
+    const floor = new T3.Mesh(new T3.BoxGeometry(len + 2 * t.ramp, 1, t.w), M.asphalt);
+    floor.position.set((t.x0 + t.x1) / 2, t.depth - 0.5, t.z);
+    scene.add(floor);
+    for (const s of [-1, 1]) {
+      const wallM = new T3.Mesh(new T3.BoxGeometry(len + 2 * t.ramp, 10, 1), M.wall);
+      wallM.position.set((t.x0 + t.x1) / 2, t.depth + 5, t.z + s * (t.w / 2 + 0.5));
+      scene.add(wallM);
+    }
+    for (let x = t.x0 + 20; x < t.x1; x += 40) {
+      const lamp = new T3.Mesh(new T3.BoxGeometry(1.5, 0.3, 0.6), new T3.MeshBasicMaterial({ color: 0xffd9a0 }));
+      lamp.position.set(x, -1.8, t.z);
+      scene.add(lamp);
+    }
+    for (const end of [t.x0 - t.ramp, t.x1 + t.ramp]) {
+      const portal = new T3.Mesh(new T3.BoxGeometry(3, 3, t.w + 8), M.hazard);
+      portal.position.set(end, 1.2, t.z);
+      scene.add(portal);
+    }
+  }
+}
+
+// ---------- buildings (instanced, windowed) ----------
+{
+  const geo = new T3.BoxGeometry(1, 1, 1);
+  geo.translate(0, 0.5, 0);
+  const mats = {
+    tower: new T3.MeshLambertMaterial({ map: winTex, emissive: 0xffffff, emissiveMap: winTex, emissiveIntensity: 0.55 }),
+    block: new T3.MeshLambertMaterial({ map: winTex2, emissive: 0xffffff, emissiveMap: winTex2, emissiveIntensity: 0.45 }),
+    wall: M.wall, hangar: new T3.MeshLambertMaterial({ color: 0x44503e }),
+    tower2: new T3.MeshLambertMaterial({ color: 0x5c5e63 }),
+    terminal: new T3.MeshLambertMaterial({ map: winTex, emissive: 0xffffff, emissiveMap: winTex, emissiveIntensity: 0.6 })
+  };
+  const groups = {};
+  for (const b of C.buildings) {
+    const k = b.kind === 'tower' && b.h < 30 ? 'block' : (mats[b.kind] ? b.kind : 'block');
+    (groups[k] = groups[k] || []).push(b);
+  }
+  const m4 = new T3.Matrix4();
+  for (const k in groups) {
+    const list = groups[k];
+    const im = new T3.InstancedMesh(geo, mats[k] || mats.block, list.length);
+    list.forEach((b, i) => {
+      m4.makeScale(b.x1 - b.x0, b.h, b.z1 - b.z0);
+      m4.setPosition((b.x0 + b.x1) / 2, 0, (b.z0 + b.z1) / 2);
+      im.setMatrixAt(i, m4);
+    });
+    im.instanceMatrix.needsUpdate = true;
+    scene.add(im);
+    // flat roofs
+    const rim = new T3.InstancedMesh(new T3.BoxGeometry(1, 0.5, 1), M.roof, list.length);
+    list.forEach((b, i) => {
+      m4.makeScale(b.x1 - b.x0 + 0.6, 1, b.z1 - b.z0 + 0.6);
+      m4.setPosition((b.x0 + b.x1) / 2, b.h + 0.2, (b.z0 + b.z1) / 2);
+      rim.setMatrixAt(i, m4);
+    });
+    rim.instanceMatrix.needsUpdate = true;
+    scene.add(rim);
+  }
+}
+
+// ---------- props (instanced by type) ----------
+{
+  const defs = {
+    pine: { geo: new T3.ConeGeometry(2.6, 9, 6), mat: new T3.MeshLambertMaterial({ color: 0x24402a }), y: p => p.y + 4.5 },
+    tree: { geo: new T3.SphereGeometry(2.6, 6, 5), mat: new T3.MeshLambertMaterial({ color: 0x2e5236 }), y: p => p.y + 5 },
+    rock: { geo: new T3.IcosahedronGeometry(1.6, 0), mat: new T3.MeshLambertMaterial({ color: 0x555251 }), y: p => p.y + 1 },
+    boulder: { geo: new T3.IcosahedronGeometry(2.6, 0), mat: new T3.MeshLambertMaterial({ color: 0x5d6066 }), y: p => p.y + 1.6 },
+    sandbag: { geo: new T3.BoxGeometry(4.4, 1.2, 1.6), mat: new T3.MeshLambertMaterial({ color: 0x6b5f42 }), y: p => p.y + 0.6 },
+    crate: { geo: new T3.BoxGeometry(2.4, 2, 2.4), mat: new T3.MeshLambertMaterial({ color: 0x5c5346 }), y: p => p.y + 1 },
+    tent: { geo: new T3.CylinderGeometry(0, 5, 3.6, 4), mat: new T3.MeshLambertMaterial({ color: 0x41472f }), y: p => p.y + 1.8 },
+    wreck: { geo: new T3.BoxGeometry(4.6, 1.6, 2.2), mat: new T3.MeshLambertMaterial({ color: 0x3a3532 }), y: p => p.y + 0.8 }
+  };
+  const trunkGeo = new T3.CylinderGeometry(0.35, 0.45, 3, 5);
+  const trunkMat = new T3.MeshLambertMaterial({ color: 0x4a3b28 });
+  const byType = {};
+  for (const p of C.props) (byType[p.type] = byType[p.type] || []).push(p);
+  const m4 = new T3.Matrix4();
+  for (const k in byType) {
+    const d = defs[k]; if (!d) continue;
+    const list = byType[k];
+    const im = new T3.InstancedMesh(d.geo, d.mat, list.length);
+    list.forEach((p, i) => {
+      m4.makeRotationY(p.a || 0);
+      m4.setPosition(p.x, d.y(p), p.z);
+      im.setMatrixAt(i, m4);
+    });
+    im.instanceMatrix.needsUpdate = true;
+    scene.add(im);
+    if (k === 'pine' || k === 'tree') {
+      const tim = new T3.InstancedMesh(trunkGeo, trunkMat, list.length);
+      list.forEach((p, i) => { m4.identity(); m4.setPosition(p.x, p.y + 1.2, p.z); tim.setMatrixAt(i, m4); });
+      tim.instanceMatrix.needsUpdate = true;
+      scene.add(tim);
+    }
+  }
+  // street lamps
+  const poleGeo = new T3.CylinderGeometry(0.12, 0.16, 6, 5);
+  const poleMat = new T3.MeshLambertMaterial({ color: 0x2a2d34 });
+  const bulbGeo = new T3.SphereGeometry(0.4, 6, 5);
+  const bulbMat = new T3.MeshBasicMaterial({ color: 0xffd9a0 });
+  const pim = new T3.InstancedMesh(poleGeo, poleMat, C.lamps.length);
+  const bim = new T3.InstancedMesh(bulbGeo, bulbMat, C.lamps.length);
+  C.lamps.forEach((l, i) => {
+    m4.identity(); m4.setPosition(l.x, 3, l.z); pim.setMatrixAt(i, m4);
+    m4.identity(); m4.setPosition(l.x, 6, l.z); bim.setMatrixAt(i, m4);
+  });
+  pim.instanceMatrix.needsUpdate = true; bim.instanceMatrix.needsUpdate = true;
+  scene.add(pim); scene.add(bim);
+}
+
+// ---------- shop / house / mission markers ----------
+const markerMeshes = [];
+function addMarker(x, z, color, label) {
+  const g = new T3.CylinderGeometry(3.4, 3.4, 0.5, 20, 1, true);
+  const m = new T3.Mesh(g, new T3.MeshBasicMaterial({ color, transparent: true, opacity: 0.65, side: T3.DoubleSide }));
+  m.position.set(x, C.groundY(x, z) + 0.6, z);
+  scene.add(m);
+  markerMeshes.push({ mesh: m, base: C.groundY(x, z) + 0.6 });
+  return m;
+}
+for (const s of C.SHOPS) addMarker(s.x, s.z, 0x79d98c);
+for (const h of C.HOUSES) addMarker(h.x, h.z, 0xd0b25a);
+const missionMarkerRefs = {};
+for (const id in C.MISSIONS) {
+  const def = C.MISSIONS[id];
+  const col = id.startsWith('war') ? 0xff785a : id.startsWith('op') ? 0xffd23f : id === 'heist' ? 0xc05aE8 : 0x5ad0e8;
+  missionMarkerRefs[id] = addMarker(def.marker.x, def.marker.z, col);
+}
+// stash crates (small glints)
+const stashMeshes = C.stashes.map(st => {
+  const m = new T3.Mesh(new T3.BoxGeometry(0.9, 0.9, 0.9), new T3.MeshBasicMaterial({ color: 0x79d98c }));
+  m.position.set(st.x, C.groundY(st.x, st.z) + 0.5, st.z);
+  scene.add(m);
+  return m;
+});
+
+// ---------- faceless man model ----------
+const OUTFIT_BY_ID = {};
+for (const o of C.OUTFITS) OUTFIT_BY_ID[o.id] = o;
+function buildMan(bodyColor, legColor, opts) {
+  opts = opts || {};
+  const g = new T3.Group();
+  const mat = new T3.MeshLambertMaterial({ color: bodyColor });
+  const legMat = new T3.MeshLambertMaterial({ color: legColor });
+  const torso = new T3.Mesh(new T3.BoxGeometry(0.62, 0.72, 0.4), mat);
+  torso.position.y = 1.06; g.add(torso);
+  const legL = new T3.Mesh(new T3.BoxGeometry(0.24, 0.7, 0.28), legMat);
+  legL.position.set(0, 0.35, -0.15); g.add(legL);
+  const legR = legL.clone(); legR.position.z = 0.15; g.add(legR);
+  const armL = new T3.Mesh(new T3.BoxGeometry(0.18, 0.66, 0.2), mat);
+  armL.position.set(0, 1.05, -0.42); g.add(armL);
+  const armR = armL.clone(); armR.position.z = 0.42; g.add(armR);
+  // the head: a smooth blank sphere. no eyes. no mouth. nothing.
+  const head = new T3.Mesh(new T3.SphereGeometry(0.26, 12, 10), M.skin);
+  head.scale.set(0.92, 1.12, 0.92);
+  head.position.y = 1.72; g.add(head);
+  if (opts.vest) {
+    const v = new T3.Mesh(new T3.BoxGeometry(0.68, 0.5, 0.46), new T3.MeshLambertMaterial({ color: opts.vest }));
+    v.position.y = 1.1; g.add(v);
+  }
+  if (opts.hat) {
+    const hcap = new T3.Mesh(new T3.SphereGeometry(0.27, 10, 6, 0, TAU, 0, 1.2), new T3.MeshLambertMaterial({ color: opts.hat }));
+    hcap.position.y = 1.78; g.add(hcap);
+  }
+  const gun = new T3.Mesh(new T3.BoxGeometry(0.9, 0.09, 0.09), M.dark);
+  gun.position.set(0.5, 1.15, 0.12); gun.visible = false; g.add(gun);
+  const tube = new T3.Mesh(new T3.CylinderGeometry(0.09, 0.09, 1.3, 8), new T3.MeshLambertMaterial({ color: 0x6f7a62 }));
+  tube.rotation.z = Math.PI / 2; tube.position.set(0.3, 1.5, 0.1); tube.visible = false; g.add(tube);
+  g.userData = { legL, legR, armL, armR, gun, tube, head };
+  return g;
+}
+function animMan(g, phase, moving, aiming) {
+  const u = g.userData;
+  const s = moving ? Math.sin(phase) * 0.55 : 0;
+  u.legL.rotation.z = s; u.legR.rotation.z = -s;
+  if (!aiming) { u.armL.rotation.z = -s * 0.8; u.armR.rotation.z = s * 0.8; }
+  else { u.armR.rotation.z = 1.2; u.armL.rotation.z = 1.0; }
+}
+
+// ---------- vehicle models ----------
+const CAR_COLORS = [0x7d3b3b, 0x3b5a7d, 0x6e6a52, 0x42425a, 0x7a6a3f, 0x513f5e, 0x3f5e51, 0x8a8578];
+function buildCar(cls, colorSeed) {
+  const g = new T3.Group();
+  const dims = { sedan: [4.4, 1.15, 2], taxi: [4.4, 1.15, 2], van: [5, 1.9, 2.2], pickup: [4.8, 1.2, 2.1], muscle: [4.7, 1.1, 2.05], sports: [4.4, 0.92, 2], cop: [4.5, 1.15, 2], apc: [5.4, 1.8, 2.6] }[cls] || [4.4, 1.15, 2];
+  const col = cls === 'cop' ? 0xe8e8ea : cls === 'taxi' ? 0xd8b23a : CAR_COLORS[(colorSeed * CAR_COLORS.length) | 0];
+  const bodyMat = new T3.MeshLambertMaterial({ color: col });
+  const body = new T3.Mesh(new T3.BoxGeometry(dims[0], dims[1], dims[2]), bodyMat);
+  body.position.y = 0.75; g.add(body);
+  const cabin = new T3.Mesh(new T3.BoxGeometry(dims[0] * 0.5, 0.72, dims[2] * 0.86), M.glassDark);
+  cabin.position.set(-dims[0] * 0.06, 0.75 + dims[1] / 2 + 0.3, 0); g.add(cabin);
+  const wg = new T3.CylinderGeometry(0.42, 0.42, 0.3, 10);
+  wg.rotateX(Math.PI / 2);
+  const wm = new T3.MeshLambertMaterial({ color: 0x14161c });
+  for (const [wx, wz] of [[dims[0] * 0.33, dims[2] / 2], [dims[0] * 0.33, -dims[2] / 2], [-dims[0] * 0.33, dims[2] / 2], [-dims[0] * 0.33, -dims[2] / 2]]) {
+    const w = new T3.Mesh(wg, wm); w.position.set(wx, 0.42, wz); g.add(w);
+  }
+  const hl = new T3.Mesh(new T3.BoxGeometry(0.1, 0.16, 0.4), new T3.MeshBasicMaterial({ color: 0xffe9a3 }));
+  hl.position.set(dims[0] / 2, 0.8, dims[2] * 0.3); g.add(hl);
+  const hl2 = hl.clone(); hl2.position.z = -dims[2] * 0.3; g.add(hl2);
+  const tl = new T3.Mesh(new T3.BoxGeometry(0.1, 0.16, 0.4), new T3.MeshBasicMaterial({ color: 0xc03030 }));
+  tl.position.set(-dims[0] / 2, 0.8, dims[2] * 0.3); g.add(tl);
+  const tl2 = tl.clone(); tl2.position.z = -dims[2] * 0.3; g.add(tl2);
+  if (cls === 'cop') {
+    const bar = new T3.Mesh(new T3.BoxGeometry(0.5, 0.22, 1.4), new T3.MeshBasicMaterial({ color: 0xff4a4a }));
+    bar.position.set(-0.2, 1.75, 0); g.add(bar);
+    g.userData.lightbar = bar;
+  }
+  if (cls === 'taxi') {
+    const sign = new T3.Mesh(new T3.BoxGeometry(0.7, 0.3, 0.5), new T3.MeshBasicMaterial({ color: 0xf2ede2 }));
+    sign.position.set(-0.2, 1.75, 0); g.add(sign);
+  }
+  if (cls === 'sports') {
+    const sp = new T3.Mesh(new T3.BoxGeometry(0.2, 0.3, 1.8), bodyMat);
+    sp.position.set(-dims[0] / 2 + 0.2, 1.35, 0); g.add(sp);
+  }
+  g.userData.tl = [tl, tl2];
+  return g;
+}
+function buildTank() {
+  const g = new T3.Group();
+  const hull = new T3.Mesh(new T3.BoxGeometry(7, 1.6, 3.6), new T3.MeshLambertMaterial({ color: 0x4a5140 }));
+  hull.position.y = 1.1; g.add(hull);
+  for (const s of [-1, 1]) {
+    const tr = new T3.Mesh(new T3.BoxGeometry(7.4, 1.1, 0.9), new T3.MeshLambertMaterial({ color: 0x33382c }));
+    tr.position.set(0, 0.55, s * 1.9); g.add(tr);
+  }
+  const tur = new T3.Group();
+  const dome = new T3.Mesh(new T3.CylinderGeometry(1.5, 1.7, 1, 10), new T3.MeshLambertMaterial({ color: 0x3d4436 }));
+  dome.position.y = 0.5; tur.add(dome);
+  const barrel = new T3.Mesh(new T3.CylinderGeometry(0.14, 0.17, 5.6, 8), M.dark);
+  barrel.rotation.z = Math.PI / 2; barrel.position.set(3.2, 0.55, 0); tur.add(barrel);
+  tur.position.y = 2; g.add(tur);
+  g.userData.turret = tur;
+  return g;
+}
+function buildHeli(cls) {
+  const g = new T3.Group();
+  const mil = cls === 'hind';
+  const body = new T3.Mesh(new T3.SphereGeometry(1.7, 10, 8), new T3.MeshLambertMaterial({ color: mil ? 0x3c4234 : 0x3c424c }));
+  body.scale.set(1.7, 0.85, 0.9); body.position.y = 1.6; g.add(body);
+  const canopy = new T3.Mesh(new T3.SphereGeometry(0.9, 8, 6), M.glassDark);
+  canopy.scale.set(1, 0.8, 0.85); canopy.position.set(1.7, 1.8, 0); g.add(canopy);
+  const tail = new T3.Mesh(new T3.BoxGeometry(4.6, 0.4, 0.4), new T3.MeshLambertMaterial({ color: mil ? 0x2c3126 : 0x232833 }));
+  tail.position.set(-3.6, 1.9, 0); g.add(tail);
+  const fin = new T3.Mesh(new T3.BoxGeometry(0.3, 1.2, 0.2), tail.material);
+  fin.position.set(-5.6, 2.5, 0); g.add(fin);
+  for (const s of [-1, 1]) {
+    const skid = new T3.Mesh(new T3.BoxGeometry(3.4, 0.12, 0.16), M.dark);
+    skid.position.set(0.3, 0.25, s * 1); g.add(skid);
+  }
+  const rotor = new T3.Group();
+  for (let i = 0; i < 2; i++) {
+    const bl = new T3.Mesh(new T3.BoxGeometry(9, 0.06, 0.34), M.dark);
+    bl.rotation.y = i * Math.PI / 2; rotor.add(bl);
+  }
+  rotor.position.set(0.3, 2.75, 0); g.add(rotor);
+  g.userData.rotor = rotor;
+  return g;
+}
+function buildPlane() {
+  const g = new T3.Group();
+  const fus = new T3.Mesh(new T3.CylinderGeometry(0.8, 0.6, 7, 10), new T3.MeshLambertMaterial({ color: 0x8a4444 }));
+  fus.rotation.z = Math.PI / 2; fus.position.y = 1.6; g.add(fus);
+  const wing = new T3.Mesh(new T3.BoxGeometry(1.6, 0.14, 11), new T3.MeshLambertMaterial({ color: 0xa0a4ad }));
+  wing.position.set(0.4, 2.1, 0); g.add(wing);
+  const tailw = new T3.Mesh(new T3.BoxGeometry(0.9, 0.12, 3.4), wing.material);
+  tailw.position.set(-3.1, 1.9, 0); g.add(tailw);
+  const fin = new T3.Mesh(new T3.BoxGeometry(0.9, 1.4, 0.14), wing.material);
+  fin.position.set(-3.2, 2.5, 0); g.add(fin);
+  const prop = new T3.Mesh(new T3.BoxGeometry(0.08, 2.6, 0.3), M.dark);
+  prop.position.set(3.6, 1.6, 0); g.add(prop);
+  for (const s of [-1, 1]) {
+    const gear = new T3.Mesh(new T3.CylinderGeometry(0.3, 0.3, 0.2, 8), M.dark);
+    gear.rotation.x = Math.PI / 2; gear.position.set(0.8, 0.3, s * 1.2); g.add(gear);
+  }
+  g.userData.rotor = prop;
+  return g;
+}
+
+// ---------- entity mesh syncing ----------
+const meshMap = new Map();
+const PED_STYLES = [
+  { body: 0x4a4f38, legs: 0x2c2c31 }, { body: 0x5a4632, legs: 0x3d3d4d }, { body: 0x2e3138, legs: 0x26282e },
+  { body: 0xb7bd3c, legs: 0x39465a, hat: 0xe0c832 }, { body: 0x31465e, legs: 0x31465e }, { body: 0x5e3a3a, legs: 0x2c2c31 }
+];
+function meshFor(e) {
+  let m = meshMap.get(e);
+  if (m) return m;
+  if (e.kind === 'ped') {
+    const st = PED_STYLES[(Math.random() * PED_STYLES.length) | 0];
+    m = buildMan(st.body, st.legs, { hat: st.hat });
+    m.scale.setScalar(e.size || 1);
+  } else if (e.kind === 'hostile' || e.kind === 'soldier') {
+    m = buildMan(e.kind === 'soldier' ? 0x44503e : 0x3a4036, 0x33382c, { vest: e.elite ? 0x454b58 : 0x2e332c });
+    m.userData.gun.visible = true;
+  } else if (e.kind === 'footcop') {
+    m = buildMan(0x2e3a5e, 0x1d2027, { hat: 0x1d2440 });
+    m.userData.gun.visible = true;
+  } else if (e.kind === 'car') m = buildCar(e.cls, e.colorSeed);
+  else if (e.kind === 'tank') m = buildTank();
+  else if (e.kind === 'heli') m = buildHeli(e.cls);
+  else if (e.kind === 'plane') m = buildPlane();
+  else m = buildMan(0x4a5138, 0x2c2c31);
+  scene.add(m);
+  meshMap.set(e, m);
+  return m;
+}
+function syncEntity(e, yawOff) {
+  const m = meshFor(e);
+  m.position.set(e.x, e.y, e.z);
+  m.rotation.y = -(e.yaw || 0) + (yawOff || 0);
+  return m;
+}
+function gcMeshes(liveSet) {
+  for (const [e, m] of meshMap) {
+    if (!liveSet.has(e)) { scene.remove(m); meshMap.delete(e); }
+  }
+}
+
+// player mesh
+let playerMesh = buildMan(0x4a5138, 0x2c2c31);
+scene.add(playerMesh);
+function rebuildPlayerMesh() {
+  scene.remove(playerMesh);
+  const o = OUTFIT_BY_ID[S.player.outfit] || C.OUTFITS[0];
+  playerMesh = buildMan(o.body, o.legs);
+  scene.add(playerMesh);
+}
+let lastOutfit = S.player.outfit;
+
+// ---------- effects ----------
+const smokeTex = canvasTex(64, 64, (g) => {
+  const gr = g.createRadialGradient(32, 32, 4, 32, 32, 30);
+  gr.addColorStop(0, 'rgba(200,200,205,0.8)'); gr.addColorStop(1, 'rgba(200,200,205,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
+});
+const fireTex = canvasTex(64, 64, (g) => {
+  const gr = g.createRadialGradient(32, 32, 2, 32, 32, 30);
+  gr.addColorStop(0, 'rgba(255,240,190,0.95)'); gr.addColorStop(0.5, 'rgba(255,140,50,0.8)'); gr.addColorStop(1, 'rgba(80,40,20,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
+});
+const sprites = [];
+function spawnSprite(x, y, z, tex, size, life, rise, color) {
+  const mat = new T3.SpriteMaterial({ map: tex, transparent: true, depthWrite: false });
+  if (color) mat.color.setHex(color);
+  const sp = new T3.Sprite(mat);
+  sp.position.set(x, y, z); sp.scale.setScalar(size);
+  scene.add(sp);
+  sprites.push({ sp, t: life, life, rise: rise || 0, grow: size });
+}
+const tracers = [];
+const tracerMat = new T3.MeshBasicMaterial({ color: 0xffe8a0 });
+const tracerMatE = new T3.MeshBasicMaterial({ color: 0xff9680 });
+function updateEffects(dt) {
+  for (const s of sprites) {
+    s.t -= dt;
+    s.sp.position.y += s.rise * dt;
+    s.sp.scale.setScalar(s.grow * (1 + (1 - s.t / s.life)));
+    s.sp.material.opacity = Math.max(0, s.t / s.life);
+    if (s.t <= 0) scene.remove(s.sp);
+  }
+  sprites.splice(0, sprites.length, ...sprites.filter(s => s.t > 0));
+  // tracers reflect live bullets
+  while (tracers.length < S.bullets.length + S.shellsList.length) {
+    const m = new T3.Mesh(new T3.BoxGeometry(1.6, 0.06, 0.06), tracerMat);
+    scene.add(m); tracers.push(m);
+  }
+  let ti = 0;
+  for (const b of S.bullets) {
+    const m = tracers[ti++];
+    m.visible = true;
+    m.material = b.friendly ? tracerMat : tracerMatE;
+    m.position.set(b.x, b.y, b.z);
+    m.rotation.y = -Math.atan2(b.dz, b.dx);
+  }
+  for (const s of S.shellsList) {
+    const m = tracers[ti++];
+    m.visible = true; m.material = tracerMat;
+    m.position.set(s.x, s.y, s.z);
+    m.rotation.y = -Math.atan2(s.dz, s.dx);
+  }
+  for (; ti < tracers.length; ti++) tracers[ti].visible = false;
+  // rockets
+  for (const r of S.rockets) spawnSprite(r.x, r.y, r.z, smokeTex, 1.2, 0.4, 2);
+}
+
+// ---------- audio (SFX only — no music by design) ----------
+let AC = null, engOsc = null, engGain = null, sirenOsc = null, sirenGain = null;
+function audioInit() {
+  if (AC) return;
+  try {
+    AC = new (window.AudioContext || window.webkitAudioContext)();
+    engOsc = AC.createOscillator(); engGain = AC.createGain();
+    engOsc.type = 'sawtooth'; engGain.gain.value = 0;
+    engOsc.connect(engGain); engGain.connect(AC.destination); engOsc.start();
+    sirenOsc = AC.createOscillator(); sirenGain = AC.createGain();
+    sirenGain.gain.value = 0; sirenOsc.connect(sirenGain); sirenGain.connect(AC.destination); sirenOsc.start();
+  } catch (e) { AC = null; }
+}
+function sfx(kind) {
+  if (!AC) return;
+  try {
+    const t0 = AC.currentTime, o = AC.createOscillator(), g = AC.createGain();
+    o.connect(g); g.connect(AC.destination);
+    const P2 = {
+      punch: ['square', 95, 0.12, 0.09], cash: ['sine', 950, 0.09, 0.16], crash: ['sawtooth', 70, 0.14, 0.2],
+      door: ['triangle', 240, 0.08, 0.1], shot: ['square', 1500, 0.1, 0.08], eshot: ['square', 1000, 0.05, 0.09],
+      reload: ['triangle', 480, 0.07, 0.2], win: ['sine', 700, 0.09, 0.5], boom: ['sawtooth', 46, 0.22, 0.5],
+      lock: ['sine', 1250, 0.07, 0.12], missile: ['sawtooth', 220, 0.08, 0.35]
+    }[kind];
+    if (!P2) return;
+    o.type = P2[0]; o.frequency.setValueAtTime(P2[1], t0);
+    if (kind === 'shot' || kind === 'eshot') o.frequency.exponentialRampToValueAtTime(110, t0 + P2[3]);
+    if (kind === 'boom') o.frequency.exponentialRampToValueAtTime(24, t0 + P2[3]);
+    if (kind === 'missile') o.frequency.exponentialRampToValueAtTime(900, t0 + P2[3]);
+    if (kind === 'win') { o.frequency.setValueAtTime(880, t0 + 0.12); o.frequency.setValueAtTime(1180, t0 + 0.24); }
+    g.gain.setValueAtTime(P2[2], t0); g.gain.exponentialRampToValueAtTime(0.001, t0 + P2[3]);
+    o.start(t0); o.stop(t0 + P2[3] + 0.01);
+  } catch (e) { /* ignore */ }
+}
+
+// ---------- input ----------
+const keys = {};
+let pendingEnter = false;
+let camYaw = 0, camPitch = -0.18, mouseDown = false, locked = false;
+window.addEventListener('keydown', e => {
+  if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
+  keys[e.code] = true;
+  audioInit();
+  if (e.code === 'KeyE') pendingEnter = true;
+  if (e.code === 'KeyF') tryInteract();
+  if (e.code === 'Escape') closeMenu();
+  const num = parseInt(e.code.replace('Digit', ''), 10);
+  if (num >= 1 && num <= 9) {
+    const ids = Object.keys(S.player.weapons);
+    if (ids[num - 1]) C.equip(ids[num - 1]);
+  }
+});
+window.addEventListener('keyup', e => { keys[e.code] = false; });
+canvas.addEventListener('click', () => {
+  if (!locked && !menuOpen && started) canvas.requestPointerLock && canvas.requestPointerLock();
+});
+document.addEventListener('pointerlockchange', () => { locked = document.pointerLockElement === canvas; });
+window.addEventListener('mousemove', e => {
+  if (!locked) return;
+  camYaw += e.movementX * 0.0024;
+  camPitch = clamp(camPitch - e.movementY * 0.0022, -1.1, 0.7);
+});
+window.addEventListener('mousedown', e => { if (e.button === 0) mouseDown = true; audioInit(); });
+window.addEventListener('mouseup', e => { if (e.button === 0) mouseDown = false; });
+window.addEventListener('wheel', e => { if (locked) C.switchWeapon(e.deltaY > 0 ? 1 : -1); });
+
+function buildInput() {
+  return {
+    fwd: keys.KeyW || keys.ArrowUp, back: keys.KeyS || keys.ArrowDown,
+    left: keys.KeyA || keys.ArrowLeft, right: keys.KeyD || keys.ArrowRight,
+    run: keys.ShiftLeft || keys.ShiftRight, nitro: keys.ShiftLeft || keys.ShiftRight,
+    fire: mouseDown && locked && !menuOpen, enter: pendingEnter ? (pendingEnter = false, true) : false,
+    handbrake: keys.Space, up: keys.Space, down: keys.ControlLeft || keys.KeyC,
+    reload: keys.KeyR, camYaw, camPitch
+  };
+}
+
+// ---------- HUD (DOM) ----------
+const $ = id => document.getElementById(id);
+const hud = {
+  hp: $('hp'), armor: $('armor'), nitro: $('nitrobar'), nitroWrap: $('nitrowrap'),
+  money: $('money'), stars: $('stars'), weapon: $('weapon'), ammo: $('ammo'),
+  speed: $('speed'), banner: $('banner'), toast: $('toast'), zone: $('zone'),
+  fail: $('fail'), crosshair: $('crosshair'), prompt: $('prompt'), mm: $('minimap'),
+  pops: $('pops'), lock: $('lockstate')
+};
+const mmCtx = hud.mm.getContext('2d');
+// prerender world minimap
+const mmWorld = document.createElement('canvas');
+mmWorld.width = 300; mmWorld.height = 200;
+{
+  const g = mmWorld.getContext('2d');
+  const sx = 300 / C.WORLD.W, sz = 200 / C.WORLD.D;
+  g.fillStyle = '#3d3830'; g.fillRect(0, 0, 300, 200);
+  g.fillStyle = '#31363f';
+  const cw = C.WORLD.CITY;
+  g.fillRect(cw.x0 * sx, cw.z0 * sz, (cw.x1 - cw.x0) * sx, (cw.z1 - cw.z0) * sz);
+  g.fillStyle = '#20242c';
+  for (let x = cw.x0; x <= cw.x1; x += C.WORLD.P) g.fillRect(x * sx, cw.z0 * sz, 1.2, (cw.z1 - cw.z0) * sz);
+  for (let z = cw.z0; z <= cw.z1; z += C.WORLD.P) g.fillRect(cw.x0 * sx, z * sz, (cw.x1 - cw.x0) * sx, 1.2);
+  g.fillStyle = '#3a4136';
+  g.fillRect(C.WORLD.SIERRA_X0 * sx, 0, 300 - C.WORLD.SIERRA_X0 * sx, 200);
+  g.fillStyle = '#44503e';
+  const f = C.WORLD.FORT; g.fillRect(f.x0 * sx, f.z0 * sz, (f.x1 - f.x0) * sx, (f.z1 - f.z0) * sz);
+  g.fillStyle = '#515560';
+  const a = C.WORLD.AIRPORT; g.fillRect(a.x0 * sx, a.z0 * sz, (a.x1 - a.x0) * sx, (a.z1 - a.z0) * sz);
+  g.fillStyle = '#4a4034';
+  g.fillRect(C.WORLD.OUTF_X0 * sx, 0, (C.WORLD.SIERRA_X0 - C.WORLD.OUTF_X0) * sx, 200);
+}
+let toastT = 0, zoneT = 0;
+function drawHUD(dt) {
+  const p = S.player;
+  hud.hp.style.width = clamp(p.hp, 0, 100) + '%';
+  hud.armor.style.width = clamp(p.armor, 0, 100) + '%';
+  hud.money.textContent = '$' + Math.floor(p.money);
+  let stars = '';
+  for (let i = 0; i < 5; i++) stars += i < S.wanted ? '★' : '☆';
+  hud.stars.textContent = stars;
+  hud.stars.style.color = S.wanted ? '#ffd23f' : 'rgba(255,255,255,0.25)';
+  const w = C.WEAPONS[p.cur];
+  hud.weapon.textContent = w.name + (w.nation ? ' [' + w.nation + ']' : '');
+  if (p.cur === 'fists') hud.ammo.textContent = '';
+  else if (w.cls === 'rocket' || w.cls === 'aa') hud.ammo.textContent = '× ' + p.ammo[w.cls];
+  else hud.ammo.textContent = p.weapons[p.cur].mag + ' / ' + p.ammo[w.cls];
+  if (p.veh && p.veh.kind === 'car') {
+    hud.speed.textContent = Math.round(Math.abs(p.veh.spd) * 2.237) + ' mph';
+    hud.nitroWrap.style.display = 'block';
+    hud.nitro.style.width = p.nitro + '%';
+  } else if (p.veh) {
+    hud.speed.textContent = 'ALT ' + Math.round(p.veh.y - C.groundY(p.veh.x, p.veh.z)) + 'm';
+    hud.nitroWrap.style.display = 'none';
+  } else { hud.speed.textContent = ''; hud.nitroWrap.style.display = 'none'; }
+  hud.crosshair.style.display = (!p.veh || p.veh.kind === 'tank' || p.veh.kind === 'heli') && locked ? 'block' : 'none';
+  hud.lock.textContent = p.lockTgt ? (p.lockT >= 1 ? 'LOCKED' : 'locking…') : '';
+  hud.lock.style.color = p.lockT >= 1 ? '#ff5a5a' : '#ffd23f';
+  // mission banner
+  const m = S.mission;
+  if (m) {
+    let txt = m.def.name;
+    if (m.id === 'courier' || m.id === 'taxi') txt += ' — ' + Math.ceil(m.t) + 's';
+    if (m.id === 'race') txt += ' — CP ' + (m.i + 1) + '/6 — ' + Math.max(0, 95 - m.t).toFixed(0) + 's';
+    if (m.id === 'airrace') txt += ' — RING ' + (m.i + 1) + '/5 — ' + Math.ceil(m.t) + 's';
+    if (m.id.startsWith('op')) txt += ' — HOSTILES ' + m.kills + '/' + m.need;
+    if (m.id.startsWith('war')) txt += ' — TARGETS LEFT: ' + m.left;
+    if (m.id === 'heist') txt += m.phase === 0 ? ' — STEAL THE T-80' : ' — DELIVER TO STINGER RIDGE';
+    hud.banner.textContent = txt;
+    hud.banner.style.display = 'block';
+  } else hud.banner.style.display = 'none';
+  // interact prompt
+  const shop = C.shopAt(), house = C.houseAt();
+  if (!p.veh && (shop || house) && !menuOpen) {
+    hud.prompt.textContent = shop ? '[F] ' + shop.name : '[F] ' + houseLabel(house);
+    hud.prompt.style.display = 'block';
+  } else hud.prompt.style.display = 'none';
+  toastT -= dt; if (toastT <= 0) hud.toast.style.display = 'none';
+  zoneT -= dt; if (zoneT <= 0) hud.zone.style.opacity = 0;
+  // fail overlay
+  if (S.state === 'busted' || S.state === 'wasted') {
+    hud.fail.textContent = S.state.toUpperCase();
+    hud.fail.style.color = S.state === 'busted' ? '#6f9fe8' : '#c0504d';
+    hud.fail.style.display = 'block';
+  } else hud.fail.style.display = 'none';
+  // minimap
+  const g = mmCtx, MW = hud.mm.width, MH = hud.mm.height;
+  g.clearRect(0, 0, MW, MH);
+  g.drawImage(mmWorld, 0, 0, MW, MH);
+  const sx = MW / C.WORLD.W, sz = MH / C.WORLD.D;
+  const dot = (x, z, col, r) => { g.fillStyle = col; g.beginPath(); g.arc(x * sx, z * sz, r || 2, 0, TAU); g.fill(); };
+  for (const id in C.MISSIONS) {
+    if (S.done[id] && !C.MISSIONS[id].repeatable) continue;
+    if (!C.unlocked(id)) continue;
+    const d = C.MISSIONS[id].marker;
+    dot(d.x, d.z, id.startsWith('war') ? '#ff785a' : id.startsWith('op') ? '#ffd23f' : id === 'heist' ? '#c05ae8' : '#5ad0e8', 2.4);
+  }
+  for (const s of C.SHOPS) dot(s.x, s.z, '#79d98c', 1.6);
+  for (const h of C.HOUSES) dot(h.x, h.z, '#d0b25a', 1.6);
+  for (const c of S.cops) dot(c.x, c.z, '#4d8dff', 2);
+  for (const t of S.tanks) if (!t.dead && t.hostile) dot(t.x, t.z, '#a0e858', 2.4);
+  for (const h of S.helis) if (!h.dead && h.hostile) dot(h.x, h.z, '#ff3a3a', 2.4);
+  if (m && m.target) dot(m.target.x, m.target.z, '#ffffff', 2.6);
+  if (m && m.id === 'race' && m.cps[m.i]) dot(m.cps[m.i].x, m.cps[m.i].z, '#ffffff', 2.6);
+  if (m && m.id === 'airrace' && m.rings[m.i]) dot(m.rings[m.i].x, m.rings[m.i].z, '#ffffff', 2.6);
+  dot(p.x, p.z, '#f2ede2', 2.6);
+  g.strokeStyle = '#f2ede2'; g.lineWidth = 1;
+  g.beginPath();
+  g.moveTo(p.x * sx, p.z * sz);
+  g.lineTo(p.x * sx + Math.cos(camYaw) * 7, p.z * sz + Math.sin(camYaw) * 7);
+  g.stroke();
+}
+function houseLabel(h) {
+  const owned = S.player.owned.houses.includes(h.id);
+  return owned ? h.name + ' (yours — heal & save)' : h.name + ' — BUY $' + h.price;
+}
+
+// ---------- shop menus (DOM) ----------
+const menuEl = $('menu');
+let menuOpen = false;
+function closeMenu() { menuOpen = false; menuEl.style.display = 'none'; }
+function money() { return Math.floor(S.player.money); }
+function tryInteract() {
+  if (menuOpen) { closeMenu(); return; }
+  const p = S.player;
+  if (p.veh) return;
+  const shop = C.shopAt();
+  const house = C.houseAt();
+  if (!shop && !house) return;
+  if (document.pointerLockElement) document.exitPointerLock();
+  menuOpen = true;
+  menuEl.style.display = 'block';
+  let html = '';
+  const btn = (label, fn) => { const id = 'b' + (btnId++); btnFns[id] = fn; return '<button id="' + id + '">' + label + '</button>'; };
+  if (house) {
+    const owned = p.owned.houses.includes(house.id);
+    html = '<h2>' + house.name + '</h2>';
+    if (owned) {
+      html += '<p>Your place. Rest here to heal. Rent $' + house.rent + ' pays out as you play.</p>';
+      html += btn('Rest (heal to full)', () => { p.hp = 100; toast2('Rested.'); closeMenu(); });
+    } else {
+      html += '<p>Price: $' + house.price + ' · Rent income: $' + house.rent + '/min · Respawn point</p>';
+      html += btn('Buy property — $' + house.price, () => { const e2 = C.buyHouse(house.id); toast2(e2 || 'Property yours.'); if (!e2) refreshMenu(); });
+    }
+  } else if (shop.type === 'guns') {
+    html = '<h2>' + shop.name + '</h2><p>Cash: $' + money() + ' · Rep tier ' + C.repTier(p.rep) + '</p>';
+    for (const id in C.WEAPONS) {
+      const w = C.WEAPONS[id];
+      if (!w.price || w.nation !== shop.nation) continue;
+      const ownedW = !!p.weapons[id];
+      const lockedW = C.repTier(p.rep) < w.tier;
+      html += '<div class="row"><b>' + w.name + '</b> <i>' + w.cls + ' · pairs with ' + C.WEAPONS[w.pair].name + '</i>' +
+        (ownedW ? '<span class="own">OWNED</span>' : lockedW ? '<span class="lock">REP TIER ' + w.tier + '</span>'
+          : btn('$' + w.price, () => { const e2 = C.buyWeapon(id); toast2(e2 || w.name + ' acquired.'); if (!e2) refreshMenu(); })) + '</div>';
+    }
+    html += '<h3>Ammunition</h3>';
+    for (const cls in C.AMMO_PRICE) {
+      html += '<div class="row"><b>' + cls + '</b> <i>' + C.AMMO_PACK[cls] + ' rounds</i>' +
+        btn('$' + C.AMMO_PRICE[cls], () => { const e2 = C.buyAmmo(cls); toast2(e2 || 'Ammo stocked.'); if (!e2) refreshMenu(); }) + '</div>';
+    }
+  } else if (shop.type === 'market') {
+    html = '<h2>' + shop.name + '</h2><p>Cash: $' + money() + '</p>' +
+      '<div class="row"><b>Snack</b> <i>+35 health</i>' + btn('$15', () => { toast2(C.buySnack() || 'Ate well.'); refreshMenu(); }) + '</div>' +
+      '<div class="row"><b>Body Armor</b> <i>full vest</i>' + btn('$400', () => { toast2(C.buyArmor() || 'Armored up.'); refreshMenu(); }) + '</div>';
+  } else if (shop.type === 'clothes') {
+    html = '<h2>' + shop.name + '</h2><p>Cash: $' + money() + ' — every cut fits the same blank head.</p>';
+    for (const o of C.OUTFITS) {
+      const has = p.outfit === o.id;
+      html += '<div class="row"><b>' + o.name + '</b>' +
+        (has ? '<span class="own">WEARING</span>' : btn(o.price ? '$' + o.price : 'FREE', () => { const e2 = C.buyOutfit(o.id); toast2(e2 || 'Changed.'); if (!e2) { refreshMenu(); } })) + '</div>';
+    }
+  } else if (shop.type === 'cars') {
+    html = '<h2>' + shop.name + '</h2><p>Cash: $' + money() + ' · Owned vehicles respawn with you.</p>';
+    for (const cls of ['sedan', 'taxi', 'pickup', 'van', 'muscle', 'sports']) {
+      const v = C.VEH[cls];
+      const has = p.owned.vehicles.includes(cls);
+      html += '<div class="row"><b>' + v.name + '</b> <i>' + Math.round(v.top * 2.237) + ' mph</i>' +
+        (has ? '<span class="own">OWNED</span>' : btn('$' + v.price, () => { const e2 = C.buyVehicle(cls); toast2(e2 || v.name + ' delivered outside.'); if (!e2) refreshMenu(); })) + '</div>';
+    }
+  } else if (shop.type === 'aircraft') {
+    html = '<h2>' + shop.name + '</h2><p>Cash: $' + money() + ' · Your own piece of the sky.</p>';
+    for (const cls of ['heli', 'plane']) {
+      const v = C.VEH[cls];
+      const has = p.owned.vehicles.includes(cls);
+      html += '<div class="row"><b>' + v.name + '</b> <i>' + (cls === 'heli' ? 'vertical take-off, door gun' : 'needs the runway, fast') + '</i>' +
+        (has ? '<span class="own">OWNED</span>' : btn('$' + v.price, () => { const e2 = C.buyVehicle(cls); toast2(e2 || v.name + ' is yours.'); if (!e2) refreshMenu(); })) + '</div>';
+    }
+  }
+  html += '<p class="hint">[F] or [Esc] to close</p>';
+  menuEl.innerHTML = html;
+  wireButtons();
+}
+let btnId = 0, btnFns = {};
+function wireButtons() {
+  for (const id in btnFns) {
+    const el = $(id);
+    if (el) el.onclick = btnFns[id];
+  }
+  btnFns = {};
+}
+function refreshMenu() { closeMenu(); tryInteract(); }
+function toast2(msg) { hud.toast.textContent = msg; hud.toast.style.display = 'block'; toastT = 3; }
+
+// ---------- events from core ----------
+function handleEvents() {
+  for (const e of C.drainEvents()) {
+    if (e.t === 'sfx') sfx(e.k);
+    else if (e.t === 'toast') { hud.toast.textContent = e.msg; hud.toast.style.display = 'block'; toastT = e.secs || 3; }
+    else if (e.t === 'zone') { hud.zone.textContent = e.name; hud.zone.style.opacity = 1; zoneT = 3; }
+    else if (e.t === 'boom') {
+      sfx('boom');
+      spawnSprite(e.x, e.y + 2, e.z, fireTex, e.r * 1.3, 0.55, 6);
+      for (let i = 0; i < 6; i++) spawnSprite(e.x + (Math.random() - 0.5) * e.r, e.y + 2 + Math.random() * 3, e.z + (Math.random() - 0.5) * e.r, smokeTex, e.r * 0.6, 1.4, 8);
+      shake = Math.min(1.4, shake + e.r / 30);
+    }
+    else if (e.t === 'flash') spawnSprite(e.x, e.y, e.z, fireTex, 1.4, 0.06, 0);
+    else if (e.t === 'smoke') spawnSprite(e.x, e.y, e.z, smokeTex, 2, 0.7, 4);
+    else if (e.t === 'popup') { const d = document.createElement('div'); d.className = 'pop'; d.textContent = e.msg; hud.pops.appendChild(d); setTimeout(() => d.remove(), 1400); }
+    else if (e.t === 'shake') shake = Math.min(1.4, shake + e.n / 12);
+    else if (e.t === 'nitro') { if (S.player.veh) spawnSprite(S.player.veh.x - Math.cos(S.player.veh.yaw) * 2.6, S.player.veh.y + 0.7, S.player.veh.z - Math.sin(S.player.veh.yaw) * 2.6, fireTex, 1.6, 0.18, 0, 0x7fb0ff); }
+    else if (e.t === 'respawn') camYaw = 0;
+  }
+}
+
+// ---------- camera ----------
+let shake = 0;
+function updateCamera(dt) {
+  const p = S.player;
+  const inVeh = !!p.veh;
+  const dist = inVeh ? (p.veh.kind === 'tank' ? 16 : p.veh.kind === 'heli' || p.veh.kind === 'plane' ? 22 : 11) : 6.5;
+  const h = inVeh ? (p.veh.kind === 'heli' || p.veh.kind === 'plane' ? 7 : 4.2) : 2.4;
+  const cp = Math.cos(camPitch), spv = Math.sin(camPitch);
+  const tx = p.x - Math.cos(camYaw) * cp * dist;
+  const tz = p.z - Math.sin(camYaw) * cp * dist;
+  let ty = p.y + h - spv * dist;
+  const gy = C.groundY(tx, tz);
+  if (ty < gy + 1.2) ty = gy + 1.2;
+  const target = new T3.Vector3(tx, ty, tz);
+  if (camera.position.distanceTo(target) > 120) camera.position.copy(target); // teleport/respawn snap
+  else camera.position.lerp(target, clamp(dt * 7, 0, 1));
+  if (shake > 0.01) {
+    camera.position.x += (Math.random() - 0.5) * shake;
+    camera.position.y += (Math.random() - 0.5) * shake;
+    shake -= shake * 4 * dt;
+  }
+  const look = new T3.Vector3(p.x + Math.cos(camYaw) * 8 * cp, p.y + 1.6 + Math.sin(camPitch) * 8, p.z + Math.sin(camYaw) * 8 * cp);
+  camera.lookAt(look);
+}
+
+// ---------- sync all meshes ----------
+function syncScene(dt, t) {
+  const p = S.player;
+  const live = new Set();
+  for (const c of S.cars) { live.add(c); const m = syncEntity(c); if (m.userData.tl) m.userData.tl.forEach(x => x.material.color.setHex(c.braking ? 0xff2222 : 0xc03030)); }
+  for (const c of S.cops) {
+    live.add(c); const m = syncEntity(c);
+    if (m.userData.lightbar) m.userData.lightbar.material.color.setHex(((t * 6 | 0) % 2) ? 0xff4a4a : 0x3f7dff);
+  }
+  for (const tk of S.tanks) { if (tk.dead) continue; live.add(tk); const m = syncEntity(tk); m.userData.turret.rotation.y = -(tk.ta - tk.yaw); }
+  for (const h of S.helis) { if (h.dead) continue; live.add(h); const m = syncEntity(h); m.userData.rotor.rotation.y = h.rotor * 2; }
+  for (const pd of S.peds) {
+    if (pd.dead) continue; live.add(pd);
+    const m = syncEntity(pd);
+    if (pd.state === 'down') { m.rotation.x = Math.PI / 2; m.position.y = pd.y + 0.4; }
+    else { m.rotation.x = 0; animMan(m, pd.phase, pd.state !== 'down', false); }
+  }
+  for (const e of S.enemies.concat(S.soldiers, S.footCops)) {
+    if (e.dead) continue; live.add(e);
+    const m = syncEntity(e);
+    if (e.state === 'down') { m.rotation.x = Math.PI / 2; m.position.y = e.y + 0.4; }
+    else { m.rotation.x = 0; animMan(m, e.phase, true, true); }
+  }
+  gcMeshes(live);
+  // player
+  if (S.player.outfit !== lastOutfit) { lastOutfit = S.player.outfit; rebuildPlayerMesh(); }
+  playerMesh.visible = !p.veh;
+  if (!p.veh) {
+    playerMesh.position.set(p.x, p.y, p.z);
+    playerMesh.rotation.y = -p.yaw;
+    const armed2 = p.cur !== 'fists';
+    playerMesh.userData.gun.visible = armed2 && C.WEAPONS[p.cur].cls !== 'rocket' && C.WEAPONS[p.cur].cls !== 'aa';
+    playerMesh.userData.tube.visible = armed2 && !playerMesh.userData.gun.visible;
+    animMan(playerMesh, p.phase, p.moving, armed2);
+  }
+  // markers pulse
+  for (const mk of markerMeshes) mk.mesh.position.y = mk.base + Math.sin(t * 3) * 0.3 + 0.3;
+  for (const id in missionMarkerRefs) {
+    const vis = (!S.done[id] || C.MISSIONS[id].repeatable) && C.unlocked(id) && (!S.mission || S.mission.id !== id);
+    missionMarkerRefs[id].visible = vis;
+  }
+  C.stashes.forEach((st, i) => { stashMeshes[i].visible = !st.found; stashMeshes[i].rotation.y = t * 2; });
+  // engine + siren audio
+  if (AC) {
+    if (p.veh && (p.veh.kind === 'car' || p.veh.kind === 'tank')) {
+      engGain.gain.value = 0.014;
+      engOsc.frequency.value = 50 + Math.abs(p.veh.spd) * 3.4;
+    } else if (p.veh) {
+      engGain.gain.value = 0.012;
+      engOsc.frequency.value = 90 + Math.abs(p.veh.spd) * 1.2;
+    } else engGain.gain.value = 0;
+    const copNear = S.cops.some(c => U.d2(c.x, c.z, p.x, p.z) < 150);
+    sirenGain.gain.value = S.wanted > 0 && copNear ? 0.02 : 0;
+    if (S.wanted > 0 && copNear) sirenOsc.frequency.value = 620 + (Math.sin(t * 7) > 0 ? 260 : 0);
+  }
+}
+
+// ---------- save / load ----------
+const SAVE_KEY = 'facelesscity3d.save';
+function save() { try { localStorage.setItem(SAVE_KEY, C.serialize()); } catch (e) {} }
+function load() { try { const s = localStorage.getItem(SAVE_KEY); if (s && C.deserialize(s)) { C.reset(true); return true; } } catch (e) {} return false; }
+setInterval(save, 5000);
+
+// ---------- main loop ----------
+let started = false, last = performance.now(), elapsed = 0;
+function frame(now) {
+  requestAnimationFrame(frame);
+  const dt = Math.min(0.05, (now - last) / 1000);
+  last = now; elapsed += dt;
+  if (!started) return;
+  C.step(dt, buildInput());
+  handleEvents();
+  syncScene(dt, elapsed);
+  updateEffects(dt);
+  updateCamera(dt);
+  drawHUD(dt);
+  renderer.render(scene, camera);
+}
+requestAnimationFrame(frame);
+
+$('playbtn').addEventListener('click', () => {
+  audioInit();
+  const had = load();
+  if (had) toast2('Save loaded — welcome back to Faceless City.');
+  $('intro').style.display = 'none';
+  started = true;
+  canvas.requestPointerLock && canvas.requestPointerLock();
+});
+$('newbtn').addEventListener('click', () => {
+  audioInit();
+  try { localStorage.removeItem(SAVE_KEY); } catch (e) {}
+  C.reset(false);
+  $('intro').style.display = 'none';
+  started = true;
+  canvas.requestPointerLock && canvas.requestPointerLock();
+});
+
+// intro portrait — the faceless one, in 3D spirit
+(function portrait() {
+  const c = document.getElementById('face'); if (!c) return;
+  const g = c.getContext('2d');
+  const W2 = c.width, H2 = c.height, cx = W2 / 2;
+  g.fillStyle = '#242b3d'; g.fillRect(0, 0, W2, H2);
+  g.fillStyle = '#4a5138';
+  g.beginPath();
+  g.moveTo(cx - 58, H2); g.quadraticCurveTo(cx - 60, H2 - 62, cx - 30, H2 - 74);
+  g.quadraticCurveTo(cx, H2 - 84, cx + 30, H2 - 74);
+  g.quadraticCurveTo(cx + 60, H2 - 62, cx + 58, H2); g.closePath(); g.fill();
+  g.fillStyle = '#c2ad92'; g.fillRect(cx - 10, H2 - 92, 20, 22);
+  const grad = g.createRadialGradient(cx - 12, H2 - 130, 8, cx, H2 - 122, 46);
+  grad.addColorStop(0, '#e6d5bc'); grad.addColorStop(0.7, '#d9c6ad'); grad.addColorStop(1, '#b39d80');
+  g.fillStyle = grad;
+  g.beginPath(); g.ellipse(cx, H2 - 122, 32, 40, 0, 0, TAU); g.fill();
+})();
+
+window.__FC3D = { scene, camera, renderer, get started() { return started; } };
+})();

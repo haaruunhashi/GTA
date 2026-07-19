@@ -3,52 +3,106 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Faceless City</title>
+<title>Faceless City 3D</title>
 <style>
-  html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; background: #1b1e26; }
-  canvas#game { display: block; cursor: default; }
-  #intro {
-    position: fixed; inset: 0; z-index: 10;
-    display: flex; flex-direction: column; align-items: center; justify-content: center;
-    background: radial-gradient(ellipse at 50% 30%, #2a3350 0%, #171b28 70%);
-    color: #e8e4d8; font-family: "Arial Black", Impact, Arial, sans-serif;
-    text-align: center; user-select: none;
-  }
-  #intro h1 {
-    font-size: clamp(38px, 7vw, 76px); margin: 18px 0 4px; letter-spacing: 4px;
-    color: #e6d5bc; text-shadow: 0 4px 0 #000, 0 0 34px rgba(255, 190, 110, 0.25);
-  }
-  #intro .sub { font-family: monospace; font-size: 15px; color: #9aa3b5; margin-bottom: 22px; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #1b1e26; font-family: "Segoe UI", Arial, sans-serif; }
+  canvas#game { display: block; }
+  #ui { position: fixed; inset: 0; pointer-events: none; color: #e8e4d8; }
+  .bar { position: absolute; height: 10px; background: rgba(0,0,0,0.55); border: 1px solid rgba(255,255,255,0.25); width: 180px; }
+  .bar > div { height: 100%; }
+  #hpwrap { left: 18px; top: 16px; } #hp { background: #5fae6b; width: 100%; }
+  #armorwrap { left: 18px; top: 30px; } #armor { background: #8fa3c8; width: 0; }
+  #nitrowrap { left: 18px; top: 44px; display: none; } #nitrobar { background: #4d9de8; width: 100%; }
+  #money { position: absolute; right: 20px; top: 12px; font: 900 28px "Arial Black", Arial; color: #7fd98a; text-shadow: 2px 2px 0 #0a2313; }
+  #stars { position: absolute; right: 20px; top: 46px; font-size: 20px; letter-spacing: 3px; }
+  #weapon { position: absolute; right: 20px; bottom: 58px; font: 700 16px monospace; text-align: right; }
+  #ammo { position: absolute; right: 20px; bottom: 36px; font: 700 20px monospace; text-align: right; color: #cfd4dd; }
+  #lockstate { position: absolute; right: 20px; bottom: 84px; font: 700 13px monospace; }
+  #speed { position: absolute; right: 20px; bottom: 12px; font: 900 20px "Arial Black", Arial; color: #8fd0ff; }
+  #banner { position: absolute; left: 50%; transform: translateX(-50%); top: 14px; display: none;
+    background: rgba(0,0,0,0.55); border: 1px solid rgba(255,210,63,0.6); padding: 6px 18px; font: 700 14px monospace; color: #ffd23f; }
+  #toast { position: absolute; left: 50%; transform: translateX(-50%); bottom: 46px; display: none;
+    background: rgba(0,0,0,0.6); padding: 6px 16px; font: 600 14px monospace; border-radius: 4px; }
+  #prompt { position: absolute; left: 50%; transform: translateX(-50%); bottom: 90px; display: none;
+    background: rgba(20,60,30,0.7); padding: 5px 14px; font: 700 13px monospace; color: #a9e8b4; border-radius: 4px; }
+  #zone { position: absolute; left: 50%; transform: translateX(-50%); top: 22%; font: 900 44px "Arial Black", Arial;
+    color: #e6d5bc; text-shadow: 0 4px 0 #000; opacity: 0; transition: opacity 0.6s; letter-spacing: 3px; }
+  #fail { position: absolute; left: 50%; top: 45%; transform: translate(-50%,-50%); display: none;
+    font: 900 64px "Arial Black", Arial; text-shadow: 4px 4px 0 #000; }
+  #crosshair { position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%); display: none; font: 400 22px monospace; color: rgba(255,255,255,0.9); }
+  #minimap { position: absolute; left: 18px; bottom: 18px; width: 210px; height: 140px; border: 2px solid rgba(255,255,255,0.3); border-radius: 6px; background: #14171e; }
+  #pops { position: absolute; left: 50%; bottom: 150px; transform: translateX(-50%); text-align: center; }
+  .pop { font: 800 16px monospace; color: #8fe388; text-shadow: 1px 1px 0 #000; animation: rise 1.4s forwards; }
+  @keyframes rise { to { transform: translateY(-40px); opacity: 0; } }
+  #menu { position: fixed; right: 24px; top: 50%; transform: translateY(-50%); width: 360px; max-height: 82vh; overflow-y: auto;
+    display: none; background: rgba(12,15,22,0.94); border: 1px solid rgba(255,255,255,0.2); border-radius: 8px;
+    padding: 16px 18px; color: #e8e4d8; pointer-events: auto; }
+  #menu h2 { margin: 2px 0 8px; font-size: 18px; color: #e6d5bc; }
+  #menu h3 { margin: 12px 0 4px; font-size: 14px; color: #9aa3b5; }
+  #menu p { font: 13px/1.4 monospace; color: #9aa3b5; margin: 4px 0 10px; }
+  #menu .row { display: flex; align-items: center; gap: 8px; padding: 5px 0; border-bottom: 1px solid rgba(255,255,255,0.07); font-size: 13px; }
+  #menu .row b { flex: 0 0 auto; } #menu .row i { flex: 1; color: #78808f; font-size: 11px; font-style: normal; }
+  #menu button { pointer-events: auto; background: #4a5138; color: #e8e4d8; border: none; border-radius: 4px; padding: 5px 12px; font: 700 12px monospace; cursor: pointer; }
+  #menu button:hover { background: #5c6547; }
+  #menu .own { color: #79d98c; font: 700 11px monospace; } #menu .lock { color: #c0504d; font: 700 11px monospace; }
+  #menu .hint { text-align: center; }
+  #intro { position: fixed; inset: 0; z-index: 10; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    background: radial-gradient(ellipse at 50% 30%, #2a3350 0%, #171b28 70%); color: #e8e4d8; text-align: center; }
+  #intro h1 { font: 900 clamp(36px,6vw,68px) "Arial Black", Arial; letter-spacing: 4px; color: #e6d5bc; text-shadow: 0 4px 0 #000; margin: 14px 0 2px; }
+  #intro .sub { font: 14px monospace; color: #9aa3b5; margin-bottom: 16px; }
   #face { border-radius: 12px; box-shadow: 0 8px 40px rgba(0,0,0,0.6); }
-  #intro .controls {
-    font-family: monospace; font-size: 13.5px; line-height: 1.9; color: #c6cbd6;
-    background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.12);
-    border-radius: 10px; padding: 12px 26px; margin-top: 20px;
-  }
+  #intro .controls { font: 12.5px/1.85 monospace; color: #c6cbd6; background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 10px; padding: 10px 24px; }
   #intro .controls b { color: #ffd23f; }
-  #playbtn {
-    margin-top: 24px; padding: 12px 46px; font-family: inherit; font-size: 19px;
-    letter-spacing: 2px; color: #171b28; background: #e6d5bc; border: none;
-    border-radius: 8px; cursor: pointer; box-shadow: 0 4px 0 #8d7c60;
-  }
-  #playbtn:hover { background: #f2e6d2; }
-  #playbtn:active { transform: translateY(3px); box-shadow: 0 1px 0 #8d7c60; }
+  #intro .btns { margin-top: 20px; display: flex; gap: 14px; }
+  #intro button { padding: 12px 40px; font: 800 17px "Arial Black", Arial; letter-spacing: 2px; color: #171b28;
+    background: #e6d5bc; border: none; border-radius: 8px; cursor: pointer; box-shadow: 0 4px 0 #8d7c60; }
+  #intro button:hover { background: #f2e6d2; }
+  #intro #newbtn { background: #9aa3b5; box-shadow: 0 4px 0 #5c6270; }
+  #intro .classic { margin-top: 14px; font: 12px monospace; }
+  #intro .classic a { color: #8fd0ff; }
 </style>
 </head>
 <body>
 <canvas id="game"></canvas>
-<div id="intro">
-  <canvas id="face" width="220" height="200"></canvas>
-  <h1>FACELESS CITY</h1>
-  <div class="sub">everyone here has no face — city jobs, tactical ops in the Outfield, guerrilla war in the Sierra</div>
-  <div class="controls">
-    <b>WASD / Arrows</b> move &amp; drive &nbsp;·&nbsp; <b>E</b> enter / carjack &nbsp;·&nbsp; <b>Shift</b> sprint / <b>NITRO</b><br>
-    <b>Space</b> punch (on foot) / handbrake (in car) &nbsp;·&nbsp; <b>Mouse</b> aim &amp; shoot &nbsp;·&nbsp; <b>R</b> reload<br>
-    <b>Q</b> rifle &#8596; Stinger (mountains) — hold aim on a gunship to lock<br>
-    blue markers: <b>city jobs</b> &nbsp;·&nbsp; yellow: <b>Outfield ops</b> &nbsp;·&nbsp; red: <b>the Sierra war</b>
-  </div>
-  <button id="playbtn">PLAY</button>
+<div id="ui">
+  <div class="bar" id="hpwrap"><div id="hp"></div></div>
+  <div class="bar" id="armorwrap"><div id="armor"></div></div>
+  <div class="bar" id="nitrowrap"><div id="nitrobar"></div></div>
+  <div id="money">$0</div>
+  <div id="stars">☆☆☆☆☆</div>
+  <div id="weapon">Fists</div>
+  <div id="ammo"></div>
+  <div id="lockstate"></div>
+  <div id="speed"></div>
+  <div id="banner"></div>
+  <div id="toast"></div>
+  <div id="prompt"></div>
+  <div id="zone"></div>
+  <div id="fail"></div>
+  <div id="crosshair">+</div>
+  <canvas id="minimap" width="210" height="140"></canvas>
+  <div id="pops"></div>
 </div>
-<script src="game.js"></script>
+<div id="menu"></div>
+<div id="intro">
+  <canvas id="face" width="200" height="180"></canvas>
+  <h1>FACELESS CITY 3D</h1>
+  <div class="sub">a whole city of men with no face — jobs, war, property, and everything in between. progress saves itself.</div>
+  <div class="controls">
+    <b>Click</b> to aim (mouse look) · <b>WASD</b> move/drive · <b>E</b> enter vehicle · <b>F</b> shops &amp; houses<br>
+    <b>Shift</b> sprint / NITRO · <b>Space</b> handbrake / heli up · <b>Ctrl</b> heli down · <b>LMB</b> fire · <b>R</b> reload<br>
+    <b>1-9 / wheel</b> weapons — every US gun has its Soviet twin · hold aim on armor &amp; gunships to <b>LOCK</b> rockets<br>
+    tunnels hide you from the law · Fort Kubra is a very bad idea · the Sierra is a war
+  </div>
+  <div class="btns">
+    <button id="playbtn">CONTINUE</button>
+    <button id="newbtn">NEW GAME</button>
+  </div>
+  <div class="classic"><a href="classic.html">← play the original 2D top-down version</a></div>
+</div>
+<script src="vendor/three.min.js"></script>
+<script src="core.js"></script>
+<script src="game3d.js"></script>
 </body>
 </html>
