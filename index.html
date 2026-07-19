@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Faceless City</title>
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; background: #1b1e26; }
+  canvas#game { display: block; cursor: default; }
+  #intro {
+    position: fixed; inset: 0; z-index: 10;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    background: radial-gradient(ellipse at 50% 30%, #2a3350 0%, #171b28 70%);
+    color: #e8e4d8; font-family: "Arial Black", Impact, Arial, sans-serif;
+    text-align: center; user-select: none;
+  }
+  #intro h1 {
+    font-size: clamp(38px, 7vw, 76px); margin: 18px 0 4px; letter-spacing: 4px;
+    color: #e6d5bc; text-shadow: 0 4px 0 #000, 0 0 34px rgba(255, 190, 110, 0.25);
+  }
+  #intro .sub { font-family: monospace; font-size: 15px; color: #9aa3b5; margin-bottom: 22px; }
+  #face { border-radius: 12px; box-shadow: 0 8px 40px rgba(0,0,0,0.6); }
+  #intro .controls {
+    font-family: monospace; font-size: 13.5px; line-height: 1.9; color: #c6cbd6;
+    background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 10px; padding: 12px 26px; margin-top: 20px;
+  }
+  #intro .controls b { color: #ffd23f; }
+  #playbtn {
+    margin-top: 24px; padding: 12px 46px; font-family: inherit; font-size: 19px;
+    letter-spacing: 2px; color: #171b28; background: #e6d5bc; border: none;
+    border-radius: 8px; cursor: pointer; box-shadow: 0 4px 0 #8d7c60;
+  }
+  #playbtn:hover { background: #f2e6d2; }
+  #playbtn:active { transform: translateY(3px); box-shadow: 0 1px 0 #8d7c60; }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div id="intro">
+  <canvas id="face" width="220" height="200"></canvas>
+  <h1>FACELESS CITY</h1>
+  <div class="sub">everyone here has no face — free roam the city, then take the war to the Outfield</div>
+  <div class="controls">
+    <b>WASD / Arrows</b> move &amp; drive &nbsp;·&nbsp; <b>E</b> enter / carjack &nbsp;·&nbsp; <b>Shift</b> sprint<br>
+    <b>Space</b> punch (on foot) / handbrake (in car)<br>
+    <b>Mouse</b> aim &amp; shoot (Outfield only) &nbsp;·&nbsp; <b>R</b> reload<br>
+    head <b>EAST</b> past the city limits for tactical operations
+  </div>
+  <button id="playbtn">PLAY</button>
+</div>
+<script src="game.js"></script>
+</body>
+</html>
