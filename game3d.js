@@ -85,7 +85,7 @@ const roadTex = canvasTex(64, 256, (g, w, h) => {
   g.fillStyle = '#23262e'; g.fillRect(0, 0, w, h);
   g.fillStyle = '#b8a94a';
   for (let y = 0; y < h; y += 64) g.fillRect(w / 2 - 1.5, y, 3, 30);
-  g.fillStyle = 'rgba(255,255,255,0.25)';
+  g.fillStyle = 'rgba(255,255,255,0.1)';
   g.fillRect(2, 0, 2, h); g.fillRect(w - 4, 0, 2, h);
 });
 const asphaltTex = canvasTex(256, 256, (g2, w, h) => {
@@ -148,9 +148,18 @@ const M = {
       m.position.set(x + (C.WORLD.P - C.WORLD.RW) / 2, -0.05, z + (C.WORLD.P - C.WORLD.RW) / 2);
       scene.add(m);
     }
-  // road center-line strips
+  // road center-line strips (separate textures per direction so dashes never smear)
   const roadMat = new T3.MeshLambertMaterial({ map: roadTex });
   roadTex.repeat.set(1, 20);
+  const roadTexH = canvasTex(256, 64, (g2, w, h) => {
+    g2.fillStyle = '#23262e'; g2.fillRect(0, 0, w, h);
+    g2.fillStyle = '#b8a94a';
+    for (let x = 0; x < w; x += 64) g2.fillRect(x, h / 2 - 1.5, 30, 3);
+    g2.fillStyle = 'rgba(255,255,255,0.1)';
+    g2.fillRect(0, 2, w, 2); g2.fillRect(0, h - 4, w, 2);
+  });
+  roadTexH.repeat.set(20, 1);
+  const roadMatH = new T3.MeshLambertMaterial({ map: roadTexH });
   for (let x = cw.x0; x <= cw.x1; x += C.WORLD.P) {
     const m = new T3.Mesh(new T3.PlaneGeometry(C.WORLD.RW, cw.z1 - cw.z0), roadMat);
     m.rotation.x = -Math.PI / 2;
@@ -158,8 +167,8 @@ const M = {
     scene.add(m);
   }
   for (let z = cw.z0; z <= cw.z1; z += C.WORLD.P) {
-    const m = new T3.Mesh(new T3.PlaneGeometry(C.WORLD.RW, cw.x1 - cw.x0), roadMat);
-    m.rotation.x = -Math.PI / 2; m.rotation.z = Math.PI / 2;
+    const m = new T3.Mesh(new T3.PlaneGeometry(cw.x1 - cw.x0, C.WORLD.RW), roadMatH);
+    m.rotation.x = -Math.PI / 2;
     m.position.set((cw.x0 + cw.x1) / 2, -0.02, z + C.WORLD.RW / 2);
     scene.add(m);
   }
@@ -382,9 +391,13 @@ function buildMan(bodyColor, legColor, opts) {
   g.userData = { legL, legR, armL, armR, gun, tube, head };
   return g;
 }
-function animMan(g, phase, moving, aiming) {
+function animMan(g, phase, moving, aiming, rate) {
   const u = g.userData;
-  if (u.mixer) { u.action.paused = !moving; return; }
+  if (u.mixer) {
+    if (moving) { u.action.paused = false; u.action.timeScale = rate || 1.2; }
+    else if (!u.action.paused) { u.action.paused = true; u.action.time = u.action.getClip().duration * 0.24; }
+    return;
+  }
   if (!u.legL) return;
   const s = moving ? Math.sin(phase) * 0.55 : 0;
   u.legL.rotation.z = s; u.legR.rotation.z = -s;
@@ -496,8 +509,8 @@ function buildPlane() {
 // ---------- AI-generated GLB assets (via Higgsfield / Meshy) ----------
 const MODELS = {};
 const MODEL_CFG = {
-  sports: { length: 4.4 }, sedan: { length: 4.5 }, heli: { length: 9.5 },
-  tank: { length: 7.2 }, man: { height: 1.8 }
+  sports: { length: 4.4, rotY: Math.PI }, sedan: { length: 4.5, rotY: Math.PI }, heli: { length: 9.5, rotY: Math.PI },
+  tank: { length: 7.2, rotY: Math.PI }, man: { height: 1.8 }
 };
 function normalizeModel(root, cfg) {
   // transforms live on wrapper groups the animation mixer can never overwrite
@@ -760,6 +773,7 @@ function sfx(kind) {
 const keys = {};
 let pendingEnter = false;
 let camYaw = 0, camPitch = -0.18, mouseDown = false, locked = false;
+let baseYaw = 0, mouseNorm = { x: 0, y: 0 }, lastMouseT = 0;
 window.addEventListener('keydown', e => {
   if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
   keys[e.code] = true;
@@ -778,10 +792,17 @@ canvas.addEventListener('click', () => {
   if (!locked && !menuOpen && started) canvas.requestPointerLock && canvas.requestPointerLock();
 });
 document.addEventListener('pointerlockchange', () => { locked = document.pointerLockElement === canvas; });
+document.addEventListener('pointerlockerror', () => { locked = false; });
 window.addEventListener('mousemove', e => {
-  if (!locked) return;
-  camYaw += e.movementX * 0.0024;
-  camPitch = clamp(camPitch - e.movementY * 0.0022, -1.1, 0.7);
+  if (locked) {
+    camYaw += e.movementX * 0.0024;
+    camPitch = clamp(camPitch - e.movementY * 0.0022, -1.1, 0.7);
+    lastMouseT = performance.now();
+  } else {
+    // sandboxed pages (no pointer lock): the cursor position steers the view
+    mouseNorm.x = e.clientX / window.innerWidth - 0.5;
+    mouseNorm.y = e.clientY / window.innerHeight - 0.5;
+  }
 });
 window.addEventListener('mousedown', e => { if (e.button === 0) mouseDown = true; audioInit(); });
 window.addEventListener('mouseup', e => { if (e.button === 0) mouseDown = false; });
@@ -1065,13 +1086,13 @@ function syncScene(dt, t) {
     if (pd.dead) continue; live.add(pd);
     const m = syncEntity(pd);
     if (pd.state === 'down') { m.rotation.x = Math.PI / 2; m.position.y = pd.y + 0.4; }
-    else { m.rotation.x = 0; animMan(m, pd.phase, pd.state !== 'down', false); }
+    else { m.rotation.x = 0; animMan(m, pd.phase, pd.state !== 'down', false, pd.state === 'flee' ? 2.4 : clamp(pd.spd / 1.3, 0.7, 2.4)); }
   }
   for (const e of S.enemies.concat(S.soldiers, S.footCops)) {
     if (e.dead) continue; live.add(e);
     const m = syncEntity(e);
     if (e.state === 'down') { m.rotation.x = Math.PI / 2; m.position.y = e.y + 0.4; }
-    else { m.rotation.x = 0; animMan(m, e.phase, true, true); }
+    else { m.rotation.x = 0; animMan(m, e.phase, true, true, 1.9); }
   }
   gcMeshes(live);
   // player
@@ -1085,7 +1106,7 @@ function syncScene(dt, t) {
       playerMesh.userData.gun.visible = armed2 && C.WEAPONS[p.cur].cls !== 'rocket' && C.WEAPONS[p.cur].cls !== 'aa';
       playerMesh.userData.tube.visible = armed2 && !playerMesh.userData.gun.visible;
     }
-    animMan(playerMesh, p.phase, p.moving, armed2);
+    animMan(playerMesh, p.phase, p.moving, armed2, (keys.ShiftLeft || keys.ShiftRight) ? 2.3 : 1.5);
   }
   // skeletal walk animations
   for (const [, mm2] of meshMap) if (mm2.userData.mixer) mm2.userData.mixer.update(dt);
@@ -1125,6 +1146,18 @@ function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000);
   last = now; elapsed += dt;
   if (!started) return;
+  {
+    const p2 = S.player;
+    if (!locked) {
+      // follow what you're doing; mouse offset looks around
+      if (p2.veh) baseYaw = U.angLerp(baseYaw, p2.veh.yaw, clamp(2.6 * dt, 0, 1));
+      else if (p2.moving) baseYaw = U.angLerp(baseYaw, p2.yaw, clamp(1.6 * dt, 0, 1));
+      camYaw = baseYaw + mouseNorm.x * 3.6;
+      camPitch = clamp(-0.16 - mouseNorm.y * 1.5, -1.1, 0.7);
+    } else if (p2.veh && performance.now() - lastMouseT > 1200) {
+      camYaw = U.angLerp(camYaw, p2.veh.yaw, clamp(2.2 * dt, 0, 1)); // chase cam settles behind the car
+    }
+  }
   C.step(dt, buildInput());
   handleEvents();
   syncScene(dt, elapsed);

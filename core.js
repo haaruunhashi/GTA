@@ -891,7 +891,9 @@ function updateBullets(dt) {
 function playerFoot(dt, inp) {
   const p = S.player;
   if (p.downT > 0) { p.downT -= dt; return; }
-  p.yaw = inp.camYaw; p.pitch = inp.camPitch;
+  p.pitch = inp.camPitch;
+  const aiming = p.cur !== 'fists';
+  if (aiming) p.yaw = inp.camYaw;
   const sp = (inp.run ? 7.5 : 4.5);
   let mx = 0, mz = 0;
   if (inp.fwd || inp.back || inp.left || inp.right) {
@@ -906,6 +908,7 @@ function playerFoot(dt, inp) {
     mx /= L; mz /= L;
   }
   p.moving = !!(mx || mz);
+  if (!aiming && p.moving) p.yaw = angLerp(p.yaw, Math.atan2(mz, mx), clamp(12 * dt, 0, 1));
   if (p.moving) {
     const nx = p.x + mx * sp * dt, nz = p.z + mz * sp * dt;
     if (!solidAt(nx + mx * 0.6, p.y + 1, p.z)) p.x = clamp(nx, 5, W - 5);
