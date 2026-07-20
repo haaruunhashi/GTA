@@ -251,10 +251,12 @@ const M = {
     terminal: new T3.MeshLambertMaterial({ map: winTex, emissive: 0xffffff, emissiveMap: winTex, emissiveIntensity: 0.6 })
   };
   const groups = {};
-  for (const b of C.buildings) {
+  C.buildings.forEach((b, i) => {
+    b.__idx = i;
     const k = b.kind === 'tower' && b.h < 30 ? 'block' : (mats[b.kind] ? b.kind : 'block');
     (groups[k] = groups[k] || []).push(b);
-  }
+  });
+  window.__blockIM = { ims: [] };
   const m4 = new T3.Matrix4();
   for (const k in groups) {
     const list = groups[k];
@@ -276,6 +278,7 @@ const M = {
     });
     rim.instanceMatrix.needsUpdate = true;
     scene.add(rim);
+    window.__blockIM.ims.push({ im, roof: rim, list });
   }
 }
 
@@ -1204,4 +1207,272 @@ $('newbtn').addEventListener('click', () => {
 })();
 
 window.__FC3D = { scene, camera, renderer, get started() { return started; } };
+
+// ================= FLAVOR PASS: CC0 Kenney kit, stunts, neon, weapon wheel =================
+(function flavor() {
+  // ---------- merged-geometry baking ----------
+  function bakeMerged(parts) {
+    const byMat = new Map();
+    const v = new T3.Vector3();
+    for (const p of parts) {
+      const key = p.material.uuid;
+      if (!byMat.has(key)) byMat.set(key, { material: p.material, pos: [], norm: [], uv: [], col: [], idx: [], base: 0 });
+      const acc = byMat.get(key);
+      const g = p.geo;
+      const pa = g.attributes.position, na = g.attributes.normal, ua = g.attributes.uv, ca = g.attributes.color;
+      const nm = new T3.Matrix3().getNormalMatrix(p.matrix);
+      for (let i = 0; i < pa.count; i++) {
+        v.fromBufferAttribute(pa, i).applyMatrix4(p.matrix);
+        acc.pos.push(v.x, v.y, v.z);
+        if (na) { v.fromBufferAttribute(na, i).applyMatrix3(nm).normalize(); acc.norm.push(v.x, v.y, v.z); }
+        if (ua) acc.uv.push(ua.getX(i), ua.getY(i));
+        if (ca) acc.col.push(ca.getX(i), ca.getY(i), ca.getZ(i));
+        else if (acc.col.length) acc.col.push(1, 1, 1);
+      }
+      const idx = g.index;
+      if (idx) for (let i = 0; i < idx.count; i++) acc.idx.push(idx.getX(i) + acc.base);
+      else for (let i = 0; i < pa.count; i++) acc.idx.push(i + acc.base);
+      acc.base += pa.count;
+    }
+    const meshes = [];
+    for (const acc of byMat.values()) {
+      const g = new T3.BufferGeometry();
+      g.setAttribute('position', new T3.Float32BufferAttribute(acc.pos, 3));
+      if (acc.norm.length) g.setAttribute('normal', new T3.Float32BufferAttribute(acc.norm, 3));
+      if (acc.uv.length) g.setAttribute('uv', new T3.Float32BufferAttribute(acc.uv, 2));
+      if (acc.col.length) { g.setAttribute('color', new T3.Float32BufferAttribute(acc.col, 3)); acc.material.vertexColors = true; }
+      g.setIndex(acc.idx);
+      if (!acc.norm.length) g.computeVertexNormals();
+      const mesh = new T3.Mesh(g, acc.material);
+      mesh.castShadow = true; mesh.receiveShadow = true;
+      meshes.push(mesh);
+    }
+    return meshes;
+  }
+  function partsOf(sceneRoot, matrix) {
+    const parts = [];
+    sceneRoot.updateMatrixWorld(true);
+    sceneRoot.traverse(o => {
+      if (o.isMesh && o.geometry && o.geometry.attributes.position) {
+        const m = new T3.Matrix4().multiplyMatrices(matrix, o.matrixWorld);
+        let mat = o.material;
+        const conv = new T3.MeshLambertMaterial({
+          map: mat.map || null, vertexColors: !!mat.vertexColors,
+          color: mat.color ? mat.color.clone() : new T3.Color(0xffffff)
+        });
+        if (conv.map) conv.map.colorSpace = T3.SRGBColorSpace;
+        conv.uuid = 'conv_' + (mat.map ? mat.map.uuid : mat.uuid); // share merged buckets
+        parts.push({ geo: o.geometry, matrix: m, material: conv });
+      }
+    });
+    return parts;
+  }
+
+  // ---------- Kenney CC0 city kit ----------
+  const KEN_FILES = ['building-small-a', 'building-small-b', 'building-small-c', 'building-small-d',
+    'building-garage', 'grass-trees', 'grass-trees-tall', 'pavement-fountain'];
+  const KEN = {};
+  function kenReady() {
+    // pick which low-rise city boxes become real storefront buildings
+    const replaced = new Set();
+    const parts = [];
+    const kinds = ['building-small-a', 'building-small-b', 'building-small-c', 'building-small-d'];
+    const nat = {};
+    for (const k of KEN_FILES) {
+      if (!KEN[k]) continue;
+      const b = new T3.Box3().setFromObject(KEN[k]);
+      nat[k] = { size: b.getSize(new T3.Vector3()), min: b.min.clone() };
+    }
+    C.buildings.forEach((b, i) => {
+      if (b.kind !== 'block') return;
+      const w = b.x1 - b.x0, d = b.z1 - b.z0, h = b.h;
+      if (h > 24 || w > 60 || d > 60) return;
+      const k = kinds[(i * 7 + 3) % kinds.length];
+      if (!KEN[k] || !nat[k]) return;
+      replaced.add(i);
+      const n = nat[k];
+      const sx = w / n.size.x, sy = h / n.size.y, sz = d / n.size.z;
+      const rot = ((i * 13) % 4) * Math.PI / 2;
+      const m = new T3.Matrix4()
+        .makeTranslation((b.x0 + b.x1) / 2, 0, (b.z0 + b.z1) / 2)
+        .multiply(new T3.Matrix4().makeRotationY(rot))
+        .multiply(new T3.Matrix4().makeScale(rot % Math.PI ? sz : sx, sy, rot % Math.PI ? sx : sz))
+        .multiply(new T3.Matrix4().makeTranslation(0, -n.min.y, 0));
+      parts.push(...partsOf(KEN[k], m));
+    });
+    // parks: fountains + tree clusters
+    C.parks.forEach((p, i) => {
+      const cx = (p.x0 + p.x1) / 2, cz = (p.z0 + p.z1) / 2;
+      if (KEN['pavement-fountain'] && i % 2 === 0) {
+        const n = nat['pavement-fountain'];
+        const s = 16 / Math.max(n.size.x, n.size.z);
+        const m = new T3.Matrix4().makeTranslation(cx, 0.05, cz)
+          .multiply(new T3.Matrix4().makeScale(s, s, s))
+          .multiply(new T3.Matrix4().makeTranslation(0, -n.min.y, 0));
+        parts.push(...partsOf(KEN['pavement-fountain'], m));
+      }
+      const tk = i % 2 ? 'grass-trees' : 'grass-trees-tall';
+      if (KEN[tk]) {
+        const n = nat[tk];
+        const s = 12 / Math.max(n.size.x, n.size.z);
+        for (const [ox, oz] of [[-24, -24], [24, 20], [-20, 26]]) {
+          const m = new T3.Matrix4().makeTranslation(cx + ox, 0.05, cz + oz)
+            .multiply(new T3.Matrix4().makeScale(s, s, s))
+            .multiply(new T3.Matrix4().makeTranslation(0, -n.min.y, 0));
+          parts.push(...partsOf(KEN[tk], m));
+        }
+      }
+    });
+    for (const mesh of bakeMerged(parts)) scene.add(mesh);
+    // rebuild the low-rise instanced boxes without the replaced ones
+    if (replaced.size && window.__blockIM) {
+      // hide replaced instances by collapsing them
+      const m4b = new T3.Matrix4();
+      window.__blockIM.ims.forEach(entry => {
+        entry.list.forEach((b, j) => {
+          if (replaced.has(b.__idx)) {
+            m4b.makeScale(0.0001, 0.0001, 0.0001);
+            m4b.setPosition(0, -50, 0);
+            entry.im.setMatrixAt(j, m4b);
+            if (entry.roof) entry.roof.setMatrixAt(j, m4b);
+          }
+        });
+        entry.im.instanceMatrix.needsUpdate = true;
+        if (entry.roof) entry.roof.instanceMatrix.needsUpdate = true;
+      });
+    }
+  }
+  if (window.GLTFLoader) {
+    const loader = new window.GLTFLoader();
+    let left = KEN_FILES.length;
+    const done = () => { if (--left === 0) { try { kenReady(); } catch (e) { console.warn('kenney', e); } } };
+    for (const k of KEN_FILES) {
+      const fin = gl => { KEN[k] = gl.scene; done(); };
+      if (window.FC_ASSETS && window.FC_ASSETS['ken_' + k]) {
+        const bin = Uint8Array.from(atob(window.FC_ASSETS['ken_' + k]), ch => ch.charCodeAt(0)).buffer;
+        loader.parse(bin, '', fin, () => done());
+      } else {
+        fetch('assets/kenney/' + k + '.glb').then(r => r.ok ? r.arrayBuffer() : Promise.reject(0))
+          .then(b => loader.parse(b, '', fin, () => done()))
+          .catch(() => done());
+      }
+    }
+  }
+
+  // ---------- stunt ramps ----------
+  const stripeTex = canvasTex(64, 64, (g2) => {
+    g2.fillStyle = '#c9a52c'; g2.fillRect(0, 0, 64, 64);
+    g2.fillStyle = '#1c1c20';
+    for (let i = -2; i < 6; i++) { g2.save(); g2.translate(i * 16, 0); g2.rotate(Math.PI / 4); g2.fillRect(0, -40, 8, 120); g2.restore(); }
+  });
+  for (const r of C.RAMPS) {
+    const w2 = r.w / 2, gy = C.groundY(r.x, r.z);
+    const geo = new T3.BufferGeometry();
+    const verts = [
+      0, 0, -w2, 0, 0, w2, r.len, 0, w2, r.len, 0, -w2,
+      r.len, r.h, -w2, r.len, r.h, w2
+    ];
+    geo.setAttribute('position', new T3.Float32BufferAttribute(verts, 3));
+    geo.setIndex([0, 1, 5, 0, 5, 4, /* slope */ 3, 4, 5, 3, 5, 2, /* back */ 0, 4, 3, /* side */ 1, 2, 5]);
+    geo.computeVertexNormals();
+    const mesh = new T3.Mesh(geo, new T3.MeshLambertMaterial({ map: stripeTex, side: T3.DoubleSide }));
+    mesh.position.set(r.x, gy + 0.02, r.z);
+    mesh.rotation.y = -r.yaw;
+    mesh.castShadow = true;
+    scene.add(mesh);
+  }
+
+  // ---------- neon signs & billboards ----------
+  const signMats = [];
+  function signTex(text, color, sub) {
+    return canvasTex(512, 160, (g2, w, h) => {
+      g2.fillStyle = '#101018'; g2.fillRect(0, 0, w, h);
+      g2.strokeStyle = color; g2.lineWidth = 5; g2.strokeRect(8, 8, w - 16, h - 16);
+      g2.font = '900 ' + (sub ? 44 : 58) + 'px Arial Black, Arial';
+      g2.textAlign = 'center'; g2.textBaseline = 'middle';
+      g2.shadowColor = color; g2.shadowBlur = 26;
+      g2.fillStyle = color;
+      g2.fillText(text, w / 2, sub ? h / 2 - 24 : h / 2);
+      if (sub) { g2.font = '700 26px Arial'; g2.shadowBlur = 12; g2.fillText(sub, w / 2, h / 2 + 38); }
+    });
+  }
+  function addSign(x, y, z, yaw, tex, sw, sh, flicker) {
+    const mat = new T3.MeshBasicMaterial({ map: tex, transparent: true, side: T3.DoubleSide });
+    const m = new T3.Mesh(new T3.PlaneGeometry(sw || 10, sh || 3.2), mat);
+    m.position.set(x, y, z); m.rotation.y = yaw;
+    scene.add(m);
+    if (flicker) signMats.push(mat);
+    return m;
+  }
+  const SIGN_DEFS = {
+    armory: ['LIBERTY ARMS', '#8fd0ff', 'US MILITARY SURPLUS'],
+    blackmarket: ['SIERRA SUPPLY', '#ff785a', 'НЕ ЗАДАВАЙ ВОПРОСОВ'],
+    market: ['FACELESS FOODS', '#79d98c', 'EVERYTHING TASTES THE SAME'],
+    clothes: ['THREADS & CO', '#e8c84a', 'SAME HEAD. BETTER CUT.'],
+    dealer: ['PRESTIGE MOTORS', '#c05ae8', 'NITRO INCLUDED'],
+    airdealer: ['SKYLINE AVIATION', '#5ad0e8', 'OWN A PIECE OF THE SKY']
+  };
+  for (const s of C.SHOPS) {
+    const d = SIGN_DEFS[s.id];
+    if (!d) continue;
+    addSign(s.x, 7.5, s.z, ((s.x * 7 + s.z) | 0) % 2 ? 0 : Math.PI / 2, signTex(d[0], d[1], d[2]), 12, 3.8, s.id === 'blackmarket');
+  }
+  const ADS = [
+    ['MANNEQUIN MOTEL', '#e8c84a', 'SLEEP LIKE YOU ARE NOT THERE'],
+    ['NO FACE? NO PROBLEM.', '#79d98c', 'FACELESS CITY TOURISM BOARD'],
+    ['STUNT RAMPS AHEAD', '#ff785a', 'INSURANCE NOT INCLUDED'],
+    ['THE JUDGE IS FACELESS TOO', '#8fd0ff', 'DRIVE ACCORDINGLY'],
+    ['VISIT SIERRA NEGRA', '#c05ae8', 'BRING ROCKETS'],
+    ['FORT KUBRA', '#ff5a5a', 'ABSOLUTELY DO NOT VISIT']
+  ];
+  const BB_SPOTS = [[500, 1010], [1230, 2980], [2400, 1010], [2880, 2200], [3100, 1600], [1700, 3300]];
+  BB_SPOTS.forEach(([x, z], i) => {
+    const gy = C.groundY(x, z);
+    const pole = new T3.Mesh(new T3.CylinderGeometry(0.35, 0.4, 11, 8), M.dark);
+    pole.position.set(x, gy + 5.5, z);
+    scene.add(pole);
+    const ad = ADS[i % ADS.length];
+    addSign(x, gy + 12.5, z, (i * 1.1) % Math.PI, signTex(ad[0], ad[1], ad[2]), 16, 5, i === 2);
+  });
+  // flicker loop hooks into the sprite updater
+  setInterval(() => {
+    for (const mt of signMats) mt.opacity = Math.random() < 0.12 ? 0.25 : 1;
+  }, 120);
+
+  // ---------- weapon wheel (Tab) ----------
+  const wheel = document.createElement('div');
+  wheel.id = 'wheel';
+  wheel.style.cssText = 'position:fixed;inset:0;display:none;background:rgba(8,10,16,0.72);z-index:20;pointer-events:auto;';
+  wheel.innerHTML = '<div id="wheelgrid" style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);display:grid;grid-template-columns:repeat(4,150px);gap:10px;"></div>' +
+    '<div style="position:absolute;left:50%;bottom:12%;transform:translateX(-50%);color:#9aa3b5;font:700 13px monospace">[TAB] close · click to equip</div>';
+  document.body.appendChild(wheel);
+  let wheelOpen = false;
+  function renderWheel() {
+    const grid = document.getElementById('wheelgrid');
+    const p = S.player;
+    grid.innerHTML = '';
+    for (const id in p.weapons) {
+      const w = C.WEAPONS[id];
+      const cell = document.createElement('div');
+      const cur = p.cur === id;
+      cell.style.cssText = 'background:' + (cur ? 'rgba(230,213,188,0.25)' : 'rgba(20,24,34,0.9)') +
+        ';border:2px solid ' + (cur ? '#e6d5bc' : 'rgba(255,255,255,0.2)') + ';border-radius:10px;padding:12px;cursor:pointer;color:#e8e4d8;font:700 13px monospace;text-align:center';
+      const ammo = id === 'fists' ? '' : (w.cls === 'rocket' || w.cls === 'aa') ? '× ' + p.ammo[w.cls] : p.weapons[id].mag + ' / ' + p.ammo[w.cls];
+      cell.innerHTML = '<div style="font-size:15px">' + w.name + '</div>' +
+        '<div style="color:#9aa3b5;margin-top:4px">' + (w.nation ? '[' + w.nation + '] ' : '') + (w.cls || '') + '</div>' +
+        '<div style="color:#8fd0ff;margin-top:4px">' + ammo + '</div>';
+      cell.onclick = () => { C.equip(id); toggleWheel(false); };
+      grid.appendChild(cell);
+    }
+  }
+  function toggleWheel(open) {
+    wheelOpen = open === undefined ? !wheelOpen : open;
+    wheel.style.display = wheelOpen ? 'block' : 'none';
+    if (wheelOpen) { renderWheel(); if (document.pointerLockElement) document.exitPointerLock(); }
+  }
+  window.addEventListener('keydown', e => {
+    if (e.code === 'Tab') { e.preventDefault(); if (started) toggleWheel(); }
+  });
+})();
+
 })();

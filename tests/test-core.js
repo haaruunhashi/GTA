@@ -243,4 +243,23 @@ S.done.getaway = 1;
 assert(C.unlocked('taxi') && C.unlocked('race') && C.unlocked('airrace'), 'taxi, street race, air race unlocked after getaway');
 assert(C.unlocked('heist'), 'heist unlocked after war2');
 
+// --- stunt ramps: launch off the airport ramp, get paid ---
+S.mission = null; S.wanted = 0;
+P.veh = null;
+const stuntCar = C.factories.mkCar(1520, 3480, 0, 'free', 'sports');
+S.cars.push(stuntCar);
+P.x = stuntCar.x + 2; P.z = stuntCar.z; P.y = 0;
+(() => { const i = inp(); i.enter = 1; step(2, i); })();
+assert(P.veh === stuntCar, 'board the stunt car');
+const iRamp = inp(); iRamp.fwd = 1; iRamp.nitro = 1;
+let flew = false, moneyBefore = P.money;
+for (let k = 0; k < 700; k++) {
+  C.step(1 / 60, iRamp);
+  if (P.veh && P.veh.air) flew = true;
+  if (!P.veh) break;
+}
+C.drainEvents();
+assert(flew, 'car goes airborne off the airport ramp');
+assert(P.money > moneyBefore, 'stunt bonus paid (+$' + (P.money - moneyBefore) + ')');
+
 console.log('\nCORE_OK — ' + pass + ' assertions passed');

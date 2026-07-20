@@ -75,3 +75,16 @@ combatants — soldiers, tanks, gunships — plus classic GTA chaos.
 - `game3d.js` — Three.js renderer, camera, input, HUD, shop menus.
 - `vendor/three.min.js` — Three.js r160, vendored.
 - `classic.html` + `game.js` — the original 2D top-down version, kept playable.
+- `assets/*.glb` — AI-generated models (Higgsfield/Meshy). `assets/kenney/*.glb` — CC0 city
+  models from [Kenney](https://kenney.nl)'s Starter Kit City Builder (thanks, Kenney!).
+
+## Flavor systems
+
+- **Stunt ramps** — eight hazard-striped ramps (airport, Outfield, city, Sierra). Hit them
+  fast: airtime over ~0.9s pays an INSANE STUNT bonus scaled by hang time and speed.
+- **Neon city** — glowing shop signs and roadside billboards for the city's faceless brands
+  (FACELESS FOODS: *everything tastes the same*; MANNEQUIN MOTEL: *sleep like you're not
+  there*), with the Sierra black market flickering in Russian.
+- **Weapon wheel** — Tab opens a wheel of everything you own with live ammo counts.
+- **Kenney storefronts** — low-rise blocks use real CC0 building models; parks get fountains
+  and tree clusters, all merged into a handful of draw calls.

@@ -442,6 +442,29 @@ C.buyHouse = function (id) {
   return null;
 };
 
+// ---------- stunt ramps ----------
+const RAMPS = [
+  { x: 1600, z: 3480, yaw: 0, len: 18, w: 8, h: 4.5 },
+  { x: 2350, z: 3620, yaw: Math.PI, len: 18, w: 8, h: 4.5 },
+  { x: 3200, z: 1500, yaw: 0.6, len: 16, w: 7, h: 4 },
+  { x: 3700, z: 2400, yaw: -1.2, len: 16, w: 7, h: 4 },
+  { x: 3500, z: 950, yaw: 2.5, len: 16, w: 7, h: 4 },
+  { x: 350, z: 1000, yaw: 0.8, len: 14, w: 7, h: 3.5 },
+  { x: 2610, z: 3080, yaw: -0.5, len: 14, w: 7, h: 3.5 },
+  { x: 4480, z: 2010, yaw: 0, len: 16, w: 7, h: 4 }
+];
+C.RAMPS = RAMPS;
+function rampAt(x, z) {
+  for (const r of RAMPS) {
+    const dx = x - r.x, dz = z - r.z;
+    const ca = Math.cos(-r.yaw), sa = Math.sin(-r.yaw);
+    const lx = ca * dx - sa * dz, lz = sa * dx + ca * dz;
+    if (lx >= 0 && lx <= r.len && Math.abs(lz) <= r.w / 2) return { r, y: (lx / r.len) * r.h };
+  }
+  return null;
+}
+C.rampAt = rampAt;
+
 // ---------- combat ----------
 function losClear(ax, ay, az, bx, by, bz) {
   const d = Math.hypot(bx - ax, bz - az), steps = Math.ceil(d / 4);
@@ -1066,7 +1089,30 @@ function playerVehicle(dt, inp) {
     }
     v.x = clamp(v.x, 8, W - 8); v.z = clamp(v.z, 8, D - 8);
     const gy = groundY(v.x, v.z);
-    v.y += clamp(gy - v.y, -40 * dt, 40 * dt);
+    if (isTank) v.y += clamp(gy - v.y, -40 * dt, 40 * dt);
+    else {
+      // stunt ramps + airtime bonuses
+      v.vy = v.vy || 0;
+      const rr2 = rampAt(v.x, v.z);
+      if (v.air) {
+        v.airT += dt; v.vy -= 22 * dt; v.y += v.vy * dt;
+        if (v.y <= gy + 0.05) {
+          v.y = gy; v.air = false; v.vy = 0;
+          if (v.airT > 0.85) {
+            const bonus = Math.round(60 * v.airT * v.airT + Math.abs(v.spd) * 2);
+            p.money += bonus; p.rep += 1;
+            ev('popup', { msg: 'INSANE STUNT +$' + bonus });
+            ev('sfx', { k: 'win' }); ev('shake', { n: 4 });
+          } else if (v.airT > 0.3) ev('shake', { n: 2 });
+        }
+      } else if (rr2 && rr2.y >= gy - 0.01) {
+        v.y = gy + rr2.y; v.onRamp = rr2.r;
+      } else if (v.onRamp) {
+        const rmp = v.onRamp; v.onRamp = null;
+        if (Math.abs(v.spd) > 10) { v.air = true; v.airT = 0; v.vy = Math.abs(v.spd) * (rmp.h / rmp.len) * 0.95; }
+        else v.y += clamp(gy - v.y, -40 * dt, 40 * dt);
+      } else v.y += clamp(gy - v.y, -40 * dt, 40 * dt);
+    }
     // tank turret + cannon
     if (isTank) {
       v.ta = angLerp(v.ta, inp.camYaw, clamp(2 * dt, 0, 1));
