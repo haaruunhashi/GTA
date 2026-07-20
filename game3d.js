@@ -10,10 +10,13 @@ const clamp = U.clamp;
 const canvas = document.getElementById('game');
 const renderer = new T3.WebGLRenderer({ canvas, antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.6));
+renderer.toneMapping = T3.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 0.95;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = T3.PCFShadowMap;
 const scene = new T3.Scene();
 const DUSK = 0x1d2438;
-scene.background = new T3.Color(0x2a3352);
-scene.fog = new T3.Fog(0x2a3352, 180, 1500);
+scene.fog = new T3.Fog(0x30344f, 200, 1600);
 const camera = new T3.PerspectiveCamera(70, 1, 0.1, 3000);
 function resize() {
   renderer.setSize(window.innerWidth, window.innerHeight);
@@ -22,11 +25,38 @@ function resize() {
 }
 window.addEventListener('resize', resize); resize();
 
+// dusk sky dome with stars + horizon glow
+{
+  const skyC = document.createElement('canvas'); skyC.width = 1024; skyC.height = 512;
+  const sg = skyC.getContext('2d');
+  const grad = sg.createLinearGradient(0, 0, 0, 512);
+  grad.addColorStop(0, '#0a0f20'); grad.addColorStop(0.45, '#1c2444');
+  grad.addColorStop(0.72, '#39395c'); grad.addColorStop(0.85, '#6b5346'); grad.addColorStop(1, '#a5744c');
+  sg.fillStyle = grad; sg.fillRect(0, 0, 1024, 512);
+  for (let i = 0; i < 320; i++) {
+    const y = Math.random() * 300;
+    sg.fillStyle = 'rgba(255,255,255,' + (Math.random() * 0.8 * (1 - y / 320)) + ')';
+    sg.fillRect(Math.random() * 1024, y, Math.random() < 0.1 ? 2 : 1, 1);
+  }
+  const skyTex = new T3.CanvasTexture(skyC);
+  skyTex.colorSpace = T3.SRGBColorSpace;
+  const sky = new T3.Mesh(new T3.SphereGeometry(2400, 24, 16),
+    new T3.MeshBasicMaterial({ map: skyTex, side: T3.BackSide, fog: false, depthWrite: false }));
+  sky.rotation.y = 1.2;
+  window.__skyDome = sky;
+  scene.add(sky);
+}
 scene.add(new T3.HemisphereLight(0x54689e, 0x38342c, 1.35));
 scene.add(new T3.AmbientLight(0x4a5470, 0.85));
 const moon = new T3.DirectionalLight(0x9fb2de, 1.15);
-moon.position.set(-0.4, 1, 0.3);
-scene.add(moon);
+moon.position.set(-60, 140, 45);
+moon.castShadow = true;
+moon.shadow.mapSize.set(2048, 2048);
+moon.shadow.camera.near = 10; moon.shadow.camera.far = 420;
+moon.shadow.camera.left = -140; moon.shadow.camera.right = 140;
+moon.shadow.camera.top = 140; moon.shadow.camera.bottom = -140;
+moon.shadow.bias = -0.0006;
+scene.add(moon); scene.add(moon.target);
 
 // ---------- shared materials / textures ----------
 function canvasTex(w, h, fn) {
@@ -58,9 +88,28 @@ const roadTex = canvasTex(64, 256, (g, w, h) => {
   g.fillStyle = 'rgba(255,255,255,0.25)';
   g.fillRect(2, 0, 2, h); g.fillRect(w - 4, 0, 2, h);
 });
+const asphaltTex = canvasTex(256, 256, (g2, w, h) => {
+  g2.fillStyle = '#26292f'; g2.fillRect(0, 0, w, h);
+  for (let i = 0; i < 2600; i++) {
+    g2.fillStyle = 'rgba(' + (30 + Math.random() * 40 | 0) + ',' + (30 + Math.random() * 40 | 0) + ',' + (36 + Math.random() * 40 | 0) + ',0.5)';
+    g2.fillRect(Math.random() * w, Math.random() * h, 1.6, 1.6);
+  }
+});
+asphaltTex.repeat.set(60, 60);
+const walkTex = canvasTex(256, 256, (g2, w, h) => {
+  g2.fillStyle = '#41454f'; g2.fillRect(0, 0, w, h);
+  for (let i = 0; i < 1400; i++) {
+    g2.fillStyle = 'rgba(255,255,255,' + Math.random() * 0.05 + ')';
+    g2.fillRect(Math.random() * w, Math.random() * h, 2, 2);
+  }
+  g2.strokeStyle = 'rgba(0,0,0,0.35)'; g2.lineWidth = 2;
+  for (let x = 0; x <= w; x += 64) { g2.beginPath(); g2.moveTo(x, 0); g2.lineTo(x, h); g2.stroke(); }
+  for (let y = 0; y <= h; y += 64) { g2.beginPath(); g2.moveTo(0, y); g2.lineTo(w, y); g2.stroke(); }
+});
+walkTex.repeat.set(12, 12);
 const M = {
-  asphalt: new T3.MeshLambertMaterial({ color: 0x23262e }),
-  sidewalk: new T3.MeshLambertMaterial({ color: 0x3d414c }),
+  asphalt: new T3.MeshLambertMaterial({ map: asphaltTex, color: 0xbbbfc8 }),
+  sidewalk: new T3.MeshLambertMaterial({ map: walkTex, color: 0xcfd2da }),
   grass: new T3.MeshLambertMaterial({ color: 0x2e4331 }),
   dirt: new T3.MeshLambertMaterial({ color: 0x4a4034 }),
   concrete: new T3.MeshLambertMaterial({ color: 0x515560 }),
@@ -77,12 +126,14 @@ const M = {
 {
   const g = new T3.PlaneGeometry(C.WORLD.W, C.WORLD.D);
   const base = new T3.Mesh(g, M.dirt);
+  base.receiveShadow = true;
   base.rotation.x = -Math.PI / 2;
   base.position.set(C.WORLD.W / 2, -0.25, C.WORLD.D / 2);
   scene.add(base);
   // city base = asphalt
   const cw = C.WORLD.CITY;
   const cbase = new T3.Mesh(new T3.PlaneGeometry(cw.x1 - cw.x0 + 60, cw.z1 - cw.z0 + 60), M.asphalt);
+  cbase.receiveShadow = true;
   cbase.rotation.x = -Math.PI / 2;
   cbase.position.set((cw.x0 + cw.x1) / 2, -0.12, (cw.z0 + cw.z1) / 2);
   scene.add(cbase);
@@ -92,6 +143,7 @@ const M = {
     for (let z = cw.z0 + C.WORLD.RW; z + (C.WORLD.P - C.WORLD.RW) <= cw.z1; z += C.WORLD.P) {
       const isPark = C.parks.some(p => Math.abs(p.x0 - x) < 2 && Math.abs(p.z0 - z) < 2);
       const m = new T3.Mesh(blockGeo, isPark ? M.grass : M.sidewalk);
+      m.receiveShadow = true;
       m.rotation.x = -Math.PI / 2;
       m.position.set(x + (C.WORLD.P - C.WORLD.RW) / 2, -0.05, z + (C.WORLD.P - C.WORLD.RW) / 2);
       scene.add(m);
@@ -148,6 +200,7 @@ const M = {
   tg.setAttribute('color', new T3.Float32BufferAttribute(cols, 3));
   tg.computeVertexNormals();
   const terr = new T3.Mesh(tg, new T3.MeshLambertMaterial({ vertexColors: true }));
+  terr.receiveShadow = true;
   terr.position.set(5100, 0, C.WORLD.D / 2);
   scene.add(terr);
   // tunnels: trench + roof + portals
@@ -203,6 +256,7 @@ const M = {
       im.setMatrixAt(i, m4);
     });
     im.instanceMatrix.needsUpdate = true;
+    im.castShadow = true;
     scene.add(im);
     // flat roofs
     const rim = new T3.InstancedMesh(new T3.BoxGeometry(1, 0.5, 1), M.roof, list.length);
@@ -243,6 +297,7 @@ const M = {
       im.setMatrixAt(i, m4);
     });
     im.instanceMatrix.needsUpdate = true;
+    im.castShadow = true;
     scene.add(im);
     if (k === 'pine' || k === 'tree') {
       const tim = new T3.InstancedMesh(trunkGeo, trunkMat, list.length);
@@ -329,6 +384,8 @@ function buildMan(bodyColor, legColor, opts) {
 }
 function animMan(g, phase, moving, aiming) {
   const u = g.userData;
+  if (u.mixer) { u.action.paused = !moving; return; }
+  if (!u.legL) return;
   const s = moving ? Math.sin(phase) * 0.55 : 0;
   u.legL.rotation.z = s; u.legR.rotation.z = -s;
   if (!aiming) { u.armL.rotation.z = -s * 0.8; u.armR.rotation.z = s * 0.8; }
@@ -435,6 +492,111 @@ function buildPlane() {
   return g;
 }
 
+
+// ---------- AI-generated GLB assets (via Higgsfield / Meshy) ----------
+const MODELS = {};
+const MODEL_CFG = {
+  sports: { length: 4.4 }, sedan: { length: 4.5 }, heli: { length: 9.5 },
+  tank: { length: 7.2 }, man: { height: 1.8 }
+};
+function normalizeModel(root, cfg) {
+  // transforms live on wrapper groups the animation mixer can never overwrite
+  const wrap = new T3.Group();
+  const inner = new T3.Group();
+  inner.add(root); wrap.add(inner);
+  let box = new T3.Box3().setFromObject(root);
+  let size = box.getSize(new T3.Vector3());
+  const s = cfg.height ? cfg.height / size.y : cfg.length / Math.max(size.x, size.z, 0.01);
+  wrap.scale.setScalar(s);
+  if (!cfg.height && size.z > size.x) inner.rotation.y = Math.PI / 2;
+  if (cfg.rotY) inner.rotation.y += cfg.rotY;
+  inner.updateMatrixWorld(true);
+  box = new T3.Box3().setFromObject(inner);
+  const c = box.getCenter(new T3.Vector3());
+  inner.position.set(-c.x, -box.min.y, -c.z);
+  // skinned rigs: units of armature and mesh can disagree — calibrate from real bone span
+  let sm = null;
+  wrap.traverse(o => { if (o.isSkinnedMesh && !sm) sm = o; });
+  if (sm && cfg.height) {
+    wrap.updateMatrixWorld(true);
+    const v = new T3.Vector3();
+    let minY = 1e9, maxY = -1e9;
+    for (const b of sm.skeleton.bones) { b.getWorldPosition(v); minY = Math.min(minY, v.y); maxY = Math.max(maxY, v.y); }
+    const span = maxY - minY;
+    if (span > 0.01) {
+      wrap.scale.multiplyScalar((cfg.height * 0.94) / span);
+      wrap.updateMatrixWorld(true);
+      minY = 1e9;
+      for (const b of sm.skeleton.bones) { b.getWorldPosition(v); minY = Math.min(minY, v.y); }
+      inner.position.y += (0.1 - minY) / wrap.scale.x;
+    }
+  }
+  wrap.traverse(o => {
+    if (o.isMesh) {
+      o.castShadow = true;
+      o.frustumCulled = false;
+      const old2 = o.material;
+      if (old2) {
+        const map = old2.map || null;
+        if (map) map.colorSpace = T3.SRGBColorSpace;
+        const nm = new T3.MeshLambertMaterial({ map, color: 0xffffff });
+        if (map) { nm.emissive = new T3.Color(0xffffff); nm.emissiveMap = map; nm.emissiveIntensity = cfg.height ? 0.14 : 0.3; }
+        o.material = nm;
+      }
+    }
+  });
+  return wrap;
+}
+function registerModel(key, gltf, cfg) {
+  // strip root-motion X/Z from clips (keep the vertical bob) so walkers stay put
+  for (const clip of gltf.animations || []) {
+    for (const tr of clip.tracks) {
+      if (tr.name.endsWith('.position')) {
+        const vals = tr.values;
+        for (let i = 3; i < vals.length; i += 3) { vals[i] = vals[0]; vals[i + 2] = vals[2]; }
+      }
+    }
+  }
+  MODELS[key] = { tpl: normalizeModel(gltf.scene, cfg), clips: gltf.animations || [] };
+  for (const [e2, m2] of meshMap) scene.remove(m2);
+  meshMap.clear();
+  rebuildPlayerMesh();
+}
+function cloneModel(key, tint) {
+  const rec = MODELS[key];
+  if (!rec) return null;
+  const c = (key === 'man' && window.SkeletonUtils) ? window.SkeletonUtils.clone(rec.tpl) : rec.tpl.clone(true);
+  if (tint && tint !== 0xffffff) c.traverse(o => {
+    if (o.isMesh && o.material) { o.material = o.material.clone(); o.material.color = new T3.Color(tint); }
+  });
+  const holder = new T3.Group();  // unscaled: safe to attach extras (rotors, lightbars)
+  holder.add(c);
+  if (key === 'man' && rec.clips.length) {
+    const mixer = new T3.AnimationMixer(c);
+    const action = mixer.clipAction(rec.clips[0]);
+    action.play();
+    holder.userData.mixer = mixer; holder.userData.action = action;
+  }
+  holder.userData.glb = true;
+  return holder;
+}
+function loadAssets() {
+  if (!window.GLTFLoader) return;
+  const loader = new window.GLTFLoader();
+  for (const k of Object.keys(MODEL_CFG)) {
+    const done = gl => { try { registerModel(k, gl, MODEL_CFG[k]); } catch (err) { console.warn('model ' + k, err); } };
+    if (window.FC_ASSETS && window.FC_ASSETS[k]) {
+      const bin = Uint8Array.from(atob(window.FC_ASSETS[k]), ch => ch.charCodeAt(0)).buffer;
+      loader.parse(bin, '', done, err => console.warn('parse ' + k, err));
+    } else {
+      fetch('assets/' + k + '.glb').then(r => r.ok ? r.arrayBuffer() : Promise.reject(0))
+        .then(b => loader.parse(b, '', done, err => console.warn('parse ' + k, err)))
+        .catch(() => {});
+    }
+  }
+}
+loadAssets();
+
 // ---------- entity mesh syncing ----------
 const meshMap = new Map();
 const PED_STYLES = [
@@ -444,21 +606,34 @@ const PED_STYLES = [
 function meshFor(e) {
   let m = meshMap.get(e);
   if (m) return m;
+  const CAR_TINTS = [0xffffff, 0xd0a0a0, 0xa0b8d0, 0xb0d0a8, 0xc8c0a0, 0xb8a8c8];
   if (e.kind === 'ped') {
-    const st = PED_STYLES[(Math.random() * PED_STYLES.length) | 0];
-    m = buildMan(st.body, st.legs, { hat: st.hat });
-    m.scale.setScalar(e.size || 1);
+    m = cloneModel('man', [0xffffff, 0xd8c8c8, 0xc8d0e0, 0xd0d8c0, 0xe0d8c8][(Math.random() * 5) | 0]);
+    if (!m) {
+      const st = PED_STYLES[(Math.random() * PED_STYLES.length) | 0];
+      m = buildMan(st.body, st.legs, { hat: st.hat });
+    }
+    m.scale.multiplyScalar(e.size || 1);
   } else if (e.kind === 'hostile' || e.kind === 'soldier') {
-    m = buildMan(e.kind === 'soldier' ? 0x44503e : 0x3a4036, 0x33382c, { vest: e.elite ? 0x454b58 : 0x2e332c });
-    m.userData.gun.visible = true;
+    m = cloneModel('man', e.kind === 'soldier' ? 0x9aa890 : 0x98a098);
+    if (!m) { m = buildMan(e.kind === 'soldier' ? 0x44503e : 0x3a4036, 0x33382c, { vest: e.elite ? 0x454b58 : 0x2e332c }); m.userData.gun.visible = true; }
   } else if (e.kind === 'footcop') {
-    m = buildMan(0x2e3a5e, 0x1d2027, { hat: 0x1d2440 });
-    m.userData.gun.visible = true;
-  } else if (e.kind === 'car') m = buildCar(e.cls, e.colorSeed);
-  else if (e.kind === 'tank') m = buildTank();
-  else if (e.kind === 'heli') m = buildHeli(e.cls);
+    m = cloneModel('man', 0x90a0c8);
+    if (!m) { m = buildMan(0x2e3a5e, 0x1d2027, { hat: 0x1d2440 }); m.userData.gun.visible = true; }
+  } else if (e.kind === 'car') {
+    const key = (e.cls === 'sports' || e.cls === 'muscle') ? 'sports' : 'sedan';
+    const tint = e.type === 'cop' ? 0xffffff : e.cls === 'taxi' ? 0xe8c84a : CAR_TINTS[(e.colorSeed * CAR_TINTS.length) | 0];
+    m = cloneModel(key, tint);
+    if (m && e.type === 'cop') {
+      const bar = new T3.Mesh(new T3.BoxGeometry(0.5, 0.22, 1.4), new T3.MeshBasicMaterial({ color: 0xff4a4a }));
+      bar.position.set(-0.2, 1.9, 0); m.add(bar);
+      m.userData.lightbar = bar;
+    }
+    if (!m) m = buildCar(e.cls, e.colorSeed);
+  } else if (e.kind === 'tank') { m = cloneModel('tank') || buildTank(); if (!m.userData.turret) m.userData.turret = new T3.Group(); }
+  else if (e.kind === 'heli') { m = cloneModel('heli'); if (m) { const r = buildHeli(e.cls).userData.rotor; r.position.set(0, MODELS.heli ? 3.1 : 2.75, 0); m.add(r); m.userData.rotor = r; } else m = buildHeli(e.cls); }
   else if (e.kind === 'plane') m = buildPlane();
-  else m = buildMan(0x4a5138, 0x2c2c31);
+  else m = cloneModel('man') || buildMan(0x4a5138, 0x2c2c31);
   scene.add(m);
   meshMap.set(e, m);
   return m;
@@ -466,7 +641,7 @@ function meshFor(e) {
 function syncEntity(e, yawOff) {
   const m = meshFor(e);
   m.position.set(e.x, e.y, e.z);
-  m.rotation.y = -(e.yaw || 0) + (yawOff || 0);
+  m.rotation.y = -(e.yaw || 0) + (yawOff || 0) + (m.userData.glb && (e.kind === 'ped' || e.kind === 'soldier' || e.kind === 'hostile' || e.kind === 'footcop') ? Math.PI / 2 : 0);
   return m;
 }
 function gcMeshes(liveSet) {
@@ -481,7 +656,11 @@ scene.add(playerMesh);
 function rebuildPlayerMesh() {
   scene.remove(playerMesh);
   const o = OUTFIT_BY_ID[S.player.outfit] || C.OUTFITS[0];
-  playerMesh = buildMan(o.body, o.legs);
+  playerMesh = cloneModel('man') || buildMan(o.body, o.legs);
+  if (playerMesh.userData.glb && S.player.outfit !== 'olive') {
+    const t = new T3.Color(o.body).lerp(new T3.Color(0xffffff), 0.55);
+    playerMesh.traverse(ob => { if (ob.isMesh && ob.material) { ob.material = ob.material.clone(); ob.material.color = t; } });
+  }
   scene.add(playerMesh);
 }
 let lastOutfit = S.player.outfit;
@@ -838,7 +1017,7 @@ function handleEvents() {
     else if (e.t === 'smoke') spawnSprite(e.x, e.y, e.z, smokeTex, 2, 0.7, 4);
     else if (e.t === 'popup') { const d = document.createElement('div'); d.className = 'pop'; d.textContent = e.msg; hud.pops.appendChild(d); setTimeout(() => d.remove(), 1400); }
     else if (e.t === 'shake') shake = Math.min(1.4, shake + e.n / 12);
-    else if (e.t === 'nitro') { if (S.player.veh) spawnSprite(S.player.veh.x - Math.cos(S.player.veh.yaw) * 2.6, S.player.veh.y + 0.7, S.player.veh.z - Math.sin(S.player.veh.yaw) * 2.6, fireTex, 1.6, 0.18, 0, 0x7fb0ff); }
+    else if (e.t === 'nitro') { if (S.player.veh) spawnSprite(S.player.veh.x - Math.cos(S.player.veh.yaw) * 2.6, S.player.veh.y + 0.7, S.player.veh.z - Math.sin(S.player.veh.yaw) * 2.6, fireTex, 0.9, 0.11, 0, 0x7fb0ff); }
     else if (e.t === 'respawn') camYaw = 0;
   }
 }
@@ -847,6 +1026,9 @@ function handleEvents() {
 let shake = 0;
 function updateCamera(dt) {
   const p = S.player;
+  moon.position.set(p.x - 60, p.y + 140, p.z + 45);
+  moon.target.position.set(p.x, p.y, p.z);
+  if (window.__skyDome) window.__skyDome.position.set(p.x, 0, p.z);
   const inVeh = !!p.veh;
   const dist = inVeh ? (p.veh.kind === 'tank' ? 16 : p.veh.kind === 'heli' || p.veh.kind === 'plane' ? 22 : 11) : 6.5;
   const h = inVeh ? (p.veh.kind === 'heli' || p.veh.kind === 'plane' ? 7 : 4.2) : 2.4;
@@ -897,12 +1079,17 @@ function syncScene(dt, t) {
   playerMesh.visible = !p.veh;
   if (!p.veh) {
     playerMesh.position.set(p.x, p.y, p.z);
-    playerMesh.rotation.y = -p.yaw;
+    playerMesh.rotation.y = -p.yaw + (playerMesh.userData.glb ? Math.PI / 2 : 0);
     const armed2 = p.cur !== 'fists';
-    playerMesh.userData.gun.visible = armed2 && C.WEAPONS[p.cur].cls !== 'rocket' && C.WEAPONS[p.cur].cls !== 'aa';
-    playerMesh.userData.tube.visible = armed2 && !playerMesh.userData.gun.visible;
+    if (playerMesh.userData.gun) {
+      playerMesh.userData.gun.visible = armed2 && C.WEAPONS[p.cur].cls !== 'rocket' && C.WEAPONS[p.cur].cls !== 'aa';
+      playerMesh.userData.tube.visible = armed2 && !playerMesh.userData.gun.visible;
+    }
     animMan(playerMesh, p.phase, p.moving, armed2);
   }
+  // skeletal walk animations
+  for (const [, mm2] of meshMap) if (mm2.userData.mixer) mm2.userData.mixer.update(dt);
+  if (playerMesh.userData.mixer) playerMesh.userData.mixer.update(dt);
   // markers pulse
   for (const mk of markerMeshes) mk.mesh.position.y = mk.base + Math.sin(t * 3) * 0.3 + 0.3;
   for (const id in missionMarkerRefs) {
