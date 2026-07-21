@@ -514,6 +514,7 @@ function killInfantry(e) {
   S.pickups.push({ x: e.x, z: e.z, y: e.y, amt: 25 + (Math.random() * 60 | 0), kind: 'cash', t: 40 });
   if (e.kind === 'soldier' && !e.gmTag) addWanted(1); // killing the military is noticed
   if (S.mission && S.mission.def.onKill) S.mission.def.onKill(e);
+  if (S.mission && S.mission.mark === e) S.mission.killed = true;
   ev('sfx', { k: 'punch' });
 }
 C.killInfantry = killInfantry;
@@ -945,13 +946,21 @@ function playerFoot(dt, inp) {
     const L = Math.hypot(mx, mz) || 1;
     mx /= L; mz /= L;
   }
-  p.moving = !!(mx || mz);
-  if (!aiming && p.moving) p.yaw = angLerp(p.yaw, Math.atan2(mz, mx), clamp(12 * dt, 0, 1));
-  if (p.moving) {
-    const nx = p.x + mx * sp * dt, nz = p.z + mz * sp * dt;
-    if (!solidAt(nx + mx * 0.6, p.y + 1, p.z)) p.x = clamp(nx, 5, W - 5);
-    if (!solidAt(p.x, p.y + 1, nz + mz * 0.6)) p.z = clamp(nz, 5, D - 5);
-    p.phase += sp * dt * 2;
+  const wantMove = !!(mx || mz);
+  // smooth acceleration/deceleration of the movement velocity so start/stop isn't a snap
+  p.mvx = p.mvx || 0; p.mvz = p.mvz || 0;
+  const tvx = wantMove ? mx * sp : 0, tvz = wantMove ? mz * sp : 0;
+  const accel = wantMove ? 14 : 20;
+  p.mvx += (tvx - p.mvx) * clamp(accel * dt, 0, 1);
+  p.mvz += (tvz - p.mvz) * clamp(accel * dt, 0, 1);
+  const vmag = Math.hypot(p.mvx, p.mvz);
+  p.moving = vmag > 0.3;
+  if (!aiming && vmag > 0.3) p.yaw = angLerp(p.yaw, Math.atan2(p.mvz, p.mvx), clamp(10 * dt, 0, 1));
+  if (vmag > 0.01) {
+    const nx = p.x + p.mvx * dt, nz = p.z + p.mvz * dt;
+    if (!solidAt(nx + Math.sign(p.mvx) * 0.6, p.y + 1, p.z)) p.x = clamp(nx, 5, W - 5); else p.mvx = 0;
+    if (!solidAt(p.x, p.y + 1, nz + Math.sign(p.mvz) * 0.6)) p.z = clamp(nz, 5, D - 5); else p.mvz = 0;
+    p.phase += vmag * dt * 2;
   }
   const pb = propBlock(p.x, p.y + 0.5, p.z, 0.5);
   if (pb) { const n = Math.atan2(p.z - pb.z, p.x - pb.x); p.x = pb.x + Math.cos(n) * (pb.r + 0.6); p.z = pb.z + Math.sin(n) * (pb.r + 0.6); }
@@ -1089,8 +1098,18 @@ function playerVehicle(dt, inp) {
     v.spd -= v.spd * (inp.handbrake ? 2.4 : 0.5) * dt;
     if (!inp.fwd && !inp.back) v.spd -= v.spd * 1.0 * dt;
     const steer = (inp.right ? 1 : 0) - (inp.left ? 1 : 0);
-    v.yaw += steer * (inp.handbrake ? 2.6 : isTank ? 0.9 : 1.8) * dt * clamp(v.spd / (isTank ? 4 : 12), -1, 1);
+    const prevSpd = v.spd;
+    const turnRate = steer * (inp.handbrake ? 2.6 : isTank ? 0.9 : 1.8) * dt * clamp(v.spd / (isTank ? 4 : 12), -1, 1);
+    v.yaw += turnRate;
     v.braking = inp.back && v.spd > 3;
+    // body dynamics (for the renderer): roll leans into turns, pitch dives on brake / squats on accel, plus a bob
+    if (!isTank) {
+      const latG = (turnRate / Math.max(dt, 0.001)) * v.spd * 0.010;
+      const lonG = (v.spd - prevSpd) / Math.max(dt, 0.001);
+      v.roll = (v.roll || 0) + (clamp(-latG, -0.22, 0.22) - (v.roll || 0)) * clamp(9 * dt, 0, 1);
+      v.pitch = (v.pitch || 0) + (clamp(lonG * 0.010, -0.16, 0.16) - (v.pitch || 0)) * clamp(7 * dt, 0, 1);
+      v.bob = Math.sin((v.bobT = (v.bobT || 0) + dt * (6 + Math.abs(v.spd) * 0.3)) ) * Math.min(0.05, Math.abs(v.spd) * 0.002);
+    }
     const nx = v.x + Math.cos(v.yaw) * v.spd * dt;
     const nz = v.z + Math.sin(v.yaw) * v.spd * dt;
     const nose = isTank ? 5 : 2.6;
@@ -1789,6 +1808,181 @@ defMission('m8', {
   outro: [['THE TAILOR', 'A perfect fit, even now. I will sponge the smoke out of it.'],
     ['THE TAILOR', 'You know the strangest part? Under all of it — he looked exactly like everyone else.'],
     ['THE TAILOR', 'Come by the shop. I made you something. On the house.']]
+});
+
+
+// ================= THE CAPTAIN — crooked cop chain (4 missions) =================
+const PRECINCT = { x: 1231, z: 2854 };
+defMission('cop1', {
+  name: 'PROFESSIONAL COURTESY', marker: PRECINCT, prereq: 'getaway', reward: 1500, rep: 3,
+  brief: 'A cruiser is hauling evidence to the courthouse. It never arrives.',
+  intro: [['THE CAPTAIN', 'I run a clean precinct. Clean, because I decide what stays in the evidence room.'],
+    ['THE CAPTAIN', 'A cruiser is moving a box that has my name in it. Stop that car. Torch it if you have to.'],
+    ['THE CAPTAIN', 'And do try not to make it look like exactly what it is.']],
+  banner(m) { return m.phase === 0 ? 'INTERCEPT THE EVIDENCE CRUISER — ' + Math.max(0, Math.ceil(m.car.hp / 1.2)) + '%' : 'GET CLEAR — LOSE THE HEAT'; },
+  start(m) {
+    const route = [RP(6, 18), RP(6, 12), RP(12, 12), RP(12, 6), RP(20, 6)];
+    m.car = mkScriptCar(route[0].x, route[0].z, 0, 'cop', route.slice(1));
+    m.car.hp = 130;
+    m.target = { x: m.car.x, z: m.car.z };
+  },
+  cleanup() { const m = S.mission; if (m && m.car) m.car.dead = true; },
+  update(m, dt) {
+    const p = S.player;
+    if (m.phase === 0) {
+      const escaped = driveRoute(m.car, dt, 16);
+      m.target = { x: m.car.x, z: m.car.z };
+      if (p.veh && d2(p.veh.x, p.veh.z, m.car.x, m.car.z) < 7 && Math.abs(p.veh.spd) > 8) { m.car.hp -= Math.abs(p.veh.spd) * 1.3 * dt * 8; ev('shake', { n: 2 }); }
+      if (m.car.hp <= 0) { m.car.dead = true; explode(m.car.x, m.car.y + 1, m.car.z, 8, 40); m.phase = 1; S.wanted = Math.max(S.wanted, 3); toast('Evidence gone. Now the whole precinct wants you. Lose them.', 4); }
+      else if (escaped) return missionFail('the cruiser reached the courthouse.');
+    } else {
+      m.target = null;
+      if (S.wanted === 0) missionDone('cop1', 1500, 3, 'No car, no box, no problem.');
+    }
+  },
+  outro: [['THE CAPTAIN', 'See? A tragic traffic accident. Happens every day in this city.'],
+    ['THE CAPTAIN', 'There is a witness who thinks he saw something. Fix his memory tomorrow.']]
+});
+defMission('cop2', {
+  name: 'WITNESS PROTECTION', marker: PRECINCT, prereq: 'cop1', reward: 1800, rep: 3,
+  brief: 'Scare the witness out of town. Do NOT kill him — a body is paperwork.',
+  intro: [['THE CAPTAIN', 'The witness lives above the supermarket. Nervous type. Give him a reason to leave the state.'],
+    ['THE CAPTAIN', 'Chase him to the edge of town. On foot, in a car, I do not care. But he walks away alive.'],
+    ['THE CAPTAIN', 'A dead witness is a murder. A frightened one is just... gone.']],
+  banner(m) { return m.phase === 0 ? 'FIND THE WITNESS AT MONO MART' : 'HERD HIM TO THE CITY EDGE (keep him alive!)'; },
+  start(m) {
+    m.wit = mkPed(1663, 2360); m.wit.state = 'script'; m.wit.hp = 100; S.peds.push(m.wit);
+    m.target = { x: 1663, z: 2360 };
+    m.flee = { x: 2740, z: 2960 };
+  },
+  cleanup() { const m = S.mission; if (m && m.wit) m.wit.dead = true; },
+  update(m, dt) {
+    const p = S.player;
+    const w = m.wit;
+    if (w.state === 'down' || w.hp <= 0) return missionFail('you killed him. The Captain wanted him scared, not silent.');
+    if (m.phase === 0) {
+      if (d2(p.x, p.z, w.x, w.z) < 12) { m.phase = 1; w.state = 'flee'; w.t = 999; toast('He runs! Chase him east — do not shoot!', 4); ev('sfx', { k: 'crash' }); }
+    } else {
+      // he flees away from the player, toward the edge
+      const away = Math.atan2(w.z - p.z, w.x - p.x);
+      const toEdge = Math.atan2(m.flee.z - w.z, m.flee.x - w.x);
+      w.yaw = angLerp(away, toEdge, 0.4);
+      const sp = d2(p.x, p.z, w.x, w.z) < 40 ? 6.5 : 3;
+      const nx = w.x + Math.cos(w.yaw) * sp * dt, nz = w.z + Math.sin(w.yaw) * sp * dt;
+      if (!solidAt(nx, w.y + 1, nz)) { w.x = nx; w.z = nz; }
+      w.y = groundY(w.x, w.z); w.phase += sp * dt * 2;
+      m.target = { x: w.x, z: w.z };
+      if (d2(w.x, w.z, m.flee.x, m.flee.z) < 25) { w.dead = true; missionDone('cop2', 1800, 3, 'He is on a bus and never coming back.'); }
+    }
+  },
+  outro: [['THE CAPTAIN', 'Good. Quiet. I like quiet.'],
+    ['THE CAPTAIN', 'The businesses on my streets are behind on their gratitude. Collection day is tomorrow.']]
+});
+defMission('cop3', {
+  name: 'COLLECTION DAY', marker: PRECINCT, prereq: 'cop2', reward: 2000, rep: 3,
+  brief: 'Four businesses. One afternoon. Cash only.',
+  intro: [['THE CAPTAIN', 'Four establishments enjoy my protection. Today they pay for it.'],
+    ['THE CAPTAIN', 'Visit all four before the shift changes. Some owners forget their manners — remind them.']],
+  banner(m) { return 'SHAKEDOWNS ' + m.got + '/4 — ' + Math.ceil(m.t) + 's'; },
+  start(m) {
+    m.spots = [{ x: 1231, z: 1450 }, { x: 1663, z: 2314 }, { x: 2041, z: 1666 }, { x: 2419, z: 2530 }].map(q => ({ x: q.x, z: q.z, got: false }));
+    m.got = 0; m.t = 150;
+    m.target = m.spots[0];
+  },
+  update(m, dt) {
+    const p = S.player;
+    m.t -= dt;
+    if (m.t <= 0) return missionFail('shift changed. The Captain hates loose ends.');
+    for (const q of m.spots) if (!q.got && d2(p.x, p.z, q.x, q.z) < 7) {
+      q.got = true; m.got++;
+      const take = 200 + (Math.random() * 200 | 0);
+      p.money += take; ev('popup', { msg: 'COLLECTED +$' + take }); ev('sfx', { k: 'cash' });
+    }
+    const next = m.spots.find(q => !q.got);
+    m.target = next || PRECINCT;
+    if (m.got >= 4) missionDone('cop3', 2000, 3, 'Everyone paid. The Captain gets his cut. You get yours.');
+  },
+  outro: [['THE CAPTAIN', 'You have been very useful. Almost too useful.'],
+    ['THE CAPTAIN', 'Which is a problem. You know where the bodies are parked. Nothing personal.']]
+});
+defMission('cop4', {
+  name: 'INTERNAL AFFAIRS', marker: PRECINCT, prereq: 'cop3', reward: 5000, rep: 6,
+  brief: "The Captain sets you up. Six units and a chopper. Reach the safehouse alive.",
+  intro: [['THE CAPTAIN', 'You walked into my precinct like you belonged. That was the mistake.'],
+    ['THE CAPTAIN', 'Every unit in the city has your description. Well — your outfit. It is all anyone has here.'],
+    ['THE CAPTAIN', 'Run. It is more fun when they run.']],
+  banner(m) { return 'ESCAPE THE SETUP — REACH THE SAFEHOUSE'; },
+  start(m) {
+    S.wanted = 5; S.evadeT = 0;
+    const h = mkHeli(PRECINCT.x + 100, PRECINCT.z + 100, 'hind', true); h.copHeli = true; S.helis.push(h);
+    m.safe = { x: 907, z: 2746 };  // Eastside Apartment
+    m.target = m.safe;
+    S.player.armor = 100;
+  },
+  update(m, dt) {
+    const p = S.player;
+    S.wanted = Math.max(S.wanted, 4); S.evadeT = 0;   // can't just wait it out
+    if (d2(p.x, p.z, m.safe.x, m.safe.z) < 8) {
+      S.wanted = 0; S.cops = []; S.footCops = []; S.helis = S.helis.filter(h => !h.copHeli);
+      missionDone('cop4', 5000, 6, 'Safehouse. The Captain will keep. Everyone in this city does.');
+    }
+  },
+  outro: [['THE CAPTAIN', '(radio) ...he reached the safehouse. Of course he did.'],
+    ['THE CAPTAIN', '(radio) Pull everyone back. We will settle up another day. In this city, we always meet again.']]
+});
+
+// ================= CONTRACTS — repeatable assassination board =================
+const CONTRACT_BOARD = { x: 4800, z: 950 };   // the black market, Sierra
+const HIT_SPOTS = [
+  { x: 1447, z: 1017 }, { x: 2311, z: 2854 }, { x: 853, z: 1666 }, { x: 2740, z: 1990 },
+  { x: 1015, z: 2960 }, { x: 2575, z: 1450 }, { x: 640, z: 2206 }, { x: 1879, z: 2530 }
+];
+defMission('contract', {
+  name: 'CONTRACT', marker: CONTRACT_BOARD, prereq: 'getaway', repeatable: true, reward: 0, rep: 0,
+  brief: 'A name, a place, and a fee. Silence pays double.',
+  intro: [['THE BROKER', 'In a city of identical men, a contract is just a set of coordinates and a suit description.'],
+    ['THE BROKER', 'The mark is in town, with company. Do it quiet and the bonus is yours. Do it loud... it still counts.']],
+  banner(m) { return m.phase === 0 ? 'REACH THE MARK' + (m.done ? '' : '') : 'ELIMINATE THE MARK — ' + (m.silent ? 'STAYING QUIET (2x)' : 'LOUD') + (m.guards ? ' — GUARDS ' + m.guards : ''); },
+  start(m) {
+    const n = (S.done.contract || 0);
+    m.spot = HIT_SPOTS[(Math.random() * HIT_SPOTS.length) | 0];
+    m.pay = 1500 + n * 400;
+    m.phase = 0; m.spawned = false; m.silent = true; m.guards = 0;
+    m.target = m.spot;
+    toast('CONTRACT: mark waiting ' + (n + 1) + '. Reach the marker.', 4);
+  },
+  cleanup() { S.enemies = S.enemies.filter(e => e.gmTag !== 'contract' || e.state === 'down'); if (S.mission && S.mission.mark) S.mission.mark.dead = true; },
+  onKill(e) {
+    const m = S.mission;
+    if (e === m.mark) { m.killed = true; }
+    else if (e.gmTag === 'contract') m.guards = Math.max(0, m.guards - 1);
+  },
+  update(m, dt) {
+    const p = S.player;
+    if (m.phase === 0) {
+      if (d2(p.x, p.z, m.spot.x, m.spot.z) < 40) {
+        m.phase = 1;
+        m.mark = mkSoldier(m.spot.x, m.spot.z, true);
+        m.mark.kind = 'hostile'; m.mark.gmTag = 'contractmark'; m.mark.hp = 120;
+        S.enemies.push(m.mark);
+        for (let k = 0; k < 2; k++) {
+          const a = k / 2 * TAU;
+          const g = mkSoldier(m.spot.x + Math.cos(a) * 12, m.spot.z + Math.sin(a) * 12);
+          g.kind = 'hostile'; g.gmTag = 'contract'; S.enemies.push(g); m.guards++;
+        }
+        toast('There he is. The one in the pinstripe. Take the shot.', 4);
+      }
+    } else {
+      if (S.wanted > 0) m.silent = false;
+      m.target = m.mark && m.mark.state !== 'down' ? { x: m.mark.x, z: m.mark.z } : null;
+      if (m.mark && m.mark.state === 'down') {
+        const pay = m.silent ? m.pay * 2 : m.pay;
+        S.enemies = S.enemies.filter(e => e.gmTag !== 'contract' || e.state === 'down');
+        missionDone('contract', pay, 3, m.silent ? 'Clean. Nobody even looked up. Double fee.' : 'Messy, but done.');
+      }
+    }
+  },
+  outro: [['THE BROKER', 'Another name off the list. There is always another name.']]
 });
 
 // ---------- ambient spawning ----------

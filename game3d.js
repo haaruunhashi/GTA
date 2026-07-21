@@ -349,7 +349,7 @@ for (const h of C.HOUSES) addMarker(h.x, h.z, 0xd0b25a);
 const missionMarkerRefs = {};
 for (const id in C.MISSIONS) {
   const def = C.MISSIONS[id];
-  const col = /^m\d+$/.test(id) ? 0xe8c84a : id.startsWith('war') ? 0xff785a : id.startsWith('op') ? 0xffd23f : id === 'heist' ? 0xc05aE8 : 0x5ad0e8;
+  const col = /^m\d+$/.test(id) ? 0xe8c84a : id.startsWith('cop') ? 0x4d8dff : id === 'contract' ? 0xff4a4a : id.startsWith('war') ? 0xff785a : id.startsWith('op') ? 0xffd23f : id === 'heist' ? 0xc05aE8 : 0x5ad0e8;
   missionMarkerRefs[id] = addMarker(def.marker.x, def.marker.z, col);
 }
 // stash crates (small glints)
@@ -713,6 +713,12 @@ const smokeTex = canvasTex(64, 64, (g) => {
   gr.addColorStop(0, 'rgba(200,200,205,0.8)'); gr.addColorStop(1, 'rgba(200,200,205,0)');
   g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
 });
+let sparkTex = null;
+{
+  const applySpark = url => new T3.TextureLoader().load(url, t => { t.colorSpace = T3.SRGBColorSpace; sparkTex = t; }, undefined, () => {});
+  if (window.FC_ASSETS && window.FC_ASSETS.tex_spark) applySpark('data:image/png;base64,' + window.FC_ASSETS.tex_spark);
+  else applySpark('assets/tex/spark.png');
+}
 const fireTex = canvasTex(64, 64, (g) => {
   const gr = g.createRadialGradient(32, 32, 2, 32, 32, 30);
   gr.addColorStop(0, 'rgba(255,240,190,0.95)'); gr.addColorStop(0.5, 'rgba(255,140,50,0.8)'); gr.addColorStop(1, 'rgba(80,40,20,0)');
@@ -946,7 +952,7 @@ function drawHUD(dt) {
     if (S.done[id] && !C.MISSIONS[id].repeatable) continue;
     if (!C.unlocked(id)) continue;
     const d = C.MISSIONS[id].marker;
-    dot(d.x, d.z, /^m\d+$/.test(id) ? '#e8c84a' : id.startsWith('war') ? '#ff785a' : id.startsWith('op') ? '#ffd23f' : id === 'heist' ? '#c05ae8' : '#5ad0e8', 2.4);
+    dot(d.x, d.z, /^m\d+$/.test(id) ? '#e8c84a' : id.startsWith('cop') ? '#4d8dff' : id === 'contract' ? '#ff4a4a' : id.startsWith('war') ? '#ff785a' : id.startsWith('op') ? '#ffd23f' : id === 'heist' ? '#c05ae8' : '#5ad0e8', 2.4);
   }
   for (const s of C.SHOPS) dot(s.x, s.z, '#79d98c', 1.6);
   for (const h of C.HOUSES) dot(h.x, h.z, '#d0b25a', 1.6);
@@ -1114,7 +1120,7 @@ function handleEvents() {
       for (let i = 0; i < 6; i++) spawnSprite(e.x + (Math.random() - 0.5) * e.r, e.y + 2 + Math.random() * 3, e.z + (Math.random() - 0.5) * e.r, smokeTex, e.r * 0.6, 1.4, 8);
       shake = Math.min(1.4, shake + e.r / 30);
     }
-    else if (e.t === 'flash') spawnSprite(e.x, e.y, e.z, fireTex, 1.4, 0.06, 0);
+    else if (e.t === 'flash') spawnSprite(e.x, e.y, e.z, sparkTex || fireTex, sparkTex ? 2.2 : 1.4, 0.07, 0, sparkTex ? 0xffe6a0 : undefined);
     else if (e.t === 'smoke') spawnSprite(e.x, e.y, e.z, smokeTex, 2, 0.7, 4);
     else if (e.t === 'popup') { const d = document.createElement('div'); d.className = 'pop'; d.textContent = e.msg; hud.pops.appendChild(d); setTimeout(() => d.remove(), 1400); }
     else if (e.t === 'shake') shake = Math.min(1.4, shake + e.n / 12);
@@ -1151,13 +1157,31 @@ function updateCamera(dt) {
   }
   const look = new T3.Vector3(p.x + Math.cos(camYaw) * 8 * cp, p.y + 1.6 + Math.sin(camPitch) * 8, p.z + Math.sin(camYaw) * 8 * cp);
   camera.lookAt(look);
+  // speed-based FOV: the world rushes past faster the quicker you go
+  const spd = (p.veh && (p.veh.kind === 'car' || p.veh.kind === 'plane')) ? Math.abs(p.veh.spd) : 0;
+  const targetFov = 70 + clamp(spd - 20, 0, 45) * 0.5 + (p.veh && (keys.ShiftLeft || keys.ShiftRight) && spd > 20 ? 6 : 0);
+  camera.fov += (targetFov - camera.fov) * clamp(4 * dt, 0, 1);
+  camera.updateProjectionMatrix();
+}
+
+// tilt the car body into turns / dive on brakes / bob over the road
+function applyBodyDynamics(mesh, c) {
+  if (c.kind !== 'car') return;
+  // preserve the model-orientation offset (rotY) child; roll/pitch go on the wrapper
+  mesh.rotation.z = c.roll || 0;
+  mesh.rotation.x = c.pitch || 0;
+  mesh.position.y = c.y + (c.bob || 0);
 }
 
 // ---------- sync all meshes ----------
 function syncScene(dt, t) {
   const p = S.player;
   const live = new Set();
-  for (const c of S.cars) { live.add(c); const m = syncEntity(c); if (m.userData.tl) m.userData.tl.forEach(x => x.material.color.setHex(c.braking ? 0xff2222 : 0xc03030)); }
+  for (const c of S.cars) {
+    live.add(c); const m = syncEntity(c);
+    if (m.userData.tl) m.userData.tl.forEach(x => x.material.color.setHex(c.braking ? 0xff2222 : 0xc03030));
+    applyBodyDynamics(m, c);
+  }
   for (const c of S.cops) {
     live.add(c); const m = syncEntity(c);
     if (m.userData.lightbar) m.userData.lightbar.material.color.setHex(((t * 6 | 0) % 2) ? 0xff4a4a : 0x3f7dff);
@@ -1200,6 +1224,7 @@ function syncScene(dt, t) {
     missionMarkerRefs[id].visible = vis;
   }
   C.stashes.forEach((st, i) => { stashMeshes[i].visible = !st.found; stashMeshes[i].rotation.y = t * 2; });
+  if (window.__syncCoins) window.__syncCoins(t);
   // engine + siren audio
   if (AC) {
     if (p.veh && (p.veh.kind === 'car' || p.veh.kind === 'tank')) {
@@ -1595,6 +1620,38 @@ window.__FC3D = { scene, camera, renderer, get started() { return started; } };
   }
   loadClip('man_idle', 'idle');
   loadClip('man_run', 'run');
+  // CC0 coin (Kenney) for visible cash pickups
+  let coinTpl = null;
+  if (window.GLTFLoader) {
+    const cmgr = new T3.LoadingManager();
+    cmgr.setURLModifier(u => u.includes('colormap') ? 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==' : u);
+    const cl = new window.GLTFLoader(cmgr);
+    const gold = new T3.MeshStandardMaterial({ color: 0xffcf3a, emissive: 0x6a5210, metalness: 0.7, roughness: 0.35 });
+    const fin = gl => {
+      const c = gl.scene;
+      const box = new T3.Box3().setFromObject(c);
+      const s = 1.6 / Math.max(box.getSize(new T3.Vector3()).y, 0.01);
+      c.scale.setScalar(s);
+      c.traverse(o => { if (o.isMesh) { o.castShadow = true; o.material = gold; } });
+      coinTpl = c;
+    };
+    if (window.FC_ASSETS && window.FC_ASSETS.ken_coin) { const bin = Uint8Array.from(atob(window.FC_ASSETS.ken_coin), ch => ch.charCodeAt(0)).buffer; cl.parse(bin, '', fin, () => {}); }
+    else fetch('assets/kenney/coin.glb').then(r => r.ok ? r.arrayBuffer() : Promise.reject(0)).then(b => cl.parse(b, '', fin, () => {})).catch(() => {});
+  }
+  const coinMeshes = new Map();
+  window.__syncCoins = (t2) => {
+    if (!coinTpl) return;
+    const live = new Set();
+    for (const g2 of S.pickups) {
+      if (g2.kind !== 'cash') continue;
+      live.add(g2);
+      let cm = coinMeshes.get(g2);
+      if (!cm) { cm = coinTpl.clone(true); scene.add(cm); coinMeshes.set(g2, cm); }
+      cm.position.set(g2.x, C.groundY(g2.x, g2.z) + 0.9 + Math.sin(t2 * 3 + g2.x) * 0.15, g2.z);
+      cm.rotation.y = t2 * 3;
+    }
+    for (const [g2, cm] of coinMeshes) if (!live.has(g2)) { scene.remove(cm); coinMeshes.delete(g2); }
+  };
   function loadTex(name, cb) {
     const use = url => new T3.TextureLoader().load(url, tt => {
       tt.colorSpace = T3.SRGBColorSpace; tt.wrapS = tt.wrapT = T3.RepeatWrapping; cb(tt);

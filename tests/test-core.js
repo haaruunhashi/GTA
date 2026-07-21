@@ -354,4 +354,42 @@ P.money = 5000;
 assert(C.buyOutfit('tailor') === null && P.outfit === 'tailor', "story reward outfit unlocked: The Tailor's Cut");
 const evs = drain();
 
+// ================= THE CAPTAIN crooked-cop chain =================
+S.mission = null; S.wanted = 0; S.cops = []; P.veh = null; S.helis = [];
+C.startMission('cop1'); m = S.mission; drain();
+assert(m.car && m.car.type === 'script', 'PROFESSIONAL COURTESY spawns the evidence cruiser');
+m.car.hp = 0; stepAlive(6);
+assert(S.mission && S.mission.phase === 1 && S.wanted >= 3, 'cruiser destroyed, heat spikes');
+S.wanted = 0; stepAlive(6);
+assert(S.done.cop1 === 1, 'PROFESSIONAL COURTESY passed');
+C.startMission('cop2'); m = S.mission; drain();
+assert(m.wit && m.wit.state === 'script', 'WITNESS PROTECTION spawns the witness');
+P.x = m.wit.x; P.z = m.wit.z; P.y = 0; stepAlive(4);
+assert(S.mission && S.mission.phase === 1, 'witness spooked, now fleeing');
+m.wit.x = m.flee.x - 30; m.wit.z = m.flee.z;
+sguard = 0;
+while (S.mission && S.mission.id === 'cop2' && sguard++ < 120) { P.x = m.wit.x - 25; P.z = m.wit.z; P.y = 0; stepAlive(5); }
+assert(S.done.cop2 === 1, 'WITNESS PROTECTION passed (herded alive)');
+C.startMission('cop3'); m = S.mission; drain();
+for (const q of m.spots) { P.x = q.x; P.z = q.z; P.y = 0; stepAlive(4); }
+assert(S.done.cop3 === 1, 'COLLECTION DAY passed (4 shakedowns)');
+C.startMission('cop4'); m = S.mission; drain();
+assert(S.wanted >= 4 && S.helis.some(h => h.copHeli), 'INTERNAL AFFAIRS: full heat + police chopper');
+P.x = m.safe.x; P.z = m.safe.z; P.y = 0; stepAlive(4);
+assert(S.done.cop4 === 1 && S.wanted === 0, 'INTERNAL AFFAIRS passed at the safehouse');
+// ================= CONTRACTS =================
+S.mission = null; S.wanted = 0;
+C.startMission('contract'); m = S.mission; drain();
+assert(m.spot && m.pay >= 1500, 'CONTRACT issues a mark and a fee');
+P.x = m.spot.x; P.z = m.spot.z; P.y = C.groundY(P.x, P.z); stepAlive(4);
+assert(S.mission && S.mission.phase === 1 && m.mark, 'reached the mark — target + guards spawn');
+const cmoney = P.money;
+C.killInfantry(m.mark); stepAlive(4);
+assert(S.done.contract >= 1, 'CONTRACT completed by eliminating the mark');
+assert(P.money >= cmoney + m.pay * 2 - 1, 'silent kill paid the double bonus (+$' + (P.money - cmoney) + ')');
+// a second contract issues a fresh, harder one
+C.startMission('contract'); const m2b = S.mission; drain();
+assert(m2b.pay > 1500, 'repeat contract scales the fee (' + m2b.pay + ')');
+C.missionFail('cleanup');
+
 console.log('\nCORE_OK — ' + pass + ' assertions passed');

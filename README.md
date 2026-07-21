@@ -50,6 +50,21 @@ Threads & Co. Each mission is a different verb:
 8. **FINAL CUT** — Herringbone flees in a gunship; lock, shoot it down, and finish his crew at the crash site.
    Reward: $10,000 and **The Tailor's Cut**, a story-exclusive outfit
 
+## THE CAPTAIN — crooked cop chain (4 missions)
+
+A dirty precinct captain uses you to bury his own case, then turns on you:
+
+1. **PROFESSIONAL COURTESY** — intercept and destroy an evidence cruiser, then lose the heat
+2. **WITNESS PROTECTION** — scare a witness out of town without killing him (herd, don't shoot)
+3. **COLLECTION DAY** — timed protection-money run across four businesses
+4. **INTERNAL AFFAIRS** — the setup: five-star heat and a police chopper, reach the safehouse alive
+
+## CONTRACTS — repeatable assassination board (the Sierra black market)
+
+A randomized mark somewhere in the city, guarded. A **silent kill (no wanted level) pays
+double**; go loud and it still counts. Fees scale each contract — endgame income that never
+runs out.
+
 ## Side missions (rep + cash, chains unlock)
 
 - **City chain**: Courier Run → Repo Man → Getaway Driver → unlocks **Taxi Fares**
@@ -103,3 +118,8 @@ combatants — soldiers, tanks, gunships — plus classic GTA chaos.
 - **Weapon wheel** — Tab opens a wheel of everything you own with live ammo counts.
 - **Kenney storefronts** — low-rise blocks use real CC0 building models; parks get fountains
   and tree clusters, all merged into a handful of draw calls.
+- **Vehicle handling feel** — cars lean into turns (suspension roll), dive on braking and squat
+  under acceleration, bob over the road, and the camera FOV widens with speed. On-foot movement
+  accelerates and decelerates smoothly instead of snapping.
+- **Visible loot** — downed enemies drop spinning gold coins (CC0 Kenney); muzzle flashes use a
+  real spark sprite.
