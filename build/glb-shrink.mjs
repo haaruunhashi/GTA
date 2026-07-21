@@ -85,5 +85,5 @@ async function shrink(path, out, maxTex) {
   fs.writeFileSync(out, Buffer.concat([outB, jstr, binHdr, binBuf]));
   console.log(path, (b.length / 1e6).toFixed(1) + 'MB ->', (fs.statSync(out).size / 1e6).toFixed(2) + 'MB');
 }
-for (const k of ['sports', 'sedan', 'heli', 'tank', 'man'])
+for (const k of (process.argv.length > 2 ? process.argv.slice(2) : ['sports', 'sedan', 'heli', 'tank', 'man']))
   await shrink('assets/' + k + '.glb', 'assets/' + k + '.glb', 768);

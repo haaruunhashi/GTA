@@ -250,6 +250,7 @@ const M = {
     tower2: new T3.MeshLambertMaterial({ color: 0x5c5e63 }),
     terminal: new T3.MeshLambertMaterial({ map: winTex, emissive: 0xffffff, emissiveMap: winTex, emissiveIntensity: 0.6 })
   };
+  window.__bmats = mats;
   const groups = {};
   C.buildings.forEach((b, i) => {
     b.__idx = i;
@@ -394,11 +395,31 @@ function buildMan(bodyColor, legColor, opts) {
   g.userData = { legL, legR, armL, armR, gun, tube, head };
   return g;
 }
+function actionFor(u, name) {
+  if (u.actions[name]) return u.actions[name];
+  const clip = (u.clips || []).find(c2 => c2.name === name);
+  if (!clip) return null;
+  const a = u.mixer.clipAction(clip);
+  u.actions[name] = a;
+  return a;
+}
 function animMan(g, phase, moving, aiming, rate) {
   const u = g.userData;
   if (u.mixer) {
-    if (moving) { u.action.paused = false; u.action.timeScale = rate || 1.2; }
-    else if (!u.action.paused) { u.action.paused = true; u.action.time = u.action.getClip().duration * 0.24; }
+    let want = 'walk';
+    if (!moving && actionFor(u, 'idle')) want = 'idle';
+    else if (moving && (rate || 1) > 1.9 && actionFor(u, 'run')) want = 'run';
+    const a = actionFor(u, want) || u.actions.walk;
+    if (u.current !== a) {
+      if (u.current) u.current.fadeOut(0.18);
+      a.reset().fadeIn(0.18).play();
+      u.current = a;
+    }
+    if (want === 'walk') {
+      if (moving) { a.paused = false; a.timeScale = rate || 1.2; }
+      else if (!a.paused) { a.paused = true; a.time = a.getClip().duration * 0.24; }
+    } else if (want === 'run') { a.paused = false; a.timeScale = (rate || 2) / 1.9; }
+    else a.paused = false;
     return;
   }
   if (!u.legL) return;
@@ -573,6 +594,7 @@ function registerModel(key, gltf, cfg) {
       }
     }
   }
+  if (key === 'man' && gltf.animations && gltf.animations[0]) gltf.animations[0].name = 'walk';
   MODELS[key] = { tpl: normalizeModel(gltf.scene, cfg), clips: gltf.animations || [] };
   for (const [e2, m2] of meshMap) scene.remove(m2);
   meshMap.clear();
@@ -589,9 +611,13 @@ function cloneModel(key, tint) {
   holder.add(c);
   if (key === 'man' && rec.clips.length) {
     const mixer = new T3.AnimationMixer(c);
-    const action = mixer.clipAction(rec.clips[0]);
-    action.play();
-    holder.userData.mixer = mixer; holder.userData.action = action;
+    holder.userData.mixer = mixer;
+    holder.userData.clips = rec.clips;
+    holder.userData.actions = {};
+    const a = mixer.clipAction(rec.clips[0]); a.play();
+    holder.userData.actions.walk = a;
+    holder.userData.current = a;
+    holder.userData.action = a; // legacy path
   }
   holder.userData.glb = true;
   return holder;
@@ -1343,7 +1369,15 @@ window.__FC3D = { scene, camera, renderer, get started() { return started; } };
     }
   }
   if (window.GLTFLoader) {
-    const loader = new window.GLTFLoader();
+    const kenMgr = new T3.LoadingManager();
+    kenMgr.setURLModifier(url => {
+      if (url.includes('colormap')) {
+        if (window.FC_ASSETS && window.FC_ASSETS.ken_colormap) return 'data:image/png;base64,' + window.FC_ASSETS.ken_colormap;
+        return 'assets/kenney/Textures/colormap.png';
+      }
+      return url;
+    });
+    const loader = new window.GLTFLoader(kenMgr);
     let left = KEN_FILES.length;
     const done = () => { if (--left === 0) { try { kenReady(); } catch (e) { console.warn('kenney', e); } } };
     for (const k of KEN_FILES) {
@@ -1472,6 +1506,64 @@ window.__FC3D = { scene, camera, renderer, get started() { return started; } };
   }
   window.addEventListener('keydown', e => {
     if (e.code === 'Tab') { e.preventDefault(); if (started) toggleWheel(); }
+  });
+
+  // ---------- day-2 AI assets: extra character clips + facade/sky textures ----------
+  function stripRootMotion(clip) {
+    for (const tr of clip.tracks) {
+      if (tr.name.endsWith('.position')) {
+        const vals = tr.values;
+        for (let i = 3; i < vals.length; i += 3) { vals[i] = vals[0]; vals[i + 2] = vals[2]; }
+      }
+    }
+  }
+  function loadClip(assetKey, clipName) {
+    if (!window.GLTFLoader) return;
+    const loader = new window.GLTFLoader();
+    const done = gl => {
+      if (!gl.animations || !gl.animations[0]) return;
+      const clip = gl.animations[0];
+      clip.name = clipName;
+      stripRootMotion(clip);
+      const tryAdd = () => {
+        if (MODELS.man) MODELS.man.clips.push(clip);
+        else setTimeout(tryAdd, 1000);
+      };
+      tryAdd();
+    };
+    if (window.FC_ASSETS && window.FC_ASSETS[assetKey]) {
+      const bin = Uint8Array.from(atob(window.FC_ASSETS[assetKey]), ch => ch.charCodeAt(0)).buffer;
+      loader.parse(bin, '', done, () => {});
+    } else {
+      fetch('assets/' + assetKey.replace('_', '-') + '.glb').then(r => r.ok ? r.arrayBuffer() : Promise.reject(0))
+        .then(b => loader.parse(b, '', done, () => {}))
+        .catch(() => {});
+    }
+  }
+  loadClip('man_idle', 'idle');
+  loadClip('man_run', 'run');
+  function loadTex(name, cb) {
+    const use = url => new T3.TextureLoader().load(url, tt => {
+      tt.colorSpace = T3.SRGBColorSpace; tt.wrapS = tt.wrapT = T3.RepeatWrapping; cb(tt);
+    });
+    if (window.FC_ASSETS && window.FC_ASSETS['tex_' + name]) use('data:image/jpeg;base64,' + window.FC_ASSETS['tex_' + name]);
+    else fetch('assets/tex/' + name + '.jpg').then(r => r.ok ? r.blob() : Promise.reject(0))
+      .then(b => use(URL.createObjectURL(b))).catch(() => {});
+  }
+  loadTex('facade-tower', t => {
+    t.repeat.set(3, 5);
+    const m = window.__bmats && window.__bmats.tower;
+    if (m) { m.map = t; m.emissiveMap = t; m.emissiveIntensity = 1.0; m.needsUpdate = true; }
+    const tm = window.__bmats && window.__bmats.terminal;
+    if (tm) { tm.map = t; tm.emissiveMap = t; tm.emissiveIntensity = 1.0; tm.needsUpdate = true; }
+  });
+  loadTex('facade-brick', t => {
+    t.repeat.set(3, 3);
+    const m = window.__bmats && window.__bmats.block;
+    if (m) { m.map = t; m.emissiveMap = t; m.emissiveIntensity = 0.9; m.needsUpdate = true; }
+  });
+  loadTex('skypano', t => {
+    if (window.__skyDome) { window.__skyDome.material.map = t; window.__skyDome.material.needsUpdate = true; }
   });
 })();
 
