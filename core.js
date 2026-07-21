@@ -224,7 +224,8 @@ const OUTFITS = [
   { id: 'suit', name: 'Charcoal Suit', body: 0x2e3138, legs: 0x26282e, price: 800 },
   { id: 'track', name: 'Navy Tracksuit', body: 0x31465e, legs: 0x31465e, price: 400 },
   { id: 'combat', name: 'Combat Fatigues', body: 0x3a4036, legs: 0x33382c, price: 1200 },
-  { id: 'winter', name: 'Sierra Parka', body: 0x6b5d45, legs: 0x3d3d4d, price: 900 }
+  { id: 'winter', name: 'Sierra Parka', body: 0x6b5d45, legs: 0x3d3d4d, price: 900 },
+  { id: 'tailor', name: "The Tailor's Cut", body: 0x23252e, legs: 0x191b22, price: 0, story: true }
 ];
 C.OUTFITS = OUTFITS;
 
@@ -414,6 +415,7 @@ C.buyArmor = function () {
 C.buyOutfit = function (id) {
   const o = OUTFITS.find(o2 => o2.id === id), p = S.player;
   if (!o) return 'no such outfit';
+  if (o.story && !S.done.m8) return 'finish the Tailor\'s story first';
   if (p.money < o.price) return 'not enough cash';
   p.money -= o.price; p.outfit = id; ev('sfx', { k: 'cash' });
   return null;
@@ -596,6 +598,7 @@ function updateInfantry(e, dt, weaponDmg) {
 
 // ---------- peds ----------
 function updatePed(pd, dt) {
+  if (pd.state === 'script') { pd.y = groundY(pd.x, pd.z); return; }
   pd.t -= dt;
   if (pd.state === 'down') { pd.downT -= dt; if (pd.downT <= 0) pd.dead = true; return; }
   const p = S.player;
@@ -787,6 +790,17 @@ function updateHeliAI(h, dt) {
   if (h.hp <= 0) { h.fall = 0; ev('sfx', { k: 'crash' }); return; }
   if (h.owned || p.veh === h) return;
   if (!h.hostile) return;
+  if (h.fleeRoute) {
+    const wp = h.fleeRoute[h.fri || 0];
+    if (wp) {
+      const ma = Math.atan2(wp.z - h.z, wp.x - h.x);
+      h.x += Math.cos(ma) * 27 * dt; h.z += Math.sin(ma) * 27 * dt;
+      h.yaw = ma;
+      if (d2(h.x, h.z, wp.x, wp.z) < 35) h.fri = (h.fri || 0) + 1;
+    } else h.escaped = (h.escaped || 0) + dt;
+    const ty2 = Math.max(groundY(h.x, h.z) + 45, 55);
+    h.y += clamp(ty2 - h.y, -12 * dt, 12 * dt);
+  } else {
   h.orb += 0.4 * dt;
   const tx = p.x + Math.cos(h.orb) * 90, tz = p.z + Math.sin(h.orb) * 90;
   const ma = Math.atan2(tz - h.z, tx - h.x);
@@ -795,6 +809,7 @@ function updateHeliAI(h, dt) {
   const targetY = Math.max(groundY(h.x, h.z) + 40, p.y + 35);
   h.y += clamp(targetY - h.y, -14 * dt, 14 * dt);
   h.yaw = angLerp(h.yaw, Math.atan2(p.z - h.z, p.x - h.x), clamp(2 * dt, 0, 1));
+  }
   h.cd -= dt;
   if (h.cd <= 0) { h.burst = 10; h.bt = 0; h.cd = R(2.5, 4); }
   if (h.burst > 0) {
@@ -1203,9 +1218,33 @@ function missionDone(id, reward, rep, msg) {
   const mult = S.done[id] > 1 && !MISSIONS[id].repeatable ? 0.5 : 1;
   S.player.money += Math.round(reward * mult);
   S.player.rep += rep;
-  toast((msg || 'Done.') + '  +$' + Math.round(reward * mult) + '  (+' + rep + ' rep)', 5);
+  ev('passed', { name: MISSIONS[id].name, reward: Math.round(reward * mult), rep, msg: msg || '' });
   ev('sfx', { k: 'win' });
+  if (MISSIONS[id].outro) ev('cutscene', { lines: MISSIONS[id].outro });
   S.mission = null;
+}
+function cutscene(lines) { ev('cutscene', { lines }); }
+// script cars: mission-owned vehicles driven along waypoint routes
+function driveRoute(c, dt, cruise) {
+  const wp = c.route && c.route[c.ri || 0];
+  if (!wp) { c.spd -= c.spd * 2 * dt; return true; }
+  const d = d2(c.x, c.z, wp.x, wp.z);
+  if (d < 10) { c.ri = (c.ri || 0) + 1; return driveRoute(c, dt, cruise); }
+  const ta = Math.atan2(wp.z - c.z, wp.x - c.x);
+  c.yaw = angLerp(c.yaw, ta, clamp(2.2 * dt, 0, 1));
+  c.spd += clamp(cruise - c.spd, -30 * dt, 12 * dt);
+  c.x += Math.cos(c.yaw) * c.spd * dt;
+  c.z += Math.sin(c.yaw) * c.spd * dt;
+  c.y = groundY(c.x, c.z);
+  return false;
+}
+C.driveRoute = driveRoute;
+const RP = (i, j) => ({ x: 209 + i * 108, z: 909 + j * 108 }); // city intersection grid
+function mkScriptCar(x, z, yaw, cls, route) {
+  const c = mkCar(x, z, yaw, 'script', cls);
+  c.route = route; c.ri = 0;
+  S.cars.push(c);
+  return c;
 }
 function missionFail(msg) { toast('FAILED — ' + msg, 3.5); if (S.mission && S.mission.def.cleanup) S.mission.def.cleanup(); S.mission = null; }
 C.missionFail = missionFail;
@@ -1213,6 +1252,7 @@ function startMission(id) {
   const def = MISSIONS[id];
   S.mission = { id, def, phase: 0, t: 0, data: {} };
   if (def.start) def.start(S.mission);
+  if (def.intro) ev('cutscene', { lines: def.intro });
   toast(def.name + ': ' + def.brief, 6);
   ev('sfx', { k: 'reload' });
 }
@@ -1418,6 +1458,339 @@ defMission('airrace', {
   }
 });
 
+// ================= THE TAILOR — eight-mission story arc =================
+// The one man in Blank City who can tell everyone apart. By their clothes.
+const TSHOP = { x: 2041, z: 1666 };
+defMission('m1', {
+  name: 'MEASURED', marker: TSHOP, reward: 1200, rep: 4,
+  brief: 'Follow the gray sedan. Not too close. Not too far.',
+  intro: [['THE TAILOR', 'Everyone in this city looks the same to you. Not to me. I measured half of them.'],
+    ['THE TAILOR', 'A courier in an off-the-rack gray suit is about to drive across town. Follow him. Stay back.'],
+    ['THE TAILOR', 'If he stops somewhere interesting, you make sure nothing happens to him. He owes me a fitting.']],
+  banner(m) { return m.phase === 0 ? 'TAIL THE SEDAN' + (m.lostT > 2 ? ' — DON\'T LOSE HIM!' : m.susT > 0.5 ? ' — TOO CLOSE!' : '') : m.phase === 1 ? 'PROTECT THE COURIER — ' + m.kills + '/3' : m.phase === 2 ? 'TAKE THE BRIEFCASE' : 'RETURN TO THE TAILOR'; },
+  start(m) {
+    m.route = [RP(16, 7), RP(16, 10), RP(12, 10), RP(12, 14), RP(8, 14), RP(6, 14)];
+    m.car = mkScriptCar(RP(16, 7).x, RP(16, 7).z - 30, Math.PI / 2, 'sedan', m.route);
+    m.lostT = 0; m.susT = 0; m.kills = 0; m.spawned = false;
+    m.target = { x: m.car.x, z: m.car.z };
+  },
+  onKill(e) { if (e.gmTag === 'm1') S.mission.kills++; },
+  cleanup() { const m = S.mission; if (m && m.car) m.car.dead = true; S.enemies = S.enemies.filter(e => e.gmTag !== 'm1' || e.state === 'down'); if (m && m.courier) m.courier.dead = true; },
+  update(m, dt) {
+    const p = S.player;
+    if (m.phase === 0) {
+      const arrived = driveRoute(m.car, dt, 13);
+      m.target = { x: m.car.x, z: m.car.z };
+      const d = d2(p.x, p.z, m.car.x, m.car.z);
+      if (!arrived) {
+        if (d > 120) { m.lostT += dt; if (m.lostT > 6) return missionFail('you lost the sedan.'); } else m.lostT = 0;
+        if (d < 20) { m.susT += dt; if (m.susT > 2.5) return missionFail('he spotted you and bolted.'); } else m.susT = Math.max(0, m.susT - dt);
+      } else {
+        m.phase = 1;
+        m.courier = mkPed(m.car.x + 3, m.car.z + 2); m.courier.state = 'script'; S.peds.push(m.courier);
+        for (let k = 0; k < 3; k++) {
+          const a = k / 3 * TAU;
+          const e = mkSoldier(m.car.x + Math.cos(a) * 45, m.car.z + Math.sin(a) * 45);
+          e.kind = 'hostile'; e.gmTag = 'm1'; S.enemies.push(e);
+        }
+        m.doorT = 0;
+        toast('AMBUSH! Keep them off the courier!', 4);
+        ev('sfx', { k: 'crash' });
+      }
+    } else if (m.phase === 1) {
+      for (const e of S.enemies) {
+        if (e.gmTag !== 'm1' || e.state === 'down') continue;
+        e.cx = m.courier.x; e.cz = m.courier.z; e.moveT = 1;
+        if (d2(e.x, e.z, m.courier.x, m.courier.z) < 4) { m.doorT += dt; if (m.doorT > 5) return missionFail('the courier is gone. The Tailor will not be pleased.'); }
+      }
+      if (m.kills >= 3) { m.phase = 2; m.target = { x: m.car.x, z: m.car.z }; toast('Grab the briefcase from the sedan.', 3); }
+    } else if (m.phase === 2) {
+      if (d2(p.x, p.z, m.car.x, m.car.z) < 5) { m.phase = 3; m.target = TSHOP; toast('Bring it back to the shop.', 3); ev('sfx', { k: 'cash' }); }
+    } else if (d2(p.x, p.z, TSHOP.x, TSHOP.z) < 7) {
+      if (m.courier) m.courier.dead = true;
+      missionDone('m1', 1200, 4, 'The courier lives. The briefcase talks.');
+    }
+  },
+  outro: [['THE TAILOR', 'Three men in identical cheap jackets. Amateurs. You can tell everything from a hem.'],
+    ['THE TAILOR', 'Someone is hunting my clients. Come back when you are ready to pull a thread.']]
+});
+defMission('m2', {
+  name: 'ALTERATIONS', marker: TSHOP, prereq: 'm1', reward: 1800, rep: 4,
+  brief: 'Plant a tracker. Then pull it in — hard.',
+  intro: [['THE TAILOR', 'The jackets came from a warehouse crew run by a man they call Herringbone.'],
+    ['THE TAILOR', 'His driver parks by MONO MART. Put this under the wheel arch. Do not be seen — no stars.'],
+    ['THE TAILOR', 'When he runs — and he will run — you stop that car by any means you like.']],
+  banner(m) { return m.phase === 0 ? (m.plantT > 0 ? 'PLANTING… ' + Math.ceil(3 - m.plantT) : 'PLANT THE TRACKER (stand by the car, stay clean)') : m.phase === 1 ? 'RAM THE CAR — ' + Math.max(0, Math.ceil(m.car.hp)) + '%' : 'SUBDUE THE DRIVER'; },
+  start(m) {
+    m.car = mkScriptCar(1717, 2314, 0, 'muscle', null);
+    m.car.hp = 260;
+    m.plantT = 0;
+    m.target = { x: 1717, z: 2314 };
+  },
+  cleanup() { const m = S.mission; if (m && m.car) m.car.dead = true; if (m && m.driver) m.driver.dead = true; },
+  update(m, dt) {
+    const p = S.player;
+    if (m.phase === 0) {
+      if (S.wanted > 0) return missionFail('too much heat — he made you.');
+      if (!p.veh && d2(p.x, p.z, m.car.x, m.car.z) < 5) {
+        m.plantT += dt;
+        if (m.plantT >= 3) {
+          m.phase = 1;
+          m.car.route = [RP(14, 13), RP(14, 9), RP(10, 9), RP(10, 5), RP(5, 5)]; m.car.ri = 0;
+          toast('Tracker on. He is MOVING. Wreck that car!', 4);
+          ev('sfx', { k: 'lock' });
+        }
+      } else m.plantT = 0;
+    } else if (m.phase === 1) {
+      const done2 = driveRoute(m.car, dt, 17);
+      m.target = { x: m.car.x, z: m.car.z };
+      if (p.veh && d2(p.veh.x, p.veh.z, m.car.x, m.car.z) < 7 && Math.abs(p.veh.spd) > 8) { m.car.hp -= Math.abs(p.veh.spd) * 1.4 * dt * 8; ev('shake', { n: 2 }); }
+      if (m.car.hp <= 80) {
+        m.phase = 2;
+        m.car.route = null;
+        m.driver = mkPed(m.car.x + 2, m.car.z + 2); m.driver.state = 'flee'; m.driver.t = 99; m.driver.hp = 80; S.peds.push(m.driver);
+        toast('He bailed! Run him down and put him on the pavement.', 4);
+      } else if (done2) return missionFail('he reached the warehouse. Tracker gone.');
+    } else {
+      m.target = { x: m.driver.x, z: m.driver.z };
+      if (m.driver.state === 'down') missionDone('m2', 1800, 4, 'He talked before he napped: the warehouse is at the airport.');
+    }
+  },
+  outro: [['DRIVER', 'Okay! OKAY. Herringbone runs it out of the airport hangars. Nobody sees his face. Nobody sees ANYBODY\'S face!'],
+    ['THE TAILOR', 'Mm. And yet his trousers break at the ankle. A monster.']]
+});
+defMission('m3', {
+  name: 'DRY CLEANING', marker: TSHOP, prereq: 'm2', reward: 2200, rep: 4,
+  brief: 'Three dirty packages. One clean tunnel. The law is already watching.',
+  intro: [['THE TAILOR', 'Herringbone left three parcels with people who should not have them. Evidence, of a kind.'],
+    ['THE TAILOR', 'The police are sniffing all three. You will be quicker. Collect them and go underground. Literally.']],
+  banner(m) { return m.got < 3 ? 'PACKAGES ' + m.got + '/3 — ' + Math.ceil(m.t) + 's' : 'GET TO THE TUNNEL — ' + Math.ceil(m.t) + 's'; },
+  start(m) {
+    m.pts = [RP(2, 2), RP(22, 4), RP(12, 18)].map(q => ({ x: q.x, z: q.z, got: false }));
+    m.got = 0; m.t = 170;
+    m.target = m.pts[0];
+  },
+  update(m, dt) {
+    const p = S.player;
+    m.t -= dt;
+    S.wanted = Math.max(S.wanted, 2); S.evadeT = 0;
+    if (m.t <= 0) return missionFail('the parcels walked off.');
+    for (const q of m.pts) if (!q.got && d2(p.x, p.z, q.x, q.z) < 6) { q.got = true; m.got++; ev('sfx', { k: 'cash' }); ev('popup', { msg: 'PACKAGE ' + m.got + '/3' }); }
+    const next = m.pts.find(q => !q.got);
+    m.target = next || { x: 1300, z: 1989 };
+    if (m.got >= 3 && C.inTunnel(p.x, p.z)) {
+      S.wanted = 0; S.cops = [];
+      missionDone('m3', 2200, 4, 'Handed off in the dark. Nobody followed.');
+    }
+  },
+  outro: [['THE TAILOR', 'Receipts, ledgers, and one photograph of a man whose suit I would not bury someone in.'],
+    ['THE TAILOR', 'They know I have them now. Which means we should expect... customers.']]
+});
+defMission('m4', {
+  name: 'THE FITTING', marker: TSHOP, prereq: 'm3', reward: 2600, rep: 5,
+  brief: 'Herringbone sends hitmen. Hold the shop.',
+  intro: [['THE TAILOR', 'Twelve appointments, none of them booked. They want the parcels back.'],
+    ['THE TAILOR', 'I will be in the back, pressing a suit. Do not let anyone reach my door.']],
+  banner(m) { return 'DEFEND THE SHOP — ' + m.kills + '/12' + (m.doorT > 4 ? '  THEY\'RE AT THE DOOR!' : ''); },
+  start(m) {
+    m.kills = 0; m.spawned = 0; m.doorT = 0; m.waveT = 0;
+    const p = S.player;
+    p.armor = 100; p.ammo.rifle += 90;
+    m.target = TSHOP;
+  },
+  onKill(e) { if (e.gmTag === 'm4') S.mission.kills++; },
+  cleanup() { S.enemies = S.enemies.filter(e => e.gmTag !== 'm4' || e.state === 'down'); },
+  update(m, dt) {
+    m.waveT -= dt;
+    const alive = S.enemies.filter(e => e.gmTag === 'm4' && e.state !== 'down').length;
+    if (m.spawned < 12 && alive < 4 && m.waveT <= 0) {
+      m.waveT = 2;
+      const a = Math.random() * TAU, d = R(70, 100);
+      const e = mkSoldier(TSHOP.x + Math.cos(a) * d, TSHOP.z + Math.sin(a) * d, m.spawned >= 8);
+      e.kind = 'hostile'; e.gmTag = 'm4'; S.enemies.push(e);
+      m.spawned++;
+    }
+    let atDoor = false;
+    for (const e of S.enemies) {
+      if (e.gmTag !== 'm4' || e.state === 'down') continue;
+      e.cx = TSHOP.x; e.cz = TSHOP.z; e.moveT = 1;
+      if (d2(e.x, e.z, TSHOP.x, TSHOP.z) < 9) atDoor = true;
+    }
+    m.doorT = atDoor ? m.doorT + dt : Math.max(0, m.doorT - dt);
+    if (m.doorT > 8) return missionFail('they got inside. The Tailor is gone.');
+    if (m.kills >= 12) missionDone('m4', 2600, 5, 'Twelve alterations, all final.');
+  },
+  outro: [['THE TAILOR', 'Look at them. Squares, all of them. Herringbone buys in bulk.'],
+    ['THE TAILOR', 'My informant knows where the money sleeps. Keep him breathing tomorrow.']]
+});
+defMission('m5', {
+  name: 'LOOSE THREADS', marker: TSHOP, prereq: 'm4', reward: 3000, rep: 5,
+  brief: 'Overwatch. The informant walks. You make sure he keeps walking.',
+  intro: [['THE TAILOR', 'My man will take a stroll and be seen. Bait, in a decent overcoat.'],
+    ['THE TAILOR', 'Herringbone\'s people will come for him on foot. You will be somewhere high-minded with a rifle.'],
+    ['THE TAILOR', 'Six of them, by my count. Do not let one touch that overcoat.']],
+  banner(m) { return 'PROTECT THE INFORMANT — ' + m.kills + '/6 DOWN'; },
+  start(m) {
+    const p = S.player;
+    if (!p.weapons.m24 && !p.weapons.svd) { p.weapons.m24 = { mag: 5 }; toast('The Tailor left an M24 in the alley.', 3); }
+    p.ammo.sniper += 20;
+    m.walker = mkPed(TSHOP.x + 5, TSHOP.z); m.walker.state = 'script'; S.peds.push(m.walker);
+    m.A = { x: TSHOP.x, z: TSHOP.z }; m.B = RP(17, 7);
+    m.leg = 0; m.kills = 0; m.spawned = 0; m.spawnT = 2;
+  },
+  onKill(e) { if (e.gmTag === 'm5') S.mission.kills++; },
+  cleanup() { const m = S.mission; if (m && m.walker) m.walker.dead = true; S.enemies = S.enemies.filter(e => e.gmTag !== 'm5' || e.state === 'down'); },
+  update(m, dt) {
+    const w = m.walker;
+    const dst = m.leg % 2 === 0 ? m.B : m.A;
+    const dd = d2(w.x, w.z, dst.x, dst.z);
+    if (dd > 3) {
+      const a = Math.atan2(dst.z - w.z, dst.x - w.x);
+      w.x += Math.cos(a) * 1.7 * dt; w.z += Math.sin(a) * 1.7 * dt; w.yaw = a; w.phase += 3 * dt;
+    } else m.leg++;
+    m.target = { x: w.x, z: w.z };
+    m.spawnT -= dt;
+    if (m.spawned < 6 && m.spawnT <= 0) {
+      m.spawnT = 8;
+      const a = Math.random() * TAU;
+      const e = mkSoldier(w.x + Math.cos(a) * R(80, 110), w.z + Math.sin(a) * R(80, 110));
+      e.kind = 'hostile'; e.gmTag = 'm5'; S.enemies.push(e);
+      m.spawned++;
+      ev('popup', { msg: 'ASSASSIN INBOUND' });
+    }
+    for (const e of S.enemies) {
+      if (e.gmTag !== 'm5' || e.state === 'down') continue;
+      e.cx = w.x; e.cz = w.z; e.moveT = 1;
+      if (d2(e.x, e.z, w.x, w.z) < 4) return missionFail('the overcoat has a hole in it now.');
+    }
+    if (m.kills >= 6) missionDone('m5', 3000, 5, 'Six tailors\' dummies, none of them mine.');
+  },
+  outro: [['INFORMANT', 'The money rides Thursdays. Armored car, police escort, straight through town. Herringbone\'s pension.'],
+    ['THE TAILOR', 'Then Thursday you become a bank.']]
+});
+defMission('m6', {
+  name: 'OFF THE RACK', marker: TSHOP, prereq: 'm5', reward: 4500, rep: 6,
+  brief: 'Hijack the armored car out from under its escort.',
+  intro: [['THE TAILOR', 'An APC full of Herringbone\'s laundered cash, dressed as police work.'],
+    ['THE TAILOR', 'Break the escort, stop the box, and drive it to Prestige Motors. They owe me a favor and a paint booth.']],
+  banner(m) { return m.phase === 0 ? 'STOP THE APC — ARMOR ' + Math.max(0, Math.ceil(m.apc.hp / 6)) + '%' : 'DELIVER THE APC TO PRESTIGE MOTORS'; },
+  start(m) {
+    const route = [RP(2, 16), RP(2, 8), RP(8, 8), RP(8, 4), RP(16, 4), RP(24, 4)];
+    m.apc = mkScriptCar(route[0].x, route[0].z, 0, 'apc', route.slice(1));
+    m.apc.hp = 600;
+    m.esc = [0, 1].map(k => {
+      const c2 = mkScriptCar(route[0].x, route[0].z + (k ? 14 : -14), 0, 'cop', route.slice(1).map(q => ({ x: q.x, z: q.z + (k ? 14 : -14) })));
+      c2.hp = 120;
+      return c2;
+    });
+    S.wanted = Math.max(S.wanted, 3);
+    m.target = { x: m.apc.x, z: m.apc.z };
+  },
+  cleanup() { const m = S.mission; if (m) { if (m.apc && S.player.veh !== m.apc) m.apc.dead = true; for (const e2 of m.esc || []) e2.dead = true; } },
+  update(m, dt) {
+    const p = S.player;
+    S.evadeT = 0;
+    for (const e2 of m.esc) {
+      if (e2.dead) continue;
+      if (e2.hp <= 0) { e2.dead = true; explode(e2.x, e2.y + 1, e2.z, 7, 50); continue; }
+      driveRoute(e2, dt, 15);
+    }
+    if (m.phase === 0) {
+      const escaped = driveRoute(m.apc, dt, 14);
+      m.target = { x: m.apc.x, z: m.apc.z };
+      if (p.veh && d2(p.veh.x, p.veh.z, m.apc.x, m.apc.z) < 8 && Math.abs(p.veh.spd) > 8) m.apc.hp -= Math.abs(p.veh.spd) * 1.2 * dt * 8;
+      if (m.apc.hp <= 250) { m.apc.route = null; m.phase = 0.5; toast('The APC is stalled — jack it (E)!', 4); }
+      if (escaped) return missionFail('the convoy made it through.');
+    }
+    if (m.phase === 0.5 && p.veh === m.apc) { m.phase = 1; m.target = { x: 2419, z: 2530 }; toast('It drives like a safe. Prestige Motors. Go.', 3); }
+    if (m.phase === 1) {
+      if (m.apc.hp <= 30) return missionFail('the armored car is scrap. So is the plan.');
+      if (p.veh === m.apc && d2(m.apc.x, m.apc.z, 2419, 2530) < 12) {
+        S.wanted = 0; S.cops = [];
+        if (!S.player.owned.vehicles.includes('apc')) S.player.owned.vehicles.push('apc');
+        m.apc.owned = true; m.apc.type = 'free';
+        missionDone('m6', 4500, 6, 'One armored car, resprayed. It is yours now.');
+      }
+    }
+  },
+  outro: [['THE TAILOR', 'Herringbone\'s pension fund, in a box with wheels. He will come out of his hangar for this.'],
+    ['THE TAILOR', 'Good. I have wanted to measure him for a long, long time.']]
+});
+defMission('m7', {
+  name: 'BESPOKE', marker: { x: 2575, z: 3450 }, prereq: 'm6', reward: 6000, rep: 7,
+  brief: 'Raid the hangar. Take the ledger. Leave by air.',
+  intro: [['THE TAILOR', 'The warehouse crew is at the hangars, guarding a ledger with every name Herringbone owns.'],
+    ['THE TAILOR', 'Eight guards. One book. And a borrowed helicopter on the runway when it gets loud.'],
+    ['THE TAILOR', 'Take the ledger to my cabin in the Sierra. Fly carefully. Or do not — it is insured.']],
+  banner(m) { return m.phase === 0 ? 'CLEAR THE HANGARS — ' + m.kills + '/8' : m.phase === 1 ? 'TAKE THE LEDGER' : 'FLY THE LEDGER TO THE SIERRA CABIN'; },
+  start(m) {
+    m.kills = 0;
+    for (let k = 0; k < 8; k++) {
+      const e = mkSoldier(2500 + R(0, 350), 3300 + R(0, 120), k % 3 === 0);
+      e.kind = 'hostile'; e.gmTag = 'm7'; S.enemies.push(e);
+    }
+    m.heli = mkHeli(2150, 3620);
+    S.helis.push(m.heli);
+    m.target = { x: 2675, z: 3360 };
+    S.player.ammo.rifle += 60;
+  },
+  onKill(e) { if (e.gmTag === 'm7') S.mission.kills++; },
+  cleanup() { S.enemies = S.enemies.filter(e => e.gmTag !== 'm7' || e.state === 'down'); const m = S.mission; if (m && m.heli && S.player.veh !== m.heli) m.heli.dead = true; },
+  update(m, dt) {
+    const p = S.player;
+    if (m.phase === 0 && m.kills >= 8) { m.phase = 1; m.target = { x: 2675, z: 3360 }; toast('Hangars clear. The ledger is inside.', 3); }
+    else if (m.phase === 1 && !p.veh && d2(p.x, p.z, 2675, 3360) < 6) { m.phase = 2; m.target = { x: 4820, z: 1060 }; toast('Ledger secured. Get airborne — Sierra cabin.', 4); ev('sfx', { k: 'cash' }); }
+    else if (m.phase === 2) {
+      const inAir = p.veh && (p.veh.kind === 'heli' || p.veh.kind === 'plane');
+      if (inAir) m.flew = true;
+      if (d2(p.x, p.z, 4820, 1060) < 40 && m.flew && (!p.veh || p.veh.y < C.groundY(p.veh.x, p.veh.z) + 5)) {
+        missionDone('m7', 6000, 7, 'Every name in the book. Including one that surprised even the Tailor.');
+      }
+    }
+  },
+  outro: [['THE TAILOR', 'This ledger says Herringbone commissioned a suit. My cut. My cloth. My label.'],
+    ['THE TAILOR', 'Somewhere out there is a man wearing my work, doing THIS with it. That ends tomorrow.']]
+});
+defMission('m8', {
+  name: 'FINAL CUT', marker: TSHOP, prereq: 'm7', reward: 10000, rep: 10,
+  brief: 'Herringbone runs for the mountains in a gunship. Cut the thread.',
+  intro: [['THE TAILOR', 'He is leaving. Gunship, escort, headed for the Sierra with everything he can carry.'],
+    ['THE TAILOR', 'In a city with no faces, a man is only his clothes. He is wearing MY clothes.'],
+    ['THE TAILOR', 'Bring me back my suit. The man inside it is optional.']],
+  banner(m) { return m.phase === 0 ? 'SHOOT DOWN HERRINGBONE\'S GUNSHIP' : 'FINISH HIS CREW — ' + m.kills + '/4'; },
+  start(m) {
+    const p = S.player;
+    if (!p.weapons.stinger && !p.weapons.strela) p.weapons.strela = { mag: 1 };
+    p.ammo.aa += 6;
+    m.boss = mkHeli(2100, 1600, 'hind', true);
+    m.boss.hp = 520; m.boss.gmTag = 'm8boss';
+    m.boss.fleeRoute = [{ x: 3000, z: 1700 }, { x: 3800, z: 1900 }, { x: 4500, z: 1900 }, { x: 5000, z: 1500 }, { x: 4830, z: 1010 }];
+    const esc2 = mkHeli(2050, 1650, 'hind', true);
+    esc2.hp = 260; esc2.gmTag = 'm8esc';
+    esc2.fleeRoute = m.boss.fleeRoute.map(q => ({ x: q.x, z: q.z + 60 }));
+    S.helis.push(m.boss, esc2);
+    m.kills = 0;
+  },
+  onHeliKill(h) { if (h.gmTag === 'm8boss') { S.mission.phase = 1; toast('He is DOWN. His crew is scattering at the ridge — none of them walk away.', 5); for (let k = 0; k < 4; k++) { const e = mkSoldier(4800 + R(-40, 40), 1000 + R(-40, 40), k === 0); e.kind = 'hostile'; e.gmTag = 'm8'; S.enemies.push(e); } } },
+  onKill(e) { if (e.gmTag === 'm8') S.mission.kills++; },
+  cleanup() { S.helis = S.helis.filter(h => !h.gmTag || h.dead); S.enemies = S.enemies.filter(e => e.gmTag !== 'm8' || e.state === 'down'); },
+  update(m, dt) {
+    if (m.phase === 0) {
+      m.target = { x: m.boss.x, z: m.boss.z };
+      if (m.boss.escaped > 18) return missionFail('the gunship slipped over the ridge.');
+    } else {
+      m.target = { x: 4800, z: 1000 };
+      if (m.kills >= 4) {
+        missionDone('m8', 10000, 10, 'The suit came back folded. The story is over — the city is yours.');
+        toast('THE TAILOR\'S CUT unlocked at Threads & Co.', 6);
+      }
+    }
+  },
+  outro: [['THE TAILOR', 'A perfect fit, even now. I will sponge the smoke out of it.'],
+    ['THE TAILOR', 'You know the strangest part? Under all of it — he looked exactly like everyone else.'],
+    ['THE TAILOR', 'Come by the shop. I made you something. On the house.']]
+});
+
 // ---------- ambient spawning ----------
 function spawnAmbient() {
   const p = S.player;
@@ -1442,7 +1815,7 @@ function spawnAmbient() {
     }
   }
   S.peds = S.peds.filter(pd => !pd.dead && d2(pd.x, pd.z, p.x, p.z) < 420);
-  S.cars = S.cars.filter(c => !c.dead && (c.owned || c.repo || c === p.veh || c.type === 'free' || d2(c.x, c.z, p.x, p.z) < 500));
+  S.cars = S.cars.filter(c => !c.dead && (c.owned || c.repo || c.type === 'script' || c === p.veh || c.type === 'free' || d2(c.x, c.z, p.x, p.z) < 500));
   // cops
   const hidden = C.inTunnel(p.x, p.z);
   if (S.wanted > 0 && !hidden) {

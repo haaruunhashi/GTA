@@ -349,7 +349,7 @@ for (const h of C.HOUSES) addMarker(h.x, h.z, 0xd0b25a);
 const missionMarkerRefs = {};
 for (const id in C.MISSIONS) {
   const def = C.MISSIONS[id];
-  const col = id.startsWith('war') ? 0xff785a : id.startsWith('op') ? 0xffd23f : id === 'heist' ? 0xc05aE8 : 0x5ad0e8;
+  const col = /^m\d+$/.test(id) ? 0xe8c84a : id.startsWith('war') ? 0xff785a : id.startsWith('op') ? 0xffd23f : id === 'heist' ? 0xc05aE8 : 0x5ad0e8;
   missionMarkerRefs[id] = addMarker(def.marker.x, def.marker.z, col);
 }
 // stash crates (small glints)
@@ -838,6 +838,7 @@ window.addEventListener('mouseup', e => { if (e.button === 0) mouseDown = false;
 window.addEventListener('wheel', e => { if (locked) C.switchWeapon(e.deltaY > 0 ? 1 : -1); });
 
 function buildInput() {
+  if (window.__cutsceneOpen) return { camYaw, camPitch };
   return {
     fwd: keys.KeyW || keys.ArrowUp, back: keys.KeyS || keys.ArrowDown,
     left: keys.KeyA || keys.ArrowLeft, right: keys.KeyD || keys.ArrowRight,
@@ -916,6 +917,7 @@ function drawHUD(dt) {
     if (m.id.startsWith('op')) txt += ' — HOSTILES ' + m.kills + '/' + m.need;
     if (m.id.startsWith('war')) txt += ' — TARGETS LEFT: ' + m.left;
     if (m.id === 'heist') txt += m.phase === 0 ? ' — STEAL THE T-80' : ' — DELIVER TO STINGER RIDGE';
+    if (m.def.banner) txt = m.def.name + ' — ' + m.def.banner(m);
     hud.banner.textContent = txt;
     hud.banner.style.display = 'block';
   } else hud.banner.style.display = 'none';
@@ -926,6 +928,7 @@ function drawHUD(dt) {
     hud.prompt.style.display = 'block';
   } else hud.prompt.style.display = 'none';
   toastT -= dt; if (toastT <= 0) hud.toast.style.display = 'none';
+  if (passT > 0) { passT -= dt; if (passT <= 0) passEl.style.display = 'none'; }
   zoneT -= dt; if (zoneT <= 0) hud.zone.style.opacity = 0;
   // fail overlay
   if (S.state === 'busted' || S.state === 'wasted') {
@@ -943,7 +946,7 @@ function drawHUD(dt) {
     if (S.done[id] && !C.MISSIONS[id].repeatable) continue;
     if (!C.unlocked(id)) continue;
     const d = C.MISSIONS[id].marker;
-    dot(d.x, d.z, id.startsWith('war') ? '#ff785a' : id.startsWith('op') ? '#ffd23f' : id === 'heist' ? '#c05ae8' : '#5ad0e8', 2.4);
+    dot(d.x, d.z, /^m\d+$/.test(id) ? '#e8c84a' : id.startsWith('war') ? '#ff785a' : id.startsWith('op') ? '#ffd23f' : id === 'heist' ? '#c05ae8' : '#5ad0e8', 2.4);
   }
   for (const s of C.SHOPS) dot(s.x, s.z, '#79d98c', 1.6);
   for (const h of C.HOUSES) dot(h.x, h.z, '#d0b25a', 1.6);
@@ -1051,6 +1054,54 @@ function wireButtons() {
 function refreshMenu() { closeMenu(); tryInteract(); }
 function toast2(msg) { hud.toast.textContent = msg; hud.toast.style.display = 'block'; toastT = 3; }
 
+// ---------- cutscenes & mission-passed presentation ----------
+const csEl = document.createElement('div');
+csEl.style.cssText = 'position:fixed;inset:0;display:none;z-index:25;pointer-events:auto;cursor:pointer;';
+csEl.innerHTML =
+  '<div style="position:absolute;top:0;left:0;right:0;height:13%;background:#000"></div>' +
+  '<div style="position:absolute;bottom:0;left:0;right:0;height:24%;background:#000;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0 12%">' +
+  '<div id="csSpeaker" style="font:800 15px monospace;color:#e8c84a;letter-spacing:2px;margin-bottom:8px"></div>' +
+  '<div id="csLine" style="font:400 19px Georgia,serif;color:#e8e4d8;text-align:center;line-height:1.5;font-style:italic"></div>' +
+  '<div style="font:700 11px monospace;color:#78808f;margin-top:10px">click to continue</div></div>';
+document.body.appendChild(csEl);
+let csLines = null, csIdx = 0;
+window.__cutsceneOpen = false;
+function showCutscene(lines) {
+  csLines = lines; csIdx = 0;
+  window.__cutsceneOpen = true;
+  csEl.style.display = 'block';
+  if (document.pointerLockElement) document.exitPointerLock();
+  renderCsLine();
+}
+function renderCsLine() {
+  const l = csLines[csIdx];
+  document.getElementById('csSpeaker').textContent = l[0];
+  document.getElementById('csLine').textContent = '\u201C' + l[1] + '\u201D';
+}
+function advanceCutscene() {
+  csIdx++;
+  if (csLines && csIdx < csLines.length) renderCsLine();
+  else { window.__cutsceneOpen = false; csEl.style.display = 'none'; csLines = null; }
+}
+csEl.addEventListener('click', advanceCutscene);
+window.addEventListener('keydown', e => {
+  if (window.__cutsceneOpen && (e.code === 'Enter' || e.code === 'KeyE' || e.code === 'Space')) { e.preventDefault(); advanceCutscene(); }
+});
+const passEl = document.createElement('div');
+passEl.style.cssText = 'position:fixed;inset:0;display:none;z-index:24;pointer-events:none;background:radial-gradient(ellipse at center,rgba(0,0,0,0.15),rgba(0,0,0,0.7));';
+passEl.innerHTML = '<div style="position:absolute;left:50%;top:42%;transform:translate(-50%,-50%);text-align:center">' +
+  '<div style="font:900 52px \'Arial Black\',Arial;font-style:italic;color:#e8c84a;text-shadow:3px 3px 0 #000;letter-spacing:3px">MISSION PASSED</div>' +
+  '<div id="passName" style="font:800 22px monospace;color:#e8e4d8;margin-top:10px;text-shadow:2px 2px 0 #000"></div>' +
+  '<div id="passReward" style="font:900 30px \'Arial Black\',Arial;color:#7fd98a;margin-top:8px;text-shadow:2px 2px 0 #000"></div></div>';
+document.body.appendChild(passEl);
+let passT = 0;
+function showPassed(name, reward, rep) {
+  document.getElementById('passName').textContent = name;
+  document.getElementById('passReward').textContent = '+$' + reward + '   ·   +' + rep + ' REP';
+  passEl.style.display = 'block';
+  passT = 4.5;
+}
+
 // ---------- events from core ----------
 function handleEvents() {
   for (const e of C.drainEvents()) {
@@ -1069,6 +1120,8 @@ function handleEvents() {
     else if (e.t === 'shake') shake = Math.min(1.4, shake + e.n / 12);
     else if (e.t === 'nitro') { if (S.player.veh) spawnSprite(S.player.veh.x - Math.cos(S.player.veh.yaw) * 2.6, S.player.veh.y + 0.7, S.player.veh.z - Math.sin(S.player.veh.yaw) * 2.6, fireTex, 0.9, 0.11, 0, 0x7fb0ff); }
     else if (e.t === 'respawn') camYaw = 0;
+    else if (e.t === 'cutscene') showCutscene(e.lines);
+    else if (e.t === 'passed') showPassed(e.name, e.reward, e.rep);
   }
 }
 

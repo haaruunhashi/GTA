@@ -35,7 +35,22 @@ The pairs trade off honestly (AK hits harder, M4 shoots straighter; SVD is faste
 harder). US arms sell at **Liberty Arms** in the city; Soviet arms at the **Sierra Black
 Market**. Higher tiers unlock as your reputation grows.
 
-## Missions (rep + cash, chains unlock)
+## THE TAILOR — the story (8 missions, letterboxed cutscenes, MISSION PASSED screens)
+
+The one man in Blank City who can tell everyone apart — by their clothes. Gold markers at
+Threads & Co. Each mission is a different verb:
+
+1. **MEASURED** — tail a courier's sedan (not too close, not too far), then fight off the ambush
+2. **ALTERATIONS** — plant a tracker clean, then chase and ram the target off the road and subdue the driver
+3. **DRY CLEANING** — three dirty packages, 170 seconds, permanent police heat, hand-off underground
+4. **THE FITTING** — hold the shop against twelve hitmen; if they reach the door, it's over
+5. **LOOSE THREADS** — sniper overwatch on a walking informant while six assassins converge
+6. **OFF THE RACK** — break a police escort and hijack an armored APC mid-route (it's yours after)
+7. **BESPOKE** — raid the airport hangars, take the ledger, escape by air to the Sierra
+8. **FINAL CUT** — Herringbone flees in a gunship; lock, shoot it down, and finish his crew at the crash site.
+   Reward: $10,000 and **The Tailor's Cut**, a story-exclusive outfit
+
+## Side missions (rep + cash, chains unlock)
 
 - **City chain**: Courier Run → Repo Man → Getaway Driver → unlocks **Taxi Fares**
   (repeatable) and the **Street GP** checkpoint race (repeatable, beat 95s)

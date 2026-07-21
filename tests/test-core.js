@@ -262,4 +262,96 @@ C.drainEvents();
 assert(flew, 'car goes airborne off the airport ramp');
 assert(P.money > moneyBefore, 'stunt bonus paid (+$' + (P.money - moneyBefore) + ')');
 
+// ================= THE TAILOR story arc =================
+const drain = () => C.drainEvents();
+function killTagged(tag, n) {
+  let guard = 0;
+  while (guard++ < 4000) {
+    const e = S.enemies.find(e2 => e2.gmTag === tag && e2.state !== 'down');
+    if (e) C.killInfantry(e);
+    stepAlive(10);
+    const done2 = S.enemies.filter(e2 => e2.gmTag === tag && e2.state === 'down').length;
+    if (!S.mission || done2 >= n) break;
+  }
+}
+S.mission = null; S.wanted = 0; S.cops = []; P.veh = null;
+let sguard = 0;
+// m1 MEASURED — tail, ambush, briefcase
+P.x = 2041; P.z = 1666; P.y = 0;
+step(5);
+assert(S.mission && S.mission.id === 'm1', 'MEASURED starts at the Tailor');
+assert(C.drainEvents !== undefined, 'events api');
+let m = S.mission;
+assert(m.car && m.car.type === 'script', 'tail target sedan spawned on a route');
+// fast-forward the tail: park ourselves mid-band and skip the car to its last waypoint
+m.car.ri = m.car.route.length - 1;
+m.car.x = m.car.route[m.car.route.length - 1].x - 14; m.car.z = m.car.route[m.car.route.length - 1].z;
+sguard = 0;
+while (S.mission && S.mission.phase === 0 && sguard++ < 600) { P.x = m.car.x - 60; P.z = m.car.z; P.y = 0; stepAlive(5); }
+assert(S.mission && S.mission.phase === 1, 'ambush phase triggers at route end');
+killTagged('m1', 3);
+assert(S.mission && S.mission.phase === 2, 'hitmen down — briefcase phase');
+P.x = m.car.x; P.z = m.car.z; stepAlive(5);
+P.x = 2041; P.z = 1666; stepAlive(5);
+assert(S.done.m1 === 1, 'MEASURED passed');
+// m2 ALTERATIONS — plant, ram, subdue
+C.startMission('m2'); m = S.mission; drain();
+S.wanted = 0; S.cops = [];
+P.veh = null; P.x = m.car.x + 2; P.z = m.car.z; P.y = 0;
+stepAlive(200);
+assert(S.mission && S.mission.phase === 1, 'tracker planted, target fleeing');
+m.car.hp = 70; stepAlive(10);
+assert(S.mission && S.mission.phase === 2 && m.driver, 'target rammed out — driver bailed');
+m.driver.state = 'down'; m.driver.downT = 20; stepAlive(5);
+assert(S.done.m2 === 1, 'ALTERATIONS passed');
+// m3 DRY CLEANING — timed pickups under heat, tunnel dropoff
+C.startMission('m3'); m = S.mission; drain();
+for (const q of m.pts) { P.x = q.x; P.z = q.z; P.y = 0; stepAlive(5); }
+assert(m.got === 3, 'all three packages collected');
+assert(S.wanted >= 2, 'police heat pinned during the run');
+P.x = 1300; P.z = 1989; P.y = -9; stepAlive(5);
+assert(S.done.m3 === 1, 'DRY CLEANING passed underground');
+// m4 THE FITTING — defend the shop
+C.startMission('m4'); m = S.mission; drain();
+P.x = 2041; P.z = 1680; P.y = 0;
+killTagged('m4', 12);
+assert(S.done.m4 === 1, 'THE FITTING passed (12 hitmen down)');
+// m5 LOOSE THREADS — overwatch
+C.startMission('m5'); m = S.mission; drain();
+killTagged('m5', 6);
+assert(S.done.m5 === 1, 'LOOSE THREADS passed (informant alive)');
+// m6 OFF THE RACK — convoy hijack
+C.startMission('m6'); m = S.mission; drain();
+m.apc.hp = 200; stepAlive(10);
+assert(S.mission && S.mission.phase === 0.5, 'APC stalled');
+P.veh = null; P.x = m.apc.x + 3; P.z = m.apc.z; P.y = C.groundY(P.x, P.z);
+(() => { const i = inp(); i.enter = 1; S.player.hp = 100; step(2, i); })();
+assert(P.veh === m.apc, 'APC jacked');
+m.apc.x = 2419; m.apc.z = 2530; stepAlive(5);
+assert(S.done.m6 === 1 && P.owned.vehicles.includes('apc'), 'OFF THE RACK passed — APC owned');
+// m7 BESPOKE — hangar raid + air escape
+C.startMission('m7'); m = S.mission; drain();
+killTagged('m7', 8);
+assert(S.mission && S.mission.phase === 1, 'hangars cleared');
+P.veh = null; P.x = 2675; P.z = 3360; P.y = 0; stepAlive(5);
+assert(S.mission && S.mission.phase === 2, 'ledger secured');
+P.x = m.heli.x + 3; P.z = m.heli.z; P.y = m.heli.y;
+(() => { const i = inp(); i.enter = 1; S.player.hp = 100; step(2, i); })();
+assert(P.veh === m.heli, 'borrowed heli boarded');
+m.heli.x = 4820; m.heli.z = 1060; m.heli.y = C.groundY(4820, 1060) + 1; stepAlive(5);
+assert(S.done.m7 === 1, 'BESPOKE passed — ledger delivered by air');
+// m8 FINAL CUT — gunship boss + LZ cleanup
+if (P.veh) { const i = inp(); i.enter = 1; step(2, i); }
+C.startMission('m8'); m = S.mission; drain();
+assert(m.boss && m.boss.fleeRoute, 'Herringbone flees by gunship');
+m.boss.hp = 0;
+sguard = 0;
+while (S.mission && S.mission.phase === 0 && sguard++ < 900) stepAlive(5);
+assert(S.mission && S.mission.phase === 1, 'boss gunship downed — LZ fight begins');
+killTagged('m8', 4);
+assert(S.done.m8 === 1, 'FINAL CUT passed — story complete');
+P.money = 5000;
+assert(C.buyOutfit('tailor') === null && P.outfit === 'tailor', "story reward outfit unlocked: The Tailor's Cut");
+const evs = drain();
+
 console.log('\nCORE_OK — ' + pass + ' assertions passed');
