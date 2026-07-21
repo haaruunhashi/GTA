@@ -305,7 +305,7 @@ function resetGame() {
   player.lockTgt = null; player.lockT = 0;
   cars.push(mkCar(31 * T, 32.5 * T, -Math.PI / 2, 'free', 'sports'));
   cam.x = player.x; cam.y = player.y;
-  toast('Faceless City. Grab the coupe (E). Jobs in town, ops east, war in the mountains.', 5);
+  toast('Blank City. Grab the coupe (E). Jobs in town, ops east, war in the mountains.', 5);
 }
 
 // ---------- factories ----------
@@ -1182,7 +1182,7 @@ function afterFail(kind) {
   player.hp = 100; player.downT = 0; player.car = null;
   player.x = 32.5 * T; player.y = 32.5 * T;
   state = 'play';
-  toast(kind === 'busted' ? ('Busted. The faceless judge fined you $' + cut) : ('Wasted. Hospital took $' + cut), 4);
+  toast(kind === 'busted' ? ('Busted. The judge fined you $' + cut) : ('Wasted. Hospital took $' + cut), 4);
 }
 
 // ---------- update ----------
@@ -1193,7 +1193,7 @@ function update(dt) {
   const z = zoneOf(player.x);
   if (z !== curZone) {
     curZone = z;
-    toast(z === 'city' ? 'FACELESS CITY' : z === 'outfield' ? 'THE OUTFIELD — operations territory' : 'SIERRA NEGRA — guerrilla country', 3);
+    toast(z === 'city' ? 'BLANK CITY' : z === 'outfield' ? 'THE OUTFIELD — operations territory' : 'SIERRA NEGRA — guerrilla country', 3);
   }
   spawnStuff();
   updateOps(dt);

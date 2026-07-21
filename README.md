@@ -1,4 +1,4 @@
-# Faceless City 3D
+# Blank City 3D
 
 A third-person **3D open-world GTA-style game** (Three.js/WebGL) where **every character is a
 faceless mannequin** — smooth blank heads, no eyes, no mouth, nothing. Built as a full
@@ -12,7 +12,7 @@ Open `index.html` in a browser. The original top-down 2D version is kept at `cla
 
 | Region | What's there |
 |---|---|
-| **Faceless City** | Downtown towers with lit windows, a grid of streets with traffic and varied faceless pedestrians, six shops, three buyable houses, mission givers |
+| **Blank City** | Downtown towers with lit windows, a grid of streets with traffic and varied faceless pedestrians, six shops, three buyable houses, mission givers |
 | **Fort Kubra** | Walled military base. Restricted: trespass draws an armed garrison; the heist mission sends you in to steal a T-80 |
 | **International Airport** | 1.5 km runway, terminal, hangars, and Skyline Aviation — buy your own helicopter or plane |
 | **The Outfield** | No-man's-land of camps and craters — wave-based tactical ops |
@@ -82,8 +82,8 @@ combatants — soldiers, tanks, gunships — plus classic GTA chaos.
 
 - **Stunt ramps** — eight hazard-striped ramps (airport, Outfield, city, Sierra). Hit them
   fast: airtime over ~0.9s pays an INSANE STUNT bonus scaled by hang time and speed.
-- **Neon city** — glowing shop signs and roadside billboards for the city's faceless brands
-  (FACELESS FOODS: *everything tastes the same*; MANNEQUIN MOTEL: *sleep like you're not
+- **Neon city** — glowing shop signs and roadside billboards for the city's in-world brands
+  (MONO MART: *everything tastes the same*; MANNEQUIN MOTEL: *sleep like you're not
   there*), with the Sierra black market flickering in Russian.
 - **Weapon wheel** — Tab opens a wheel of everything you own with live ammo counts.
 - **Kenney storefronts** — low-rise blocks use real CC0 building models; parks get fountains

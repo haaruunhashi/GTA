@@ -208,7 +208,7 @@ function propBlock(x, y, z, pad) {
 const SHOPS = [
   { id: 'armory', name: 'LIBERTY ARMS (US weapons)', x: 1231, z: 1450, type: 'guns', nation: 'US' },
   { id: 'blackmarket', name: 'SIERRA BLACK MARKET (Soviet weapons)', x: 4800, z: 950, type: 'guns', nation: 'SOV' },
-  { id: 'market', name: 'FACELESS FOODS SUPERMARKET', x: 1663, z: 2314, type: 'market' },
+  { id: 'market', name: 'MONO MART SUPERMARKET', x: 1663, z: 2314, type: 'market' },
   { id: 'clothes', name: 'THREADS & CO CLOTHING', x: 2095, z: 1666, type: 'clothes' },
   { id: 'dealer', name: 'PRESTIGE MOTORS', x: 2419, z: 2530, type: 'cars' },
   { id: 'airdealer', name: 'SKYLINE AVIATION', x: 1900, z: 3700, type: 'aircraft' }
@@ -347,7 +347,7 @@ function reset(keepProgress) {
     else if (VEH[vc].kind === 'tank') { const t = mkTank(4850, 1100); t.owned = true; S.tanks.push(t); }
     off++;
   }
-  toast('Faceless City. Jobs in town, war out east. Everything you earn is saved.', 5);
+  toast('Blank City. Jobs in town, war out east. Everything you earn is saved.', 5);
 }
 C.reset = reset;
 
@@ -1259,13 +1259,13 @@ defMission('getaway', {
   update(m, dt) {
     if (d2(S.player.x, S.player.z, m.target.x, m.target.z) < 10) {
       S.wanted = 0; S.cops = []; S.footCops = [];
-      missionDone('getaway', 1000, 3, 'He vanished into the crowd of blank faces.');
+      missionDone('getaway', 1000, 3, 'He vanished into the crowd. Nobody saw anything.');
     }
   }
 });
 defMission('taxi', {
   name: 'TAXI FARES', marker: { x: 1663, z: 2422 }, prereq: 'getaway', repeatable: true, reward: 0, rep: 0,
-  brief: 'Faceless fares, real money. Each drop pays. Leave the stand to quit.',
+  brief: 'Fares waiting, real money. Each drop pays. Leave the stand to quit.',
   start(m) { m.fares = 0; m.next(m); },
   next(m) {
     const spots = [{ x: 853, z: 1666 }, { x: 2311, z: 2854 }, { x: 1447, z: 1017 }, { x: 2740, z: 1990 }, { x: 640, z: 2206 }];
@@ -1389,7 +1389,7 @@ defMission('heist', {
       S.wanted = 0; S.cops = []; S.soldiers = []; S.footCops = [];
       m.tank.owned = true; m.tank.heist = false;
       S.player.owned.vehicles.includes('tank') || S.player.owned.vehicles.push('tank');
-      missionDone('heist', 12000, 8, 'The rebels salute a man with no face. The tank is yours now.');
+      missionDone('heist', 12000, 8, 'The rebels salute. The tank is yours now.');
     }
   }
 });
@@ -1486,7 +1486,7 @@ function afterFail(kind) {
   const home = p.owned.houses.length ? HOUSES.find(h => h.id === p.owned.houses[0]) : null;
   p.x = home ? home.x : 1505; p.z = home ? home.z : 2056; p.y = groundY(p.x, p.z);
   S.state = 'play';
-  toast(kind === 'busted' ? 'Busted. The faceless judge took $' + cut : 'Wasted. The hospital took $' + cut, 4);
+  toast(kind === 'busted' ? 'Busted. The judge did not even look up. Fined $' + cut : 'Wasted. The hospital took $' + cut, 4);
   ev('respawn', {});
 }
 
@@ -1502,7 +1502,7 @@ C.step = function (dt, inp) {
   const z = zoneOf(p.x, p.z);
   if (z !== lastZone) {
     lastZone = z;
-    const names = { city: 'FACELESS CITY', fort: 'FORT KUBRA — RESTRICTED', airport: 'INTERNATIONAL AIRPORT', outfield: 'THE OUTFIELD', sierra: 'SIERRA NEGRA', fringe: '' };
+    const names = { city: 'BLANK CITY', fort: 'FORT KUBRA — RESTRICTED', airport: 'INTERNATIONAL AIRPORT', outfield: 'THE OUTFIELD', sierra: 'SIERRA NEGRA', fringe: '' };
     if (names[z]) ev('zone', { name: names[z] });
   }
   spawnAmbient();

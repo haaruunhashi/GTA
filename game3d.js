@@ -1174,7 +1174,7 @@ requestAnimationFrame(frame);
 $('playbtn').addEventListener('click', () => {
   audioInit();
   const had = load();
-  if (had) toast2('Save loaded — welcome back to Faceless City.');
+  if (had) toast2('Save loaded — welcome back to Blank City.');
   $('intro').style.display = 'none';
   started = true;
   canvas.requestPointerLock && canvas.requestPointerLock();
@@ -1407,7 +1407,7 @@ window.__FC3D = { scene, camera, renderer, get started() { return started; } };
   const SIGN_DEFS = {
     armory: ['LIBERTY ARMS', '#8fd0ff', 'US MILITARY SURPLUS'],
     blackmarket: ['SIERRA SUPPLY', '#ff785a', 'НЕ ЗАДАВАЙ ВОПРОСОВ'],
-    market: ['FACELESS FOODS', '#79d98c', 'EVERYTHING TASTES THE SAME'],
+    market: ['MONO MART', '#79d98c', 'EVERYTHING TASTES THE SAME'],
     clothes: ['THREADS & CO', '#e8c84a', 'SAME HEAD. BETTER CUT.'],
     dealer: ['PRESTIGE MOTORS', '#c05ae8', 'NITRO INCLUDED'],
     airdealer: ['SKYLINE AVIATION', '#5ad0e8', 'OWN A PIECE OF THE SKY']
@@ -1419,9 +1419,9 @@ window.__FC3D = { scene, camera, renderer, get started() { return started; } };
   }
   const ADS = [
     ['MANNEQUIN MOTEL', '#e8c84a', 'SLEEP LIKE YOU ARE NOT THERE'],
-    ['NO FACE? NO PROBLEM.', '#79d98c', 'FACELESS CITY TOURISM BOARD'],
+    ['SMILE! (OPTIONAL)', '#79d98c', 'BLANK CITY TOURISM BOARD'],
     ['STUNT RAMPS AHEAD', '#ff785a', 'INSURANCE NOT INCLUDED'],
-    ['THE JUDGE IS FACELESS TOO', '#8fd0ff', 'DRIVE ACCORDINGLY'],
+    ['THE JUDGE ISN\'T LOOKING', '#8fd0ff', 'DRIVE ACCORDINGLY'],
     ['VISIT SIERRA NEGRA', '#c05ae8', 'BRING ROCKETS'],
     ['FORT KUBRA', '#ff5a5a', 'ABSOLUTELY DO NOT VISIT']
   ];
