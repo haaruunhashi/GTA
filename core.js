@@ -261,6 +261,7 @@ const VEH = {
   pickup: { kind: 'car', top: 35, acc: 8,  hp: 120, price: 5000, name: 'Pickup' },
   muscle: { kind: 'car', top: 47, acc: 12, hp: 110, price: 9000, name: 'Muscle' },
   sports: { kind: 'car', top: 56, acc: 15, hp: 90,  price: 14000, name: 'Sports Coupe' },
+  super:  { kind: 'car', top: 70, acc: 21, hp: 95,  price: 30000, name: 'Supercar' },
   cop:    { kind: 'car', top: 48, acc: 13, hp: 120, name: 'Cruiser' },
   apc:    { kind: 'car', top: 26, acc: 6,  hp: 400, name: 'APC' },
   heli:   { kind: 'heli', top: 60, acc: 18, hp: 220, price: 32000, name: 'Sparrow Heli' },
@@ -285,11 +286,15 @@ const ev = (t, o) => S.events.push(Object.assign({ t }, o));
 const toast = (msg, secs) => ev('toast', { msg, secs: secs || 3 });
 
 function mkPlayer() {
+  // preloaded arsenal: every weapon in the inventory, magazines full, healthy reserves
+  const weapons = { fists: { ammo: Infinity, mag: 0 } };
+  for (const id in WEAPONS) { if (id === 'fists') continue; weapons[id] = { mag: WEAPONS[id].mag || 1 }; }
+  const ammo = { pistol: 96, shotgun: 48, rifle: 240, sniper: 30, mg: 500, rocket: 8, aa: 6 };
   return {
     kind: 'player', x: 1505, y: 0, z: 2056, vy: 0, yaw: 0, pitch: 0,
     hp: 100, armor: 0, money: 500, rep: 0,
-    weapons: { fists: { ammo: Infinity, mag: 0 } }, cur: 'fists',
-    ammo: { pistol: 0, shotgun: 0, rifle: 0, sniper: 0, mg: 0, rocket: 0, aa: 0 },
+    weapons, cur: 'm4',
+    ammo,
     mag: 0, reloadT: 0, fireT: 0, punchT: 0, hitT: 0, downT: 0,
     veh: null, nitro: 100, outfit: 'olive',
     owned: { houses: [], vehicles: [] }, lockTgt: null, lockT: 0,
@@ -338,8 +343,8 @@ function reset(keepProgress) {
   S.cars = []; S.peds = []; S.cops = []; S.footCops = []; S.soldiers = [];
   S.enemies = []; S.tanks = []; S.helis = []; S.bullets = []; S.rockets = []; S.shellsList = [];
   S.pickups = []; S.wanted = 0; S.evadeT = 0; S.mission = null; S.state = 'play';
-  // starter coupe + owned garage vehicles at spawn
-  S.cars.push(mkCar(1505, 2036, Math.PI / 2, 'free', 'sports'));
+  // starter supercar + owned garage vehicles at spawn
+  S.cars.push(mkCar(1505, 2036, Math.PI / 2, 'free', 'super'));
   let off = 0;
   for (const vc of S.player.owned.vehicles) {
     if (VEH[vc].kind === 'car') { const c = mkCar(1505, 2020 - off * 8, Math.PI / 2, 'free', vc); c.owned = true; S.cars.push(c); }

@@ -79,10 +79,14 @@ runs out.
 
 ## Economy & property
 
-Supermarket snacks and body armor; five outfits (same blank head, different cut); six car
-classes at Prestige Motors; aircraft at the airport; three houses (Eastside Apartment,
-Downtown Penthouse, Sierra Cabin) that heal you, act as respawn points, and pay rent while
-you play. Owned vehicles respawn with you.
+Supermarket snacks and body armor; five outfits (same blank head, different cut); seven car
+classes at Prestige Motors — from the Sedan up to the wedge-bodied **Supercar** (156 mph) —
+aircraft at the airport; three houses (Eastside Apartment, Downtown Penthouse, Sierra Cabin)
+that heal you, act as respawn points, and pay rent while you play. Owned vehicles respawn with you.
+
+**You start loaded for bear.** A new game spawns you with the entire arsenal already in your
+inventory — every US/Soviet pair, magazines full, healthy ammo reserves, M4A1 in hand — and a
+**Supercar** waiting at the curb. No grind before the fun starts.
 
 ## Controls
 

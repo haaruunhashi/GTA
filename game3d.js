@@ -448,10 +448,11 @@ function animMan(g, phase, moving, aiming, rate) {
 
 // ---------- vehicle models ----------
 const CAR_COLORS = [0x7d3b3b, 0x3b5a7d, 0x6e6a52, 0x42425a, 0x7a6a3f, 0x513f5e, 0x3f5e51, 0x8a8578];
+const SUPER_COLORS = [0xd11f2a, 0xf0a000, 0x1560d0, 0x18a558, 0xe8e8ea, 0x1a1c22];
 function buildCar(cls, colorSeed) {
   const g = new T3.Group();
-  const dims = { sedan: [4.4, 1.15, 2], taxi: [4.4, 1.15, 2], van: [5, 1.9, 2.2], pickup: [4.8, 1.2, 2.1], muscle: [4.7, 1.1, 2.05], sports: [4.4, 0.92, 2], cop: [4.5, 1.15, 2], apc: [5.4, 1.8, 2.6] }[cls] || [4.4, 1.15, 2];
-  const col = cls === 'cop' ? 0xe8e8ea : cls === 'taxi' ? 0xd8b23a : CAR_COLORS[(colorSeed * CAR_COLORS.length) | 0];
+  const dims = { sedan: [4.4, 1.15, 2], taxi: [4.4, 1.15, 2], van: [5, 1.9, 2.2], pickup: [4.8, 1.2, 2.1], muscle: [4.7, 1.1, 2.05], sports: [4.4, 0.92, 2], super: [4.7, 0.78, 2.06], cop: [4.5, 1.15, 2], apc: [5.4, 1.8, 2.6] }[cls] || [4.4, 1.15, 2];
+  const col = cls === 'cop' ? 0xe8e8ea : cls === 'taxi' ? 0xd8b23a : cls === 'super' ? SUPER_COLORS[(colorSeed * SUPER_COLORS.length) | 0] : CAR_COLORS[(colorSeed * CAR_COLORS.length) | 0];
   const bodyMat = new T3.MeshLambertMaterial({ color: col });
   const body = new T3.Mesh(new T3.BoxGeometry(dims[0], dims[1], dims[2]), bodyMat);
   body.position.y = 0.75; g.add(body);
@@ -481,6 +482,26 @@ function buildCar(cls, colorSeed) {
   if (cls === 'sports') {
     const sp = new T3.Mesh(new T3.BoxGeometry(0.2, 0.3, 1.8), bodyMat);
     sp.position.set(-dims[0] / 2 + 0.2, 1.35, 0); g.add(sp);
+  }
+  if (cls === 'super') {
+    // flatten the cabin and drop it forward for a mid-engine wedge look
+    cabin.scale.set(1.15, 0.72, 0.94); cabin.position.set(dims[0] * 0.06, 0.75 + dims[1] / 2 + 0.2, 0);
+    // wide rear wing on two struts
+    const wingMat = new T3.MeshLambertMaterial({ color: 0x14161c });
+    const wing = new T3.Mesh(new T3.BoxGeometry(0.6, 0.08, dims[2] + 0.3), wingMat);
+    wing.position.set(-dims[0] / 2 + 0.15, 1.28, 0); g.add(wing);
+    for (const s of [-1, 1]) {
+      const strut = new T3.Mesh(new T3.BoxGeometry(0.16, 0.4, 0.1), wingMat);
+      strut.position.set(-dims[0] / 2 + 0.15, 1.05, s * dims[2] * 0.35); g.add(strut);
+    }
+    // front splitter + rocker skirts
+    const splitter = new T3.Mesh(new T3.BoxGeometry(0.4, 0.08, dims[2] + 0.16), wingMat);
+    splitter.position.set(dims[0] / 2 - 0.1, 0.4, 0); g.add(splitter);
+    for (const s of [-1, 1]) {
+      const skirt = new T3.Mesh(new T3.BoxGeometry(dims[0] * 0.6, 0.16, 0.1), wingMat);
+      skirt.position.set(0, 0.5, s * (dims[2] / 2 + 0.02)); g.add(skirt);
+    }
+    body.position.y = 0.68; // sit lower
   }
   g.userData.tl = [tl, tl2];
   return g;
@@ -679,6 +700,8 @@ function meshFor(e) {
   } else if (e.kind === 'footcop') {
     m = cloneModel('man', 0x90a0c8);
     if (!m) { m = buildMan(0x2e3a5e, 0x1d2027, { hat: 0x1d2440 }); m.userData.gun.visible = true; }
+  } else if (e.kind === 'car' && e.cls === 'super') {
+    m = buildCar('super', e.colorSeed); // the wedge supercar is procedural, not a GLB
   } else if (e.kind === 'car') {
     const key = (e.cls === 'sports' || e.cls === 'muscle') ? 'sports' : 'sedan';
     const tint = e.type === 'cop' ? 0xffffff : e.cls === 'taxi' ? 0xe8c84a : CAR_TINTS[(e.colorSeed * CAR_TINTS.length) | 0];
@@ -1147,7 +1170,7 @@ function tryInteract() {
     }
   } else if (shop.type === 'cars') {
     html = '<h2>' + shop.name + '</h2><p>Cash: $' + money() + ' · Owned vehicles respawn with you.</p>';
-    for (const cls of ['sedan', 'taxi', 'pickup', 'van', 'muscle', 'sports']) {
+    for (const cls of ['sedan', 'taxi', 'pickup', 'van', 'muscle', 'sports', 'super']) {
       const v = C.VEH[cls];
       const has = p.owned.vehicles.includes(cls);
       html += '<div class="row"><b>' + v.name + '</b> <i>' + Math.round(v.top * 2.237) + ' mph</i>' +

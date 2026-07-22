@@ -16,6 +16,13 @@ function stepAlive(n, i) { // keep the test player alive & un-arrested: we test 
 }
 const P = S.player;
 
+// --- preloaded arsenal + supercar starter (pristine new game) ---
+assert(Object.keys(P.weapons).length === Object.keys(C.WEAPONS).length, 'every weapon preloaded in the inventory');
+assert(P.cur === 'm4' && P.weapons.m4.mag === C.WEAPONS.m4.mag, 'starts with the M4A1 loaded');
+assert(P.ammo.rifle > 0 && P.ammo.aa > 0 && P.ammo.rocket > 0, 'preloaded ammo reserves across weapon classes');
+assert(S.cars[0] && S.cars[0].cls === 'super', 'the first car at spawn is a supercar');
+assert(C.VEH.super && C.VEH.super.top > C.VEH.sports.top, 'the supercar out-runs the sports coupe');
+
 // --- world ---
 assert(C.buildings.length > 300, 'city generated (' + C.buildings.length + ' buildings)');
 assert(C.buildings.some(b => b.kind === 'tower' && b.h > 60), 'downtown towers rise above 60m');
@@ -41,10 +48,13 @@ assert(pairs === 7, 'seven US/Soviet weapon pairs (' + pairs + ')');
 
 // --- economy ---
 P.money = 100000; P.rep = 20;
+// the arsenal starts preloaded, so a fresh player already owns every gun
+assert(C.buyWeapon('ak47') !== null && P.weapons.ak47, 'AK-47 preloaded (already owned)');
+delete P.weapons.ak47; delete P.weapons.m4; delete P.weapons.svd; delete P.weapons.stinger;
 assert(C.buyWeapon('ak47') === null && P.weapons.ak47, 'buy AK-47');
 assert(C.buyWeapon('m4') === null && P.weapons.m4, 'buy M4A1');
 assert(C.buyWeapon('stinger') === null, 'buy Stinger (tier unlocked by rep)');
-P.rep = 0;
+P.rep = 0; delete P.weapons.svd;
 assert(C.buyWeapon('svd') !== null, 'sniper locked at low rep');
 P.rep = 20;
 assert(C.buyAmmo('rifle') === null && P.ammo.rifle > 0, 'buy rifle ammo');
