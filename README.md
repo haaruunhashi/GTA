@@ -12,7 +12,7 @@ Open `index.html` in a browser. The original top-down 2D version is kept at `cla
 
 | Region | What's there |
 |---|---|
-| **Blank City** | Downtown towers with lit windows, a grid of streets with traffic and varied faceless pedestrians, six shops, three buyable houses, mission givers |
+| **Blank City** | A **real city built from OpenStreetMap** — ~2,000 actual Lower-Manhattan building footprints with real heights, the real street network with traffic that follows the real roads, varied pedestrians, six shops, three buyable houses, mission givers |
 | **Fort Kubra** | Walled military base. Restricted: trespass draws an armed garrison; the heist mission sends you in to steal a T-80 |
 | **International Airport** | 1.5 km runway, terminal, hangars, and Skyline Aviation — buy your own helicopter or plane |
 | **The Outfield** | No-man's-land of camps and craters — wave-based tactical ops |
@@ -116,6 +116,11 @@ combatants — soldiers, tanks, gunships — plus classic GTA chaos.
   (63 behavior assertions: heli flight, tunnel evasion, AA locks, the tank heist, save
   round-trips, weapon pairing…).
 - `game3d.js` — Three.js renderer, camera, input, HUD, shop menus.
+- `assets/citydata.js` — the city itself: ~2,000 real building footprints + the drivable
+  road graph, baked offline from **OpenStreetMap** (Lower Manhattan). Map data ©
+  OpenStreetMap contributors, licensed **ODbL**. Regenerate with the OSM pipeline
+  (Overpass fetch → `convert-osm.mjs`). If this file is absent, the game falls back to the
+  original procedural block grid, so it always runs.
 - `vendor/three.min.js` — Three.js r160, vendored.
 - `classic.html` + `game.js` — the original 2D top-down version, kept playable.
 - `assets/*.glb` — AI-generated models (Higgsfield/Meshy). `assets/kenney/*.glb` — CC0 city

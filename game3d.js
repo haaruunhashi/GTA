@@ -131,39 +131,69 @@ const M = {
   base.rotation.x = -Math.PI / 2;
   base.position.set(C.WORLD.W / 2, -0.25, C.WORLD.D / 2);
   scene.add(base);
-  // city base = one dark asphalt slab (this IS the road surface)
   const cw = C.WORLD.CITY;
-  const cbase = new T3.Mesh(new T3.PlaneGeometry(cw.x1 - cw.x0 + 60, cw.z1 - cw.z0 + 60), M.asphalt);
-  cbase.receiveShadow = true;
-  cbase.rotation.x = -Math.PI / 2;
-  cbase.position.set((cw.x0 + cw.x1) / 2, -0.02, (cw.z0 + cw.z1) / 2);
-  scene.add(cbase);
-  // raised, lighter sidewalk / park blocks sit on the building lots — clear curb, no z-fight
-  const blockGeo = new T3.BoxGeometry(C.WORLD.P - C.WORLD.RW, 0.3, C.WORLD.P - C.WORLD.RW);
-  for (let x = cw.x0 + C.WORLD.RW; x + (C.WORLD.P - C.WORLD.RW) <= cw.x1; x += C.WORLD.P)
-    for (let z = cw.z0 + C.WORLD.RW; z + (C.WORLD.P - C.WORLD.RW) <= cw.z1; z += C.WORLD.P) {
-      const isPark = C.parks.some(p => Math.abs(p.x0 - x) < 2 && Math.abs(p.z0 - z) < 2);
-      const m = new T3.Mesh(blockGeo, isPark ? M.grass : M.sidewalk);
-      m.receiveShadow = true;
-      m.position.set(x + (C.WORLD.P - C.WORLD.RW) / 2, 0.15, z + (C.WORLD.P - C.WORLD.RW) / 2);
-      scene.add(m);
+  const cityData = (typeof window !== 'undefined' && window.FC_CITYDATA) || null;
+  if (C.ROADS && C.ROADS.on && cityData && cityData.roadways) {
+    // real city: light pavement base + real OpenStreetMap streets as asphalt ribbons
+    const cbase = new T3.Mesh(new T3.PlaneGeometry(cw.x1 - cw.x0 + 80, cw.z1 - cw.z0 + 80), M.sidewalk);
+    cbase.receiveShadow = true; cbase.rotation.x = -Math.PI / 2;
+    cbase.position.set((cw.x0 + cw.x1) / 2, -0.03, (cw.z0 + cw.z1) / 2);
+    scene.add(cbase);
+    const nodes = C.ROADS.nodes, HW = 6.5; // half road width
+    const pos = [], dashPts = [];
+    for (const way of cityData.roadways) {
+      for (let k = 0; k + 1 < way.length; k++) {
+        const a = nodes[way[k]], b = nodes[way[k + 1]];
+        if (!a || !b) continue;
+        let dx = b[0] - a[0], dz = b[1] - a[1]; const L = Math.hypot(dx, dz); if (L < 0.2) continue; dx /= L; dz /= L;
+        const px = dz * HW, pz = -dx * HW;
+        const aLx = a[0] - px, aLz = a[1] - pz, aRx = a[0] + px, aRz = a[1] + pz;
+        const bLx = b[0] - px, bLz = b[1] - pz, bRx = b[0] + px, bRz = b[1] + pz;
+        pos.push(aLx, 0, aLz, aRx, 0, aRz, bRx, 0, bRz, aLx, 0, aLz, bRx, 0, bRz, bLx, 0, bLz);
+        for (let d = 3.5; d < L - 1; d += 8) dashPts.push([a[0] + dx * d, a[1] + dz * d, Math.atan2(dz, dx)]);
+      }
     }
-  // thin dashed lane markings, only down the centre of each road lane (small quads, never smear)
-  const dashMat = new T3.MeshBasicMaterial({ color: 0x9c8c46, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
-  const dashGeo = new T3.PlaneGeometry(0.22, 2.4);
-  const dashGeoH = new T3.PlaneGeometry(2.4, 0.22);
-  const dashesV = [], dashesH = [];
-  for (let x = cw.x0 + C.WORLD.RW / 2; x <= cw.x1; x += C.WORLD.P)
-    for (let z = cw.z0 + 6; z < cw.z1; z += 13) dashesV.push([x, z]);
-  for (let z = cw.z0 + C.WORLD.RW / 2; z <= cw.z1; z += C.WORLD.P)
-    for (let x = cw.x0 + 6; x < cw.x1; x += 13) dashesH.push([x, z]);
-  const mkDashes = (arr, geo) => {
-    const im = new T3.InstancedMesh(geo, dashMat, arr.length);
+    const rgeo = new T3.BufferGeometry();
+    rgeo.setAttribute('position', new T3.Float32BufferAttribute(pos, 3));
+    rgeo.computeVertexNormals();
+    const roadMesh = new T3.Mesh(rgeo, new T3.MeshLambertMaterial({ color: 0x34373e, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }));
+    roadMesh.position.y = 0.02; roadMesh.receiveShadow = true; scene.add(roadMesh);
+    const dashMat = new T3.MeshBasicMaterial({ color: 0xc9b45a, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
+    const dashGeo = new T3.PlaneGeometry(2.6, 0.32); dashGeo.rotateX(-Math.PI / 2);
+    const dim = new T3.InstancedMesh(dashGeo, dashMat, dashPts.length);
     const m4 = new T3.Matrix4();
-    arr.forEach(([x, z], i) => { m4.makeRotationX(-Math.PI / 2); m4.setPosition(x, 0.02, z); im.setMatrixAt(i, m4); });
-    im.instanceMatrix.needsUpdate = true; scene.add(im);
-  };
-  mkDashes(dashesV, dashGeo); mkDashes(dashesH, dashGeoH);
+    dashPts.forEach(([x, z, ang], i) => { m4.makeRotationY(-ang); m4.setPosition(x, 0.05, z); dim.setMatrixAt(i, m4); });
+    dim.instanceMatrix.needsUpdate = true; dim.frustumCulled = false; scene.add(dim);
+  } else {
+    // procedural fallback: dark asphalt slab + grid sidewalks + grid dashes
+    const cbase = new T3.Mesh(new T3.PlaneGeometry(cw.x1 - cw.x0 + 60, cw.z1 - cw.z0 + 60), M.asphalt);
+    cbase.receiveShadow = true; cbase.rotation.x = -Math.PI / 2;
+    cbase.position.set((cw.x0 + cw.x1) / 2, -0.02, (cw.z0 + cw.z1) / 2);
+    scene.add(cbase);
+    const blockGeo = new T3.BoxGeometry(C.WORLD.P - C.WORLD.RW, 0.3, C.WORLD.P - C.WORLD.RW);
+    for (let x = cw.x0 + C.WORLD.RW; x + (C.WORLD.P - C.WORLD.RW) <= cw.x1; x += C.WORLD.P)
+      for (let z = cw.z0 + C.WORLD.RW; z + (C.WORLD.P - C.WORLD.RW) <= cw.z1; z += C.WORLD.P) {
+        const isPark = C.parks.some(p => Math.abs(p.x0 - x) < 2 && Math.abs(p.z0 - z) < 2);
+        const m = new T3.Mesh(blockGeo, isPark ? M.grass : M.sidewalk);
+        m.receiveShadow = true;
+        m.position.set(x + (C.WORLD.P - C.WORLD.RW) / 2, 0.15, z + (C.WORLD.P - C.WORLD.RW) / 2);
+        scene.add(m);
+      }
+    const dashMat = new T3.MeshBasicMaterial({ color: 0x9c8c46, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
+    const dashGeo = new T3.PlaneGeometry(0.22, 2.4), dashGeoH = new T3.PlaneGeometry(2.4, 0.22);
+    const dashesV = [], dashesH = [];
+    for (let x = cw.x0 + C.WORLD.RW / 2; x <= cw.x1; x += C.WORLD.P)
+      for (let z = cw.z0 + 6; z < cw.z1; z += 13) dashesV.push([x, z]);
+    for (let z = cw.z0 + C.WORLD.RW / 2; z <= cw.z1; z += C.WORLD.P)
+      for (let x = cw.x0 + 6; x < cw.x1; x += 13) dashesH.push([x, z]);
+    const mkDashes = (arr, geo) => {
+      const im = new T3.InstancedMesh(geo, dashMat, arr.length);
+      const m4 = new T3.Matrix4();
+      arr.forEach(([x, z], i) => { m4.makeRotationX(-Math.PI / 2); m4.setPosition(x, 0.02, z); im.setMatrixAt(i, m4); });
+      im.instanceMatrix.needsUpdate = true; scene.add(im);
+    };
+    mkDashes(dashesV, dashGeo); mkDashes(dashesH, dashGeoH);
+  }
   // fort + airport pads
   const f = C.WORLD.FORT;
   const fpad = new T3.Mesh(new T3.PlaneGeometry(f.x1 - f.x0, f.z1 - f.z0), M.concrete);
@@ -1072,9 +1102,25 @@ mmWorld.width = 300; mmWorld.height = 200;
   g.fillStyle = '#31363f';
   const cw = C.WORLD.CITY;
   g.fillRect(cw.x0 * sx, cw.z0 * sz, (cw.x1 - cw.x0) * sx, (cw.z1 - cw.z0) * sz);
-  g.fillStyle = '#20242c';
-  for (let x = cw.x0; x <= cw.x1; x += C.WORLD.P) g.fillRect(x * sx, cw.z0 * sz, 1.2, (cw.z1 - cw.z0) * sz);
-  for (let z = cw.z0; z <= cw.z1; z += C.WORLD.P) g.fillRect(cw.x0 * sx, z * sz, (cw.x1 - cw.x0) * sx, 1.2);
+  const mmData = (typeof window !== 'undefined' && window.FC_CITYDATA) || null;
+  if (C.ROADS && C.ROADS.on && mmData && mmData.roadways) {
+    // real road network on the minimap
+    g.strokeStyle = '#565c66'; g.lineWidth = 0.5;
+    const nodes = C.ROADS.nodes;
+    g.beginPath();
+    for (const way of mmData.roadways) {
+      for (let k = 0; k < way.length; k++) {
+        const n = nodes[way[k]]; if (!n) continue;
+        const X = n[0] * sx, Z = n[1] * sz;
+        if (k === 0) g.moveTo(X, Z); else g.lineTo(X, Z);
+      }
+    }
+    g.stroke();
+  } else {
+    g.fillStyle = '#20242c';
+    for (let x = cw.x0; x <= cw.x1; x += C.WORLD.P) g.fillRect(x * sx, cw.z0 * sz, 1.2, (cw.z1 - cw.z0) * sz);
+    for (let z = cw.z0; z <= cw.z1; z += C.WORLD.P) g.fillRect(cw.x0 * sx, z * sz, (cw.x1 - cw.x0) * sx, 1.2);
+  }
   g.fillStyle = '#3a4136';
   g.fillRect(C.WORLD.SIERRA_X0 * sx, 0, 300 - C.WORLD.SIERRA_X0 * sx, 200);
   g.fillStyle = '#44503e';

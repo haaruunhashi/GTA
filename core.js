@@ -43,7 +43,38 @@ const inAirport = (x, z) => x > AIRPORT.x0 && x < AIRPORT.x1 && z > AIRPORT.z0 &
 const zoneOf = (x, z) => inFort(x, z) ? 'fort' : inAirport(x, z) ? 'airport'
   : x >= SIERRA_X0 ? 'sierra' : x >= OUTF_X0 ? 'outfield' : inCity(x, z) ? 'city' : 'fringe';
 C.zoneOf = zoneOf;
-const isCityRoad = (x, z) => inCity(x, z) && (((x - CITY.x0) % P) < RW || ((z - CITY.z0) % P) < RW);
+// ---------- real-city map data (OpenStreetMap — Lower Manhattan — baked offline) ----------
+const CITYDATA = (typeof FC_CITYDATA !== 'undefined' && FC_CITYDATA) ||
+  (typeof require !== 'undefined' ? (function () { try { return require('./assets/citydata.js'); } catch (e) { return null; } })() : null);
+const ROADS = { nodes: [], adj: [], bucket: new Map(), bk: 120, on: false };
+if (CITYDATA && CITYDATA.nodes && CITYDATA.nodes.length) {
+  ROADS.nodes = CITYDATA.nodes;
+  ROADS.adj = ROADS.nodes.map(() => []);
+  for (const e of CITYDATA.edges) { ROADS.adj[e[0]].push(e[1]); ROADS.adj[e[1]].push(e[0]); }
+  for (let i = 0; i < ROADS.nodes.length; i++) {
+    const n = ROADS.nodes[i], key = Math.floor(n[0] / ROADS.bk) + ',' + Math.floor(n[1] / ROADS.bk);
+    if (!ROADS.bucket.has(key)) ROADS.bucket.set(key, []);
+    ROADS.bucket.get(key).push(i);
+  }
+  ROADS.on = true;
+}
+function nearestNode(x, z) {
+  if (!ROADS.on) return -1;
+  const BK = ROADS.bk, gx = Math.floor(x / BK), gz = Math.floor(z / BK);
+  let best = -1, bd = 1e18;
+  for (let a = gx - 1; a <= gx + 1; a++) for (let b = gz - 1; b <= gz + 1; b++) {
+    const arr = ROADS.bucket.get(a + ',' + b); if (!arr) continue;
+    for (const i of arr) { const n = ROADS.nodes[i], dd = d2(x, z, n[0], n[1]); if (dd < bd) { bd = dd; best = i; } }
+  }
+  if (best < 0) for (let i = 0; i < ROADS.nodes.length; i++) { const n = ROADS.nodes[i], dd = d2(x, z, n[0], n[1]); if (dd < bd) { bd = dd; best = i; } }
+  return best;
+}
+function nearRoad(x, z, r) { const i = nearestNode(x, z); return i >= 0 && d2(x, z, ROADS.nodes[i][0], ROADS.nodes[i][1]) < r; }
+function roadPoint(x, z) { const i = nearestNode(x, z); return i < 0 ? { x, z } : { x: ROADS.nodes[i][0], z: ROADS.nodes[i][1] }; }
+C.ROADS = ROADS; C.nearestNode = nearestNode; C.roadPoint = roadPoint;
+
+const isCityRoad = (x, z) => ROADS.on ? (inCity(x, z) && nearRoad(x, z, RW)) :
+  (inCity(x, z) && (((x - CITY.x0) % P) < RW || ((z - CITY.z0) % P) < RW));
 C.isCityRoad = isCityRoad;
 
 // ---------- tunnels ----------
@@ -107,34 +138,62 @@ const stashes = [];     // hidden money crates
 const parks = [];
 function addB(x0, z0, x1, z1, h, kind) { buildings.push({ x0, z0, x1, z1, h, kind: kind || 'block' }); }
 
-(function buildWorld() {
-  // city blocks
-  const bx = Math.floor((CITY.x1 - CITY.x0) / P), bz = Math.floor((CITY.z1 - CITY.z0) / P);
-  for (let i = 0; i < bx; i++) for (let j = 0; j < bz; j++) {
-    const x0 = CITY.x0 + i * P + RW, z0 = CITY.z0 + j * P + RW;
-    const x1 = x0 + (P - RW), z1 = z0 + (P - RW);
-    if (x1 > CITY.x1 || z1 > CITY.z1) continue;
-    // keep tunnels clear of foundations
-    if (TUNNELS.some(t => z0 - 10 < t.z && z1 + 10 > t.z && x1 > t.x0 - t.ramp && x0 < t.x1 + t.ramp)) continue;
-    const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
-    if (rnd() < 0.12) { parks.push({ x0, z0, x1, z1 }); continue; }
-    const downtown = d2(cx, cz, 1550, 2000) < 620;
-    const split = rnd();
-    const hgt = () => downtown ? 40 + rnd() * 95 : 10 + rnd() * 22;
-    const m = 6;
-    if (split < 0.45) addB(x0 + m, z0 + m, x1 - m, z1 - m, hgt(), downtown ? 'tower' : 'block');
-    else if (split < 0.75) {
-      addB(x0 + m, z0 + m, cx - 3, z1 - m, hgt(), downtown ? 'tower' : 'block');
-      addB(cx + 3, z0 + m, x1 - m, z1 - m, hgt(), downtown ? 'tower' : 'block');
-    } else {
-      addB(x0 + m, z0 + m, x1 - m, cz - 3, hgt(), downtown ? 'tower' : 'block');
-      addB(x0 + m, cz + 3, x1 - m, z1 - m, hgt(), 'block');
+// spatial grid over building AABBs — O(1) lookups for a real city's ~2000 footprints
+const BCELL = 40;
+let BGRID = null;
+function indexBuildings() {
+  BGRID = new Map();
+  for (let i = 0; i < buildings.length; i++) {
+    const b = buildings[i];
+    const gx0 = Math.floor(b.x0 / BCELL), gx1 = Math.floor(b.x1 / BCELL);
+    const gz0 = Math.floor(b.z0 / BCELL), gz1 = Math.floor(b.z1 / BCELL);
+    for (let gx = gx0; gx <= gx1; gx++) for (let gz = gz0; gz <= gz1; gz++) {
+      const k = gx + ',' + gz; let a = BGRID.get(k); if (!a) { a = []; BGRID.set(k, a); } a.push(i);
     }
   }
-  // lamps at city intersections
-  for (let x = CITY.x0 + RW / 2; x < CITY.x1; x += P)
-    for (let z = CITY.z0 + RW / 2; z < CITY.z1; z += P)
-      lamps.push({ x, z });
+}
+function solidAt(x, y, z) { // static solids only
+  if (!BGRID) indexBuildings();
+  const arr = BGRID.get(Math.floor(x / BCELL) + ',' + Math.floor(z / BCELL));
+  if (!arr) return false;
+  for (const i of arr) { const b = buildings[i]; if (x > b.x0 && x < b.x1 && z > b.z0 && z < b.z1 && y < b.h) return true; }
+  return false;
+}
+C.solidAt = solidAt;
+
+(function buildWorld() {
+  if (CITYDATA && CITYDATA.buildings && CITYDATA.buildings.length) {
+    // real city — Lower Manhattan footprints + heights from OpenStreetMap
+    for (const b of CITYDATA.buildings) buildings.push({ x0: b.x0, z0: b.z0, x1: b.x1, z1: b.z1, h: b.h, kind: b.kind || 'block' });
+    // street lamps along the real road network (every few nodes)
+    for (let i = 0; i < ROADS.nodes.length; i += 5) lamps.push({ x: ROADS.nodes[i][0], z: ROADS.nodes[i][1] });
+  } else {
+    // procedural fallback — regular block grid
+    const bx = Math.floor((CITY.x1 - CITY.x0) / P), bz = Math.floor((CITY.z1 - CITY.z0) / P);
+    for (let i = 0; i < bx; i++) for (let j = 0; j < bz; j++) {
+      const x0 = CITY.x0 + i * P + RW, z0 = CITY.z0 + j * P + RW;
+      const x1 = x0 + (P - RW), z1 = z0 + (P - RW);
+      if (x1 > CITY.x1 || z1 > CITY.z1) continue;
+      if (TUNNELS.some(t => z0 - 10 < t.z && z1 + 10 > t.z && x1 > t.x0 - t.ramp && x0 < t.x1 + t.ramp)) continue;
+      const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
+      if (rnd() < 0.12) { parks.push({ x0, z0, x1, z1 }); continue; }
+      const downtown = d2(cx, cz, 1550, 2000) < 620;
+      const split = rnd();
+      const hgt = () => downtown ? 40 + rnd() * 95 : 10 + rnd() * 22;
+      const m = 6;
+      if (split < 0.45) addB(x0 + m, z0 + m, x1 - m, z1 - m, hgt(), downtown ? 'tower' : 'block');
+      else if (split < 0.75) {
+        addB(x0 + m, z0 + m, cx - 3, z1 - m, hgt(), downtown ? 'tower' : 'block');
+        addB(cx + 3, z0 + m, x1 - m, z1 - m, hgt(), downtown ? 'tower' : 'block');
+      } else {
+        addB(x0 + m, z0 + m, x1 - m, cz - 3, hgt(), downtown ? 'tower' : 'block');
+        addB(x0 + m, cz + 3, x1 - m, z1 - m, hgt(), 'block');
+      }
+    }
+    for (let x = CITY.x0 + RW / 2; x < CITY.x1; x += P)
+      for (let z = CITY.z0 + RW / 2; z < CITY.z1; z += P)
+        lamps.push({ x, z });
+  }
   // Fort Kubra: walls (with south gate), hangars, towers
   const wT = 3, wH = 6, gate = { x0: 650, x1: 750 };
   addB(FORT.x0, FORT.z0, FORT.x1, FORT.z0 + wT, wH, 'wall');
@@ -187,12 +246,6 @@ function addB(x0, z0, x1, z1, h, kind) { buildings.push({ x0, z0, x1, z1, h, kin
 })();
 C.buildings = buildings; C.props = props; C.lamps = lamps; C.parks = parks; C.stashes = stashes; C.SITES = SITES;
 
-function solidAt(x, y, z) { // static solids only
-  for (const b of buildings)
-    if (x > b.x0 && x < b.x1 && z > b.z0 && z < b.z1 && y < b.h) return true;
-  return false;
-}
-C.solidAt = solidAt;
 function propBlock(x, y, z, pad) {
   for (const p of props) {
     if (p.type === 'tree' || p.type === 'pine') { // trunks only block a thin core
@@ -219,6 +272,20 @@ const HOUSES = [
   { id: 'cabin', name: 'Sierra Cabin', x: 4820, z: 1060, price: 15000, rent: 300 }
 ];
 C.SHOPS = SHOPS; C.HOUSES = HOUSES;
+
+// carve clear plazas out of the real footprints so shops, houses and the spawn are reachable
+if (ROADS.on) {
+  const carve = (x, z, r) => {
+    for (let i = buildings.length - 1; i >= 0; i--) {
+      const b = buildings[i];
+      if (b.x1 > x - r && b.x0 < x + r && b.z1 > z - r && b.z0 < z + r) buildings.splice(i, 1);
+    }
+  };
+  for (const s of SHOPS) if (inCity(s.x, s.z)) carve(s.x, s.z, 11);
+  for (const h of HOUSES) if (inCity(h.x, h.z)) carve(h.x, h.z, 11);
+  carve(1495, 2035, 42);   // player spawn + starter vehicles
+  BGRID = null;            // footprints changed — rebuild the collision index lazily
+}
 const OUTFITS = [
   { id: 'olive', name: 'Olive Sweater', body: 0x4a5138, legs: 0x2c2c31, price: 0 },
   { id: 'suit', name: 'Charcoal Suit', body: 0x2e3138, legs: 0x26282e, price: 800 },
@@ -644,7 +711,44 @@ function laneFor(x, z) {
   return null;
 }
 C.laneFor = laneFor;
+const LANE = 3.4; // right-hand lane offset from road centreline
+function updateTrafficGraph(c, dt) {
+  const p = S.player;
+  let nb = ROADS.nodes[c.nb];
+  if (!nb) { c.dead = true; return; }
+  let tx = nb[0] - c.x, tz = nb[1] - c.z;
+  const tl = Math.hypot(tx, tz) || 1; tx /= tl; tz /= tl;
+  const aimX = nb[0] + tz * LANE, aimZ = nb[1] - tx * LANE; // keep to the right
+  const lookX = c.x + tx * 12, lookZ = c.z + tz * 12;
+  let blocked = false;
+  for (const o of S.cars) if (o !== c && d2(o.x, o.z, lookX, lookZ) < 8) { blocked = true; break; }
+  if (!blocked && d2(p.x, p.z, lookX, lookZ) < (p.veh ? 9 : 5)) blocked = true;
+  if (!blocked) for (const pd of S.peds) if (pd.state !== 'down' && d2(pd.x, pd.z, lookX, lookZ) < 5) { blocked = true; break; }
+  c.braking = blocked && c.spd > 4;
+  c.spd += clamp((blocked ? 0 : c.cruise) - c.spd, -32 * dt, 8 * dt);
+  const ta = Math.atan2(aimZ - c.z, aimX - c.x);
+  c.yaw = angLerp(c.yaw, ta, clamp(6 * dt, 0, 1));
+  c.x += Math.cos(c.yaw) * c.spd * dt; c.z += Math.sin(c.yaw) * c.spd * dt;
+  c.y = groundY(c.x, c.z);
+  if (d2(c.x, c.z, nb[0], nb[1]) < 8) { // arrived at the node — choose the next road
+    const adj = ROADS.adj[c.nb] || [];
+    let pool = adj.filter(n => n !== c.na);
+    if (!pool.length) pool = adj;
+    if (!pool.length) { c.dead = true; return; }
+    let best = pool[0], bestDot = -2;
+    for (const n of pool) {
+      let nx = ROADS.nodes[n][0] - nb[0], nz = ROADS.nodes[n][1] - nb[1];
+      const nl = Math.hypot(nx, nz) || 1;
+      const dot = (nx / nl) * Math.cos(c.yaw) + (nz / nl) * Math.sin(c.yaw);
+      if (dot > bestDot) { bestDot = dot; best = n; }
+    }
+    c.na = c.nb;
+    c.nb = Math.random() < 0.72 ? best : pool[(Math.random() * pool.length) | 0];
+  }
+  if (!inCity(c.x, c.z)) c.dead = true;
+}
 function updateTraffic(c, dt) {
+  if (ROADS.on) return updateTrafficGraph(c, dt);
   const p = S.player;
   const lookX = c.x + Math.cos(c.yaw) * 12, lookZ = c.z + Math.sin(c.yaw) * 12;
   let blocked = false;
@@ -1286,7 +1390,10 @@ function driveRoute(c, dt, cruise) {
   return false;
 }
 C.driveRoute = driveRoute;
-const RP = (i, j) => ({ x: 209 + i * 108, z: 909 + j * 108 }); // city intersection grid
+const RP = (i, j) => { // mission waypoint: snap the old grid slot onto the nearest real road
+  const gx = clamp(209 + i * 108, CITY.x0 + 40, CITY.x1 - 40), gz = clamp(909 + j * 108, CITY.z0 + 40, CITY.z1 - 40);
+  return ROADS.on ? roadPoint(gx, gz) : { x: gx, z: gz };
+};
 function mkScriptCar(x, z, yaw, cls, route) {
   const c = mkCar(x, z, yaw, 'script', cls);
   c.route = route; c.ri = 0;
@@ -2026,13 +2133,23 @@ function spawnAmbient() {
     }
     const traffic = S.cars.filter(c => c.type === 'traffic');
     if (traffic.length < 9) {
-      const a = Math.random() * TAU, dd = R(120, 280);
+      const a = Math.random() * TAU, dd = R(140, 300);
       const x = p.x + Math.cos(a) * dd, z = p.z + Math.sin(a) * dd;
-      const L = laneFor(x, z);
-      if (L && inCity(x, z)) {
-        const c = mkCar(L.dx !== 0 ? x : L.lane, L.dx !== 0 ? L.lane : z, Math.atan2(L.dz, L.dx), 'traffic');
-        c.dirx = L.dx; c.dirz = L.dz; c.lane = L.lane;
-        if (!S.cars.some(o => d2(o.x, o.z, c.x, c.z) < 20)) S.cars.push(c);
+      if (ROADS.on) {
+        const na = nearestNode(x, z), n = na >= 0 ? ROADS.nodes[na] : null;
+        const adj = na >= 0 ? ROADS.adj[na] : null;
+        if (n && adj && adj.length && d2(n[0], n[1], p.x, p.z) > 95 && !S.cars.some(o => d2(o.x, o.z, n[0], n[1]) < 22)) {
+          const nb = adj[(Math.random() * adj.length) | 0];
+          const c = mkCar(n[0], n[1], Math.atan2(ROADS.nodes[nb][1] - n[1], ROADS.nodes[nb][0] - n[0]), 'traffic');
+          c.na = na; c.nb = nb; S.cars.push(c);
+        }
+      } else {
+        const L = laneFor(x, z);
+        if (L && inCity(x, z)) {
+          const c = mkCar(L.dx !== 0 ? x : L.lane, L.dx !== 0 ? L.lane : z, Math.atan2(L.dz, L.dx), 'traffic');
+          c.dirx = L.dx; c.dirz = L.dz; c.lane = L.lane;
+          if (!S.cars.some(o => d2(o.x, o.z, c.x, c.z) < 20)) S.cars.push(c);
+        }
       }
     }
   }
@@ -2043,9 +2160,12 @@ function spawnAmbient() {
   if (S.wanted > 0 && !hidden) {
     while (S.cops.length < S.wanted) {
       const a = Math.random() * TAU, dd = R(150, 260);
-      const x = p.x + Math.cos(a) * dd, z = p.z + Math.sin(a) * dd;
-      if (isCityRoad(x, z) || !inCity(x, z)) S.cops.push(mkCar(clamp(x, 100, W - 100), clamp(z, 100, D - 100), 0, 'cop'));
-      else break;
+      let cx = clamp(p.x + Math.cos(a) * dd, 100, W - 100), cz = clamp(p.z + Math.sin(a) * dd, 100, D - 100);
+      if (inCity(cx, cz)) {
+        if (ROADS.on) { const rp = roadPoint(cx, cz); cx = rp.x; cz = rp.z; }
+        else if (!isCityRoad(cx, cz)) break;
+      }
+      S.cops.push(mkCar(cx, cz, 0, 'cop'));
     }
     if (S.wanted >= 4 && !S.helis.some(h => h.copHeli)) {
       const h = mkHeli(p.x + 200, p.z + 200, 'hind', true); h.copHeli = true; S.helis.push(h);
