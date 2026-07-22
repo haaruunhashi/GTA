@@ -22,6 +22,9 @@ assert(P.cur === 'm4' && P.weapons.m4.mag === C.WEAPONS.m4.mag, 'starts with the
 assert(P.ammo.rifle > 0 && P.ammo.aa > 0 && P.ammo.rocket > 0, 'preloaded ammo reserves across weapon classes');
 assert(S.cars[0] && S.cars[0].cls === 'super', 'the first car at spawn is a supercar');
 assert(C.VEH.super && C.VEH.super.top > C.VEH.sports.top, 'the supercar out-runs the sports coupe');
+assert(P.owned.vehicles.includes('heli') && P.owned.vehicles.includes('jet'), 'a helicopter and fighter jet are preloaded');
+assert(S.helis.filter(h => h.owned).length >= 2, 'both aircraft spawn at the start (' + S.helis.filter(h => h.owned).length + ')');
+assert(C.VEH.jet && C.VEH.jet.kind === 'plane' && C.VEH.jet.top > C.VEH.plane.top, 'the fighter jet exists and is fast');
 
 // --- world ---
 assert(C.buildings.length > 300, 'city generated (' + C.buildings.length + ' buildings)');
@@ -61,6 +64,7 @@ assert(C.buyAmmo('rifle') === null && P.ammo.rifle > 0, 'buy rifle ammo');
 assert(C.buyOutfit('combat') === null && P.outfit === 'combat', 'buy combat fatigues outfit');
 assert(C.buyHouse('apt') === null && P.owned.houses.includes('apt'), 'buy the Eastside Apartment');
 assert(C.buyVehicle('muscle') === null && P.owned.vehicles.includes('muscle'), 'buy a muscle car');
+P.owned.vehicles = P.owned.vehicles.filter(v => v !== 'heli' && v !== 'jet'); // preloaded — clear to test purchase
 assert(C.buyVehicle('heli') === null, 'buy a helicopter');
 P.money = 100000;
 assert(C.buyVehicle('plane') === null, 'buy a plane (the airway)');
@@ -77,7 +81,7 @@ S.cars[0].x = 300; S.cars[0].z = 1980; S.cars[0].yaw = 0; // long road east... r
 P.x = S.cars[0].x + 3; P.z = S.cars[0].z; P.y = 0;
 const iE = inp(); iE.enter = 1;
 step(2, iE);
-assert(P.veh === S.cars[0], 'enter the starter sports coupe');
+assert(P.veh === S.cars[0], 'enter the starter supercar');
 const iD = inp(); iD.fwd = 1;
 P.veh.x = 400; P.veh.z = 2532; P.veh.yaw = 0; P.veh.spd = 0; // on an east-west road row
 let vmax = 0;
@@ -120,6 +124,28 @@ for (let i = 0; i < 600 && P.veh.y > C.groundY(P.veh.x, P.veh.z) + 0.7; i++) C.s
 C.drainEvents();
 pressEnter();
 assert(!P.veh, 'land and dismount');
+
+// --- aircraft armament: jet cannons + bombs, heli bombs ---
+const jet = S.helis.find(h => h.cls === 'jet');
+assert(jet, 'the preloaded fighter jet is in the world');
+jet.y = C.groundY(jet.x, jet.z) + 70; jet.spd = 90; jet.fall = -1; P.veh = jet;
+S.bullets = []; S.bombs = [];
+const iAir = inp(); iAir.fire = 1;
+stepAlive(24, iAir);
+assert(S.bullets.length > 0, 'the jet fires its cannons');
+S.bombs = []; jet.y = C.groundY(jet.x, jet.z) + 70;
+const iDrop = inp(); iDrop.bomb = 1;
+stepAlive(4, iDrop);
+assert(S.bombs.length > 0, 'the jet drops a bomb');
+const beforeFall = S.bombs.length;
+stepAlive(300, inp());
+assert(S.bombs.length < beforeFall, 'dropped bombs fall and detonate');
+const heli2 = S.helis.find(h => h.cls === 'heli' && h.owned);
+assert(heli2, 'the preloaded helicopter is in the world');
+heli2.y = C.groundY(heli2.x, heli2.z) + 60; heli2.fall = -1; P.veh = heli2; S.bombs = [];
+stepAlive(4, iDrop);
+assert(S.bombs.length > 0, 'the helicopter drops bombs too');
+P.veh = null; S.bombs = []; S.bullets = [];
 
 // --- city mission: courier ---
 P.veh = null;

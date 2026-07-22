@@ -85,14 +85,17 @@ aircraft at the airport; three houses (Eastside Apartment, Downtown Penthouse, S
 that heal you, act as respawn points, and pay rent while you play. Owned vehicles respawn with you.
 
 **You start loaded for bear.** A new game spawns you with the entire arsenal already in your
-inventory — every US/Soviet pair, magazines full, healthy ammo reserves, M4A1 in hand — and a
-**Supercar** waiting at the curb. No grind before the fun starts.
+inventory — every US/Soviet pair, magazines full, healthy ammo reserves, M4A1 in hand — a
+**Supercar** at the curb, and a **combat helicopter** and **fighter jet** parked and ready.
+Both aircraft are armed: **machine guns** (LMB) and a **bomb payload** (B on desktop, RLD on
+touch) that free-falls and detonates on impact. No grind before the fun starts.
 
 ## Controls
 
 Click to capture the mouse (aim). **WASD** move/drive · **E** vehicles · **F** shops/houses ·
 **Shift** sprint/nitro · **Space** handbrake / heli up · **Ctrl** heli down · **LMB** fire ·
 **R** reload · **1-9 / wheel** weapons · hold aim on armor/gunships to lock AA rockets.
+In the helicopter or fighter jet, **LMB** fires the guns and **B** drops bombs.
 
 **On mobile / touch** the game auto-switches to an on-screen layout: a left virtual **stick**
 to move and drive, **drag anywhere on the screen** to look around and aim, and touch buttons —

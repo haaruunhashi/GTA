@@ -547,8 +547,34 @@ function buildHeli(cls) {
   g.userData.rotor = rotor;
   return g;
 }
-function buildPlane() {
+function buildPlane(cls) {
   const g = new T3.Group();
+  if (cls === 'jet') {
+    // sleek dark fighter: pointed nose, swept wings, twin tail, canopy, wingtip missiles
+    const skin = new T3.MeshLambertMaterial({ color: 0x3b4048 });
+    const fus = new T3.Mesh(new T3.CylinderGeometry(0.55, 0.32, 8.4, 12), skin);
+    fus.rotation.z = Math.PI / 2; fus.position.y = 1.9; g.add(fus);
+    const nose = new T3.Mesh(new T3.ConeGeometry(0.32, 1.8, 12), skin);
+    nose.rotation.z = -Math.PI / 2; nose.position.set(5, 1.9, 0); g.add(nose);
+    const canopy = new T3.Mesh(new T3.SphereGeometry(0.5, 10, 8), M.glassDark);
+    canopy.scale.set(1.7, 0.7, 0.8); canopy.position.set(1.6, 2.35, 0); g.add(canopy);
+    // swept delta wings
+    for (const s of [-1, 1]) {
+      const wing = new T3.Mesh(new T3.BoxGeometry(3.4, 0.12, 2.4), skin);
+      wing.position.set(-0.6, 1.85, s * 2.1); wing.rotation.y = s * -0.5; g.add(wing);
+      const missile = new T3.Mesh(new T3.CylinderGeometry(0.12, 0.12, 1.6, 8), new T3.MeshLambertMaterial({ color: 0xb5b8bf }));
+      missile.rotation.z = Math.PI / 2; missile.position.set(-0.4, 1.72, s * 3.4); g.add(missile);
+    }
+    // twin canted tail fins
+    for (const s of [-1, 1]) {
+      const fin = new T3.Mesh(new T3.BoxGeometry(1.3, 1.3, 0.1), skin);
+      fin.position.set(-3.3, 2.5, s * 0.7); fin.rotation.x = s * 0.35; g.add(fin);
+    }
+    const exhaust = new T3.Mesh(new T3.CylinderGeometry(0.36, 0.36, 0.4, 12), new T3.MeshBasicMaterial({ color: 0xff7a3a }));
+    exhaust.rotation.z = Math.PI / 2; exhaust.position.set(-4.3, 1.9, 0); g.add(exhaust);
+    g.userData.rotor = new T3.Group(); // no prop; keep the field the syncer expects
+    return g;
+  }
   const fus = new T3.Mesh(new T3.CylinderGeometry(0.8, 0.6, 7, 10), new T3.MeshLambertMaterial({ color: 0x8a4444 }));
   fus.rotation.z = Math.PI / 2; fus.position.y = 1.6; g.add(fus);
   const wing = new T3.Mesh(new T3.BoxGeometry(1.6, 0.14, 11), new T3.MeshLambertMaterial({ color: 0xa0a4ad }));
@@ -714,7 +740,7 @@ function meshFor(e) {
     if (!m) m = buildCar(e.cls, e.colorSeed);
   } else if (e.kind === 'tank') { m = cloneModel('tank') || buildTank(); if (!m.userData.turret) m.userData.turret = new T3.Group(); }
   else if (e.kind === 'heli') { m = cloneModel('heli'); if (m) { const r = buildHeli(e.cls).userData.rotor; r.position.set(0, MODELS.heli ? 3.1 : 2.75, 0); m.add(r); m.userData.rotor = r; } else m = buildHeli(e.cls); }
-  else if (e.kind === 'plane') m = buildPlane();
+  else if (e.kind === 'plane') m = buildPlane(e.cls);
   else m = cloneModel('man') || buildMan(0x4a5138, 0x2c2c31);
   scene.add(m);
   meshMap.set(e, m);
@@ -735,6 +761,18 @@ function gcMeshes(liveSet) {
 // player mesh
 let playerMesh = buildMan(0x4a5138, 0x2c2c31);
 scene.add(playerMesh);
+// The GLB "man" model has no weapon geometry; give the player a held gun/tube so
+// the equipped weapon is visible. Procedural buildMan already carries userData.gun.
+function attachPlayerWeapon(mesh) {
+  if (mesh.userData.gun) return;
+  const gun = new T3.Mesh(new T3.BoxGeometry(0.1, 0.13, 0.98), M.dark); // long axis +Z (world-forward for the GLB player)
+  gun.position.set(0.16, 1.12, 0.42);
+  const tube = new T3.Mesh(new T3.CylinderGeometry(0.09, 0.09, 1.3, 8), new T3.MeshLambertMaterial({ color: 0x6f7a62 }));
+  tube.rotation.x = Math.PI / 2; tube.position.set(0.12, 1.42, 0.4);
+  gun.visible = false; tube.visible = false;
+  mesh.add(gun); mesh.add(tube);
+  mesh.userData.gun = gun; mesh.userData.tube = tube;
+}
 function rebuildPlayerMesh() {
   scene.remove(playerMesh);
   const o = OUTFIT_BY_ID[S.player.outfit] || C.OUTFITS[0];
@@ -743,6 +781,7 @@ function rebuildPlayerMesh() {
     const t = new T3.Color(o.body).lerp(new T3.Color(0xffffff), 0.55);
     playerMesh.traverse(ob => { if (ob.isMesh && ob.material) { ob.material = ob.material.clone(); ob.material.color = t; } });
   }
+  attachPlayerWeapon(playerMesh);
   scene.add(playerMesh);
 }
 let lastOutfit = S.player.outfit;
@@ -776,6 +815,9 @@ function spawnSprite(x, y, z, tex, size, life, rise, color) {
 const tracers = [];
 const tracerMat = new T3.MeshBasicMaterial({ color: 0xffe8a0 });
 const tracerMatE = new T3.MeshBasicMaterial({ color: 0xff9680 });
+const bombMeshes = [];
+const bombMat = new T3.MeshLambertMaterial({ color: 0x2a2c30 });
+const bombGeo = new T3.SphereGeometry(0.4, 8, 6);
 function updateEffects(dt) {
   for (const s of sprites) {
     s.t -= dt;
@@ -807,6 +849,11 @@ function updateEffects(dt) {
   for (; ti < tracers.length; ti++) tracers[ti].visible = false;
   // rockets
   for (const r of S.rockets) spawnSprite(r.x, r.y, r.z, smokeTex, 1.2, 0.4, 2);
+  // falling bombs
+  while (bombMeshes.length < S.bombs.length) { const m = new T3.Mesh(bombGeo, bombMat); m.scale.set(0.8, 1.5, 0.8); scene.add(m); bombMeshes.push(m); }
+  let bi = 0;
+  for (const b of S.bombs) { const m = bombMeshes[bi++]; m.visible = true; m.position.set(b.x, b.y, b.z); }
+  for (; bi < bombMeshes.length; bi++) bombMeshes[bi].visible = false;
 }
 
 // ---------- audio (SFX only — no music by design) ----------
@@ -849,8 +896,12 @@ const keys = {};
 let pendingEnter = false;
 let camYaw = 0, camPitch = -0.18, mouseDown = false, locked = false;
 let baseYaw = 0, mouseNorm = { x: 0, y: 0 }, lastMouseT = 0;
+// pointer lock is unavailable in sandboxed iframes (e.g. the published artifact);
+// when we detect that, the cursor aims and left-click fires directly instead.
+let canLock = true;
 // touch / mobile
 const isTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+if (isTouch) canLock = false;
 let lastTouchLookT = 0;
 const touch = { on: false, mx: 0, my: 0, fire: false, run: false, up: false, down: false, reload: false };
 window.addEventListener('keydown', e => {
@@ -868,10 +919,16 @@ window.addEventListener('keydown', e => {
 });
 window.addEventListener('keyup', e => { keys[e.code] = false; });
 canvas.addEventListener('click', () => {
-  if (!locked && !menuOpen && started) canvas.requestPointerLock && canvas.requestPointerLock();
+  if (!locked && !menuOpen && started && canLock) {
+    let req;
+    try { req = canvas.requestPointerLock && canvas.requestPointerLock(); } catch (e) { canLock = false; }
+    if (req && req.catch) req.catch(() => { canLock = false; });
+    // if the lock never engages (sandboxed iframe), fall back to click-to-fire
+    setTimeout(() => { if (!locked) canLock = false; }, 350);
+  }
 });
-document.addEventListener('pointerlockchange', () => { locked = document.pointerLockElement === canvas; });
-document.addEventListener('pointerlockerror', () => { locked = false; });
+document.addEventListener('pointerlockchange', () => { locked = document.pointerLockElement === canvas; if (locked) canLock = true; });
+document.addEventListener('pointerlockerror', () => { locked = false; canLock = false; });
 window.addEventListener('mousemove', e => {
   if (locked) {
     camYaw += e.movementX * 0.0024;
@@ -885,7 +942,7 @@ window.addEventListener('mousemove', e => {
 });
 window.addEventListener('mousedown', e => { if (e.button === 0) mouseDown = true; audioInit(); });
 window.addEventListener('mouseup', e => { if (e.button === 0) mouseDown = false; });
-window.addEventListener('wheel', e => { if (locked) C.switchWeapon(e.deltaY > 0 ? 1 : -1); });
+window.addEventListener('wheel', e => { if (locked || !canLock) C.switchWeapon(e.deltaY > 0 ? 1 : -1); });
 
 function buildInput() {
   if (window.__cutsceneOpen) return { camYaw, camPitch };
@@ -897,9 +954,9 @@ function buildInput() {
     fwd: keys.KeyW || keys.ArrowUp || tf, back: keys.KeyS || keys.ArrowDown || tb,
     left: keys.KeyA || keys.ArrowLeft || tl, right: keys.KeyD || keys.ArrowRight || tr,
     run: keys.ShiftLeft || keys.ShiftRight || touch.run, nitro: keys.ShiftLeft || keys.ShiftRight || touch.run,
-    fire: ((mouseDown && locked) || touch.fire) && !menuOpen, enter: pendingEnter ? (pendingEnter = false, true) : false,
+    fire: ((mouseDown && (locked || !canLock)) || touch.fire) && !menuOpen, enter: pendingEnter ? (pendingEnter = false, true) : false,
     handbrake: keys.Space || touch.up, up: keys.Space || touch.up, down: keys.ControlLeft || keys.KeyC || touch.down,
-    reload: keys.KeyR || touch.reload, camYaw, camPitch
+    reload: keys.KeyR || touch.reload, bomb: keys.KeyB || touch.reload, camYaw, camPitch
   };
 }
 
@@ -909,8 +966,8 @@ if (isTouch) {
   const ctrls = document.querySelector('#intro .controls');
   if (ctrls) ctrls.innerHTML =
     '<b>Left stick</b> move / drive · <b>Drag the screen</b> to look &amp; aim · <b>RUN</b> sprint or nitro<br>' +
-    '<b>FIRE</b> shoot · <b>PUNCH</b> melee · <b>E</b> enter vehicle · <b>F</b> shops &amp; houses · <b>RLD</b> reload<br>' +
-    '<b>▲ / ▼</b> handbrake &amp; heli up / down · <b>WPN</b> weapon wheel — every US gun has its Soviet twin<br>' +
+    '<b>FIRE</b> shoot / aircraft guns · <b>PUNCH</b> melee · <b>E</b> enter vehicle · <b>F</b> shops · <b>RLD</b> reload / drop bombs<br>' +
+    '<b>▲ / ▼</b> handbrake &amp; heli up / down · <b>WPN</b> weapon wheel — you start with the whole arsenal<br>' +
     'hit the striped <b>STUNT RAMPS</b> at speed for cash · tunnels hide you from the law · Fort Kubra is a very bad idea';
 }
 function wireTouch() {
@@ -1050,7 +1107,7 @@ function drawHUD(dt) {
     hud.speed.textContent = 'ALT ' + Math.round(p.veh.y - C.groundY(p.veh.x, p.veh.z)) + 'm';
     hud.nitroWrap.style.display = 'none';
   } else { hud.speed.textContent = ''; hud.nitroWrap.style.display = 'none'; }
-  hud.crosshair.style.display = (!p.veh || p.veh.kind === 'tank' || p.veh.kind === 'heli') && (locked || isTouch) ? 'block' : 'none';
+  hud.crosshair.style.display = (!p.veh || p.veh.kind === 'tank' || p.veh.kind === 'heli') && (locked || isTouch || !canLock) ? 'block' : 'none';
   hud.lock.textContent = p.lockTgt ? (p.lockT >= 1 ? 'LOCKED' : 'locking…') : '';
   hud.lock.style.color = p.lockT >= 1 ? '#ff5a5a' : '#ffd23f';
   // mission banner
@@ -1178,10 +1235,11 @@ function tryInteract() {
     }
   } else if (shop.type === 'aircraft') {
     html = '<h2>' + shop.name + '</h2><p>Cash: $' + money() + ' · Your own piece of the sky.</p>';
-    for (const cls of ['heli', 'plane']) {
+    for (const cls of ['heli', 'plane', 'jet']) {
       const v = C.VEH[cls];
       const has = p.owned.vehicles.includes(cls);
-      html += '<div class="row"><b>' + v.name + '</b> <i>' + (cls === 'heli' ? 'vertical take-off, door gun' : 'needs the runway, fast') + '</i>' +
+      const blurb = cls === 'heli' ? 'vertical take-off, door gun + bombs' : cls === 'jet' ? 'cannons + bombs, needs the runway' : 'needs the runway, fast';
+      html += '<div class="row"><b>' + v.name + '</b> <i>' + blurb + '</i>' +
         (has ? '<span class="own">OWNED</span>' : btn('$' + v.price, () => { const e2 = C.buyVehicle(cls); toast2(e2 || v.name + ' is yours.'); if (!e2) refreshMenu(); })) + '</div>';
     }
   }

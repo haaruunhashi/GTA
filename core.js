@@ -267,6 +267,7 @@ const VEH = {
   heli:   { kind: 'heli', top: 60, acc: 18, hp: 220, price: 32000, name: 'Sparrow Heli' },
   hind:   { kind: 'heli', top: 55, acc: 15, hp: 500, name: 'Gunship' },
   plane:  { kind: 'plane', top: 95, acc: 12, hp: 160, price: 48000, name: 'Duster Plane' },
+  jet:    { kind: 'plane', top: 135, acc: 24, hp: 220, price: 95000, name: 'Fighter Jet' },
   tank:   { kind: 'tank', top: 13, acc: 4,  hp: 1200, name: 'T-80 Tank' }
 };
 C.VEH = VEH;
@@ -275,7 +276,7 @@ C.VEH = VEH;
 const S = {
   state: 'play', stateT: 0,
   player: null, cars: [], peds: [], cops: [], footCops: [], soldiers: [],
-  enemies: [], tanks: [], helis: [], bullets: [], rockets: [], shellsList: [],
+  enemies: [], tanks: [], helis: [], bullets: [], rockets: [], shellsList: [], bombs: [],
   pickups: [], wanted: 0, evadeT: 0, time: 0, rentT: 0,
   mission: null,           // active mission object
   done: {},                // mission id -> true
@@ -297,7 +298,7 @@ function mkPlayer() {
     ammo,
     mag: 0, reloadT: 0, fireT: 0, punchT: 0, hitT: 0, downT: 0,
     veh: null, nitro: 100, outfit: 'olive',
-    owned: { houses: [], vehicles: [] }, lockTgt: null, lockT: 0,
+    owned: { houses: [], vehicles: ['heli', 'jet'] }, lockTgt: null, lockT: 0,
     onGround: true, moving: false, phase: 0
   };
 }
@@ -341,15 +342,15 @@ function reset(keepProgress) {
       S.player[k] = prev[k];
   }
   S.cars = []; S.peds = []; S.cops = []; S.footCops = []; S.soldiers = [];
-  S.enemies = []; S.tanks = []; S.helis = []; S.bullets = []; S.rockets = []; S.shellsList = [];
+  S.enemies = []; S.tanks = []; S.helis = []; S.bullets = []; S.rockets = []; S.shellsList = []; S.bombs = [];
   S.pickups = []; S.wanted = 0; S.evadeT = 0; S.mission = null; S.state = 'play';
   // starter supercar + owned garage vehicles at spawn
   S.cars.push(mkCar(1505, 2036, Math.PI / 2, 'free', 'super'));
   let off = 0;
   for (const vc of S.player.owned.vehicles) {
     if (VEH[vc].kind === 'car') { const c = mkCar(1505, 2020 - off * 8, Math.PI / 2, 'free', vc); c.owned = true; S.cars.push(c); }
-    else if (VEH[vc].kind === 'heli') { const h = mkHeli(1505, 1964 - off * 20); h.owned = true; S.helis.push(h); }
-    else if (VEH[vc].kind === 'plane') { const h = mkHeli(2100, 3600, 'plane'); h.owned = true; h.kind = 'plane'; S.helis.push(h); }
+    else if (VEH[vc].kind === 'heli') { const h = mkHeli(1470, 2016 - off * 20, vc); h.owned = true; S.helis.push(h); }
+    else if (VEH[vc].kind === 'plane') { const h = mkHeli(2100 + off * 30, 3600, vc); h.owned = true; h.kind = 'plane'; S.helis.push(h); }
     else if (VEH[vc].kind === 'tank') { const t = mkTank(4850, 1100); t.owned = true; S.tanks.push(t); }
     off++;
   }
@@ -929,6 +930,18 @@ function updateBullets(dt) {
     }
   }
   S.rockets = S.rockets.filter(m => m.ttl > 0);
+  // air-dropped bombs — parabolic fall, big blast on impact
+  for (const b of S.bombs) {
+    b.ttl -= dt;
+    b.vy -= 22 * dt;
+    b.x += b.dx * dt; b.z += b.dz * dt; b.y += b.vy * dt;
+    ev('smoke', { x: b.x, y: b.y, z: b.z });
+    const gyb = groundY(b.x, b.z);
+    if (b.ttl <= 0 || b.y <= gyb || solidAt(b.x, b.y, b.z) || propBlock(b.x, b.y, b.z, 0)) {
+      explode(b.x, Math.max(b.y, gyb), b.z, 24, 240); b.ttl = 0; ev('shake', { n: 8 });
+    }
+  }
+  S.bombs = S.bombs.filter(b => b.ttl > 0);
 }
 
 // ---------- player: on foot ----------
@@ -1219,15 +1232,25 @@ function playerVehicle(dt, inp) {
     if (v.y > 320) v.y = 320;
     // rooftop collision
     if (solidAt(v.x, v.y, v.z)) { v.hp -= 100; explode(v.x, v.y, v.z, 10, 60); v.y += 4; v.spd *= 0.3; }
-    // heli door gun (helis only)
-    if (!isPlane && inp.fire) {
+    // aircraft armament — machine guns + bomb payload (helis and the fighter jet)
+    const armedAir = !isPlane || v.cls === 'jet';
+    if (armedAir && inp.fire) {
       v.gcd = Math.max(0, (v.gcd || 0) - dt);
       if (v.gcd <= 0) {
-        v.gcd = 0.09;
-        fireBullet(v.x + Math.cos(v.yaw) * 2, v.y - 1, v.z + Math.sin(v.yaw) * 2, v.yaw, clamp(inp.camPitch, -1, 0.3), true, 18, 0.03);
+        v.gcd = isPlane ? 0.06 : 0.09; // the jet's cannons rip faster
+        const pitch = isPlane ? clamp(inp.camPitch, -0.7, 0.3) : clamp(inp.camPitch, -1, 0.3);
+        fireBullet(v.x + Math.cos(v.yaw) * 3.2, v.y - (isPlane ? 0.2 : 1), v.z + Math.sin(v.yaw) * 3.2, v.yaw, pitch, true, isPlane ? 26 : 18, isPlane ? 0.014 : 0.03);
         ev('sfx', { k: 'shot' });
       }
-    } else if (!isPlane) v.gcd = 0;
+    } else v.gcd = 0;
+    if (armedAir) {
+      v.bcd = Math.max(0, (v.bcd || 0) - dt);
+      if (inp.bomb && v.bcd <= 0) {
+        v.bcd = 0.6;
+        S.bombs.push({ x: v.x, y: v.y - 1.2, z: v.z, dx: Math.cos(v.yaw) * v.spd, dz: Math.sin(v.yaw) * v.spd, vy: -1.5, ttl: 9, friendly: true });
+        ev('sfx', { k: 'shot' });
+      }
+    }
   }
   p.x = v.x; p.z = v.z; p.y = v.y;
   if (broken && v.kind === 'car') toast('This vehicle is wrecked — E to bail.', 0.2);
