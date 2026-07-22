@@ -52,10 +52,11 @@ const moon = new T3.DirectionalLight(0x9fb2de, 1.15);
 moon.position.set(-60, 140, 45);
 moon.castShadow = true;
 moon.shadow.mapSize.set(2048, 2048);
-moon.shadow.camera.near = 10; moon.shadow.camera.far = 420;
-moon.shadow.camera.left = -140; moon.shadow.camera.right = 140;
-moon.shadow.camera.top = 140; moon.shadow.camera.bottom = -140;
-moon.shadow.bias = -0.0006;
+moon.shadow.camera.near = 10; moon.shadow.camera.far = 360;
+moon.shadow.camera.left = -85; moon.shadow.camera.right = 85;
+moon.shadow.camera.top = 85; moon.shadow.camera.bottom = -85;
+moon.shadow.bias = -0.00015;
+moon.shadow.normalBias = 0.6;
 scene.add(moon); scene.add(moon.target);
 
 // ---------- shared materials / textures ----------
@@ -108,9 +109,9 @@ const walkTex = canvasTex(256, 256, (g2, w, h) => {
 });
 walkTex.repeat.set(12, 12);
 const M = {
-  asphalt: new T3.MeshLambertMaterial({ map: asphaltTex, color: 0xbbbfc8 }),
-  sidewalk: new T3.MeshLambertMaterial({ map: walkTex, color: 0xcfd2da }),
-  grass: new T3.MeshLambertMaterial({ color: 0x2e4331 }),
+  asphalt: new T3.MeshLambertMaterial({ map: asphaltTex, color: 0x4a4e58 }),
+  sidewalk: new T3.MeshLambertMaterial({ map: walkTex, color: 0x8b90a0 }),
+  grass: new T3.MeshLambertMaterial({ color: 0x33502f }),
   dirt: new T3.MeshLambertMaterial({ color: 0x4a4034 }),
   concrete: new T3.MeshLambertMaterial({ color: 0x515560 }),
   runway: new T3.MeshLambertMaterial({ color: 0x2b2e35 }),
@@ -130,48 +131,39 @@ const M = {
   base.rotation.x = -Math.PI / 2;
   base.position.set(C.WORLD.W / 2, -0.25, C.WORLD.D / 2);
   scene.add(base);
-  // city base = asphalt
+  // city base = one dark asphalt slab (this IS the road surface)
   const cw = C.WORLD.CITY;
   const cbase = new T3.Mesh(new T3.PlaneGeometry(cw.x1 - cw.x0 + 60, cw.z1 - cw.z0 + 60), M.asphalt);
   cbase.receiveShadow = true;
   cbase.rotation.x = -Math.PI / 2;
-  cbase.position.set((cw.x0 + cw.x1) / 2, -0.12, (cw.z0 + cw.z1) / 2);
+  cbase.position.set((cw.x0 + cw.x1) / 2, -0.02, (cw.z0 + cw.z1) / 2);
   scene.add(cbase);
-  // block sidewalks + parks
-  const blockGeo = new T3.PlaneGeometry(C.WORLD.P - C.WORLD.RW, C.WORLD.P - C.WORLD.RW);
+  // raised, lighter sidewalk / park blocks sit on the building lots — clear curb, no z-fight
+  const blockGeo = new T3.BoxGeometry(C.WORLD.P - C.WORLD.RW, 0.3, C.WORLD.P - C.WORLD.RW);
   for (let x = cw.x0 + C.WORLD.RW; x + (C.WORLD.P - C.WORLD.RW) <= cw.x1; x += C.WORLD.P)
     for (let z = cw.z0 + C.WORLD.RW; z + (C.WORLD.P - C.WORLD.RW) <= cw.z1; z += C.WORLD.P) {
       const isPark = C.parks.some(p => Math.abs(p.x0 - x) < 2 && Math.abs(p.z0 - z) < 2);
       const m = new T3.Mesh(blockGeo, isPark ? M.grass : M.sidewalk);
       m.receiveShadow = true;
-      m.rotation.x = -Math.PI / 2;
-      m.position.set(x + (C.WORLD.P - C.WORLD.RW) / 2, -0.05, z + (C.WORLD.P - C.WORLD.RW) / 2);
+      m.position.set(x + (C.WORLD.P - C.WORLD.RW) / 2, 0.15, z + (C.WORLD.P - C.WORLD.RW) / 2);
       scene.add(m);
     }
-  // road center-line strips (separate textures per direction so dashes never smear)
-  const roadMat = new T3.MeshLambertMaterial({ map: roadTex });
-  roadTex.repeat.set(1, 20);
-  const roadTexH = canvasTex(256, 64, (g2, w, h) => {
-    g2.fillStyle = '#23262e'; g2.fillRect(0, 0, w, h);
-    g2.fillStyle = '#b8a94a';
-    for (let x = 0; x < w; x += 64) g2.fillRect(x, h / 2 - 1.5, 30, 3);
-    g2.fillStyle = 'rgba(255,255,255,0.1)';
-    g2.fillRect(0, 2, w, 2); g2.fillRect(0, h - 4, w, 2);
-  });
-  roadTexH.repeat.set(20, 1);
-  const roadMatH = new T3.MeshLambertMaterial({ map: roadTexH });
-  for (let x = cw.x0; x <= cw.x1; x += C.WORLD.P) {
-    const m = new T3.Mesh(new T3.PlaneGeometry(C.WORLD.RW, cw.z1 - cw.z0), roadMat);
-    m.rotation.x = -Math.PI / 2;
-    m.position.set(x + C.WORLD.RW / 2, -0.02, (cw.z0 + cw.z1) / 2);
-    scene.add(m);
-  }
-  for (let z = cw.z0; z <= cw.z1; z += C.WORLD.P) {
-    const m = new T3.Mesh(new T3.PlaneGeometry(cw.x1 - cw.x0, C.WORLD.RW), roadMatH);
-    m.rotation.x = -Math.PI / 2;
-    m.position.set((cw.x0 + cw.x1) / 2, -0.02, z + C.WORLD.RW / 2);
-    scene.add(m);
-  }
+  // thin dashed lane markings, only down the centre of each road lane (small quads, never smear)
+  const dashMat = new T3.MeshBasicMaterial({ color: 0x9c8c46, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
+  const dashGeo = new T3.PlaneGeometry(0.22, 2.4);
+  const dashGeoH = new T3.PlaneGeometry(2.4, 0.22);
+  const dashesV = [], dashesH = [];
+  for (let x = cw.x0 + C.WORLD.RW / 2; x <= cw.x1; x += C.WORLD.P)
+    for (let z = cw.z0 + 6; z < cw.z1; z += 13) dashesV.push([x, z]);
+  for (let z = cw.z0 + C.WORLD.RW / 2; z <= cw.z1; z += C.WORLD.P)
+    for (let x = cw.x0 + 6; x < cw.x1; x += 13) dashesH.push([x, z]);
+  const mkDashes = (arr, geo) => {
+    const im = new T3.InstancedMesh(geo, dashMat, arr.length);
+    const m4 = new T3.Matrix4();
+    arr.forEach(([x, z], i) => { m4.makeRotationX(-Math.PI / 2); m4.setPosition(x, 0.02, z); im.setMatrixAt(i, m4); });
+    im.instanceMatrix.needsUpdate = true; scene.add(im);
+  };
+  mkDashes(dashesV, dashGeo); mkDashes(dashesH, dashGeoH);
   // fort + airport pads
   const f = C.WORLD.FORT;
   const fpad = new T3.Mesh(new T3.PlaneGeometry(f.x1 - f.x0, f.z1 - f.z0), M.concrete);
@@ -185,8 +177,8 @@ const M = {
   rw.rotation.x = -Math.PI / 2; rw.position.set(2050, -0.03, 3550);
   scene.add(rw);
   for (let i = 0; i < 14; i++) {
-    const stripe = new T3.Mesh(new T3.PlaneGeometry(30, 2), new T3.MeshBasicMaterial({ color: 0xcfd4dd }));
-    stripe.rotation.x = -Math.PI / 2; stripe.position.set(1400 + i * 100, 0.02, 3550);
+    const stripe = new T3.Mesh(new T3.PlaneGeometry(30, 2), new T3.MeshBasicMaterial({ color: 0xcfd4dd, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }));
+    stripe.rotation.x = -Math.PI / 2; stripe.position.set(1400 + i * 100, 0.05, 3550);
     scene.add(stripe);
   }
   // Sierra heightfield
@@ -403,23 +395,48 @@ function actionFor(u, name) {
   u.actions[name] = a;
   return a;
 }
+// The AI-generated 'idle' pose is contorted; synthesize a clean stand by freezing the
+// walk clip at its 'passing' frame (feet closest together, a natural neutral).
+function neutralTime(mesh, u) {
+  if (u.neutralT !== undefined) return u.neutralT;
+  const walk = actionFor(u, 'walk');
+  if (!walk) { u.neutralT = 0; return 0; }
+  let lf = null, rf = null;
+  mesh.traverse(o => { if (o.isBone && o.name === 'LeftFoot') lf = o; if (o.isBone && o.name === 'RightFoot') rf = o; });
+  if (!lf || !rf) { u.neutralT = walk.getClip().duration * 0.5; return u.neutralT; }
+  const dur = walk.getClip().duration;
+  const wasIdle = {};
+  for (const k in u.actions) { wasIdle[k] = u.actions[k].enabled; u.actions[k].enabled = false; }
+  walk.enabled = true; walk.setEffectiveWeight(1); walk.play();
+  let best = 0, bestD = 1e9;
+  const a = new T3.Vector3(), b = new T3.Vector3();
+  for (let s = 0; s <= 40; s++) {
+    const tt = (s / 40) * dur;
+    walk.time = tt; u.mixer.update(0); mesh.updateMatrixWorld(true);
+    lf.getWorldPosition(a); rf.getWorldPosition(b);
+    const d = Math.hypot(a.x - b.x, a.z - b.z);
+    if (d < bestD) { bestD = d; best = tt; }
+  }
+  for (const k in u.actions) u.actions[k].enabled = wasIdle[k];
+  u.neutralT = best;
+  return best;
+}
 function animMan(g, phase, moving, aiming, rate) {
   const u = g.userData;
   if (u.mixer) {
-    let want = 'walk';
-    if (!moving && actionFor(u, 'idle')) want = 'idle';
-    else if (moving && (rate || 1) > 1.9 && actionFor(u, 'run')) want = 'run';
-    const a = actionFor(u, want) || u.actions.walk;
-    if (u.current !== a) {
-      if (u.current) u.current.fadeOut(0.18);
-      a.reset().fadeIn(0.18).play();
-      u.current = a;
+    const runA = (rate || 1) > 1.9 ? actionFor(u, 'run') : null;
+    if (moving) {
+      const a = (runA && (rate || 1) > 1.9) ? runA : u.actions.walk;
+      if (u.current !== a) { if (u.current) u.current.fadeOut(0.16); a.reset().fadeIn(0.16).play(); u.current = a; }
+      a.paused = false;
+      a.timeScale = a === runA ? (rate || 2) / 1.9 : (rate || 1.2);
+    } else {
+      // hold the clean neutral frame of the walk clip (legs together) — no contortion
+      const a = u.actions.walk;
+      if (u.current !== a) { if (u.current) u.current.fadeOut(0.16); a.reset().fadeIn(0.16).play(); u.current = a; }
+      a.paused = true;
+      a.time = neutralTime(g, u);
     }
-    if (want === 'walk') {
-      if (moving) { a.paused = false; a.timeScale = rate || 1.2; }
-      else if (!a.paused) { a.paused = true; a.time = a.getClip().duration * 0.24; }
-    } else if (want === 'run') { a.paused = false; a.timeScale = (rate || 2) / 1.9; }
-    else a.paused = false;
     return;
   }
   if (!u.legL) return;
@@ -809,6 +826,10 @@ const keys = {};
 let pendingEnter = false;
 let camYaw = 0, camPitch = -0.18, mouseDown = false, locked = false;
 let baseYaw = 0, mouseNorm = { x: 0, y: 0 }, lastMouseT = 0;
+// touch / mobile
+const isTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+let lastTouchLookT = 0;
+const touch = { on: false, mx: 0, my: 0, fire: false, run: false, up: false, down: false, reload: false };
 window.addEventListener('keydown', e => {
   if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
   keys[e.code] = true;
@@ -845,15 +866,111 @@ window.addEventListener('wheel', e => { if (locked) C.switchWeapon(e.deltaY > 0 
 
 function buildInput() {
   if (window.__cutsceneOpen) return { camYaw, camPitch };
+  const dz = 0.30;
+  const tOn = touch.on;
+  const tf = tOn && touch.my > dz, tb = tOn && touch.my < -dz;
+  const tl = tOn && touch.mx < -dz, tr = tOn && touch.mx > dz;
   return {
-    fwd: keys.KeyW || keys.ArrowUp, back: keys.KeyS || keys.ArrowDown,
-    left: keys.KeyA || keys.ArrowLeft, right: keys.KeyD || keys.ArrowRight,
-    run: keys.ShiftLeft || keys.ShiftRight, nitro: keys.ShiftLeft || keys.ShiftRight,
-    fire: mouseDown && locked && !menuOpen, enter: pendingEnter ? (pendingEnter = false, true) : false,
-    handbrake: keys.Space, up: keys.Space, down: keys.ControlLeft || keys.KeyC,
-    reload: keys.KeyR, camYaw, camPitch
+    fwd: keys.KeyW || keys.ArrowUp || tf, back: keys.KeyS || keys.ArrowDown || tb,
+    left: keys.KeyA || keys.ArrowLeft || tl, right: keys.KeyD || keys.ArrowRight || tr,
+    run: keys.ShiftLeft || keys.ShiftRight || touch.run, nitro: keys.ShiftLeft || keys.ShiftRight || touch.run,
+    fire: ((mouseDown && locked) || touch.fire) && !menuOpen, enter: pendingEnter ? (pendingEnter = false, true) : false,
+    handbrake: keys.Space || touch.up, up: keys.Space || touch.up, down: keys.ControlLeft || keys.KeyC || touch.down,
+    reload: keys.KeyR || touch.reload, camYaw, camPitch
   };
 }
+
+// ---------- touch controls (mobile) ----------
+if (isTouch) {
+  document.body.classList.add('touch');
+  const ctrls = document.querySelector('#intro .controls');
+  if (ctrls) ctrls.innerHTML =
+    '<b>Left stick</b> move / drive · <b>Drag the screen</b> to look &amp; aim · <b>RUN</b> sprint or nitro<br>' +
+    '<b>FIRE</b> shoot · <b>PUNCH</b> melee · <b>E</b> enter vehicle · <b>F</b> shops &amp; houses · <b>RLD</b> reload<br>' +
+    '<b>▲ / ▼</b> handbrake &amp; heli up / down · <b>WPN</b> weapon wheel — every US gun has its Soviet twin<br>' +
+    'hit the striped <b>STUNT RAMPS</b> at speed for cash · tunnels hide you from the law · Fort Kubra is a very bad idea';
+}
+function wireTouch() {
+  const stick = document.getElementById('stick');
+  const nub = document.getElementById('stickNub');
+  if (!stick) return;
+  const R = 46; // max nub travel px
+  let stickId = null;
+  const setNub = (dx, dy) => { nub.style.transform = 'translate(' + dx + 'px,' + dy + 'px)'; };
+  const onStickMove = (cx, cy, rect) => {
+    let dx = cx - (rect.left + rect.width / 2);
+    let dy = cy - (rect.top + rect.height / 2);
+    const len = Math.hypot(dx, dy) || 1;
+    if (len > R) { dx = dx / len * R; dy = dy / len * R; }
+    setNub(dx, dy);
+    touch.mx = dx / R; touch.my = -dy / R; touch.on = true;
+  };
+  stick.addEventListener('touchstart', e => {
+    e.preventDefault(); audioInit();
+    const t = e.changedTouches[0]; stickId = t.identifier;
+    onStickMove(t.clientX, t.clientY, stick.getBoundingClientRect());
+  }, { passive: false });
+  stick.addEventListener('touchmove', e => {
+    e.preventDefault();
+    for (const t of e.changedTouches) if (t.identifier === stickId) onStickMove(t.clientX, t.clientY, stick.getBoundingClientRect());
+  }, { passive: false });
+  const endStick = e => {
+    for (const t of e.changedTouches) if (t.identifier === stickId) { stickId = null; touch.on = false; touch.mx = touch.my = 0; setNub(0, 0); }
+  };
+  stick.addEventListener('touchend', endStick);
+  stick.addEventListener('touchcancel', endStick);
+
+  // right-side drag = look around (camera)
+  let lookId = null, lx = 0, ly = 0;
+  window.addEventListener('touchstart', e => {
+    if (!started || menuOpen || window.__cutsceneOpen) return;
+    for (const t of e.changedTouches) {
+      if (lookId !== null) continue;
+      const el = document.elementFromPoint(t.clientX, t.clientY);
+      if (el && (el.closest('#touch .tbtn') || el.closest('#stick') || el.closest('#menu') || el.closest('#wheel'))) continue;
+      lookId = t.identifier; lx = t.clientX; ly = t.clientY;
+    }
+  }, { passive: true });
+  window.addEventListener('touchmove', e => {
+    for (const t of e.changedTouches) if (t.identifier === lookId) {
+      camYaw += (t.clientX - lx) * 0.005;
+      camPitch = clamp(camPitch - (t.clientY - ly) * 0.005, -1.1, 0.7);
+      lx = t.clientX; ly = t.clientY; lastTouchLookT = performance.now();
+    }
+  }, { passive: true });
+  const endLook = e => { for (const t of e.changedTouches) if (t.identifier === lookId) lookId = null; };
+  window.addEventListener('touchend', endLook);
+  window.addEventListener('touchcancel', endLook);
+
+  // action buttons
+  const hold = (id, on, off) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener('touchstart', e => { e.preventDefault(); audioInit(); el.classList.add('on'); on(); }, { passive: false });
+    const up = e => { if (e) e.preventDefault(); el.classList.remove('on'); if (off) off(); };
+    el.addEventListener('touchend', up); el.addEventListener('touchcancel', up);
+  };
+  const tap = (id, fn) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener('touchstart', e => { e.preventDefault(); audioInit(); el.classList.add('on'); fn(); }, { passive: false });
+    const up = e => { if (e) e.preventDefault(); el.classList.remove('on'); };
+    el.addEventListener('touchend', up); el.addEventListener('touchcancel', up);
+  };
+  hold('btnFire', () => touch.fire = true, () => touch.fire = false);
+  hold('btnAB', () => touch.fire = true, () => touch.fire = false);
+  hold('btnUp', () => touch.up = true, () => touch.up = false);
+  hold('btnDown', () => touch.down = true, () => touch.down = false);
+  hold('btnReload', () => touch.reload = true, () => touch.reload = false);
+  tap('btnEnter', () => pendingEnter = true);
+  tap('btnInteract', () => tryInteract());
+  tap('btnRun', () => touch.run = !touch.run);
+  tap('btnWpn', () => { if (window.__toggleWheel) window.__toggleWheel(); });
+  // keep RUN button visibly reflecting its toggle state
+  const runBtn = document.getElementById('btnRun');
+  if (runBtn) setInterval(() => runBtn.classList.toggle('on', touch.run), 200);
+}
+wireTouch();
 
 // ---------- HUD (DOM) ----------
 const $ = id => document.getElementById(id);
@@ -910,7 +1027,7 @@ function drawHUD(dt) {
     hud.speed.textContent = 'ALT ' + Math.round(p.veh.y - C.groundY(p.veh.x, p.veh.z)) + 'm';
     hud.nitroWrap.style.display = 'none';
   } else { hud.speed.textContent = ''; hud.nitroWrap.style.display = 'none'; }
-  hud.crosshair.style.display = (!p.veh || p.veh.kind === 'tank' || p.veh.kind === 'heli') && locked ? 'block' : 'none';
+  hud.crosshair.style.display = (!p.veh || p.veh.kind === 'tank' || p.veh.kind === 'heli') && (locked || isTouch) ? 'block' : 'none';
   hud.lock.textContent = p.lockTgt ? (p.lockT >= 1 ? 'LOCKED' : 'locking…') : '';
   hud.lock.style.color = p.lockT >= 1 ? '#ff5a5a' : '#ffd23f';
   // mission banner
@@ -1255,7 +1372,10 @@ function frame(now) {
   if (!started) return;
   {
     const p2 = S.player;
-    if (!locked) {
+    if (isTouch) {
+      // touch: drag steers directly; when idle in a vehicle, settle behind it
+      if (p2.veh && performance.now() - lastTouchLookT > 1400) camYaw = U.angLerp(camYaw, p2.veh.yaw, clamp(2.0 * dt, 0, 1));
+    } else if (!locked) {
       // follow what you're doing; mouse offset looks around
       if (p2.veh) baseYaw = U.angLerp(baseYaw, p2.veh.yaw, clamp(2.6 * dt, 0, 1));
       else if (p2.moving) baseYaw = U.angLerp(baseYaw, p2.yaw, clamp(1.6 * dt, 0, 1));
@@ -1556,7 +1676,8 @@ window.__FC3D = { scene, camera, renderer, get started() { return started; } };
   wheel.id = 'wheel';
   wheel.style.cssText = 'position:fixed;inset:0;display:none;background:rgba(8,10,16,0.72);z-index:20;pointer-events:auto;';
   wheel.innerHTML = '<div id="wheelgrid" style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);display:grid;grid-template-columns:repeat(4,150px);gap:10px;"></div>' +
-    '<div style="position:absolute;left:50%;bottom:12%;transform:translateX(-50%);color:#9aa3b5;font:700 13px monospace">[TAB] close · click to equip</div>';
+    '<div style="position:absolute;left:50%;bottom:12%;transform:translateX(-50%);color:#9aa3b5;font:700 13px monospace">' +
+    (isTouch ? 'tap a weapon to equip · tap outside to close' : '[TAB] close · click to equip') + '</div>';
   document.body.appendChild(wheel);
   let wheelOpen = false;
   function renderWheel() {
@@ -1582,6 +1703,8 @@ window.__FC3D = { scene, camera, renderer, get started() { return started; } };
     wheel.style.display = wheelOpen ? 'block' : 'none';
     if (wheelOpen) { renderWheel(); if (document.pointerLockElement) document.exitPointerLock(); }
   }
+  window.__toggleWheel = toggleWheel;
+  wheel.addEventListener('click', e => { if (e.target === wheel) toggleWheel(false); });
   window.addEventListener('keydown', e => {
     if (e.code === 'Tab') { e.preventDefault(); if (started) toggleWheel(); }
   });

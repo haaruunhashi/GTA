@@ -61,6 +61,29 @@
   #intro #newbtn { background: #9aa3b5; box-shadow: 0 4px 0 #5c6270; }
   #intro .classic { margin-top: 14px; font: 12px monospace; }
   #intro .classic a { color: #8fd0ff; }
+  /* ---- touch controls (mobile) ---- */
+  #touch { position: fixed; inset: 0; z-index: 8; display: none; pointer-events: none;
+    -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; touch-action: none; }
+  body.touch #touch { display: block; }
+  body.touch #minimap { left: auto; right: 16px; bottom: 16px; width: 128px; height: 86px; }
+  #stick { position: absolute; left: 26px; bottom: 30px; width: 138px; height: 138px; border-radius: 50%;
+    background: radial-gradient(circle, rgba(255,255,255,0.10), rgba(255,255,255,0.04) 70%, transparent);
+    border: 2px solid rgba(255,255,255,0.22); pointer-events: auto; }
+  #stickNub { position: absolute; left: 50%; top: 50%; width: 58px; height: 58px; margin: -29px 0 0 -29px; border-radius: 50%;
+    background: rgba(230,213,188,0.55); border: 2px solid rgba(255,255,255,0.5); box-shadow: 0 2px 8px rgba(0,0,0,0.5); }
+  .tbtn { position: absolute; border-radius: 50%; pointer-events: auto; color: #f2ede1; font: 800 14px "Arial Black", Arial;
+    display: flex; align-items: center; justify-content: center; text-align: center; line-height: 1.05;
+    background: rgba(20,24,34,0.5); border: 2px solid rgba(255,255,255,0.28); text-shadow: 0 1px 2px #000; }
+  .tbtn:active, .tbtn.on { background: rgba(230,213,188,0.55); color: #171b28; }
+  #btnFire { right: 30px; bottom: 118px; width: 96px; height: 96px; font-size: 16px; background: rgba(150,44,44,0.55); border-color: rgba(255,120,120,0.5); }
+  #btnAB { right: 140px; bottom: 44px; width: 74px; height: 74px; }
+  #btnEnter { right: 44px; bottom: 226px; width: 66px; height: 66px; }
+  #btnInteract { right: 122px; bottom: 200px; width: 60px; height: 60px; }
+  #btnReload { right: 150px; bottom: 128px; width: 60px; height: 60px; }
+  #btnRun { left: 176px; bottom: 118px; width: 66px; height: 66px; }
+  #btnUp { right: 30px; bottom: 300px; width: 60px; height: 60px; font-size: 22px; }
+  #btnDown { right: 108px; bottom: 288px; width: 54px; height: 54px; font-size: 22px; }
+  #btnWpn { left: 176px; bottom: 30px; width: 60px; height: 60px; }
 </style>
 </head>
 <body>
@@ -85,6 +108,18 @@
   <div id="pops"></div>
 </div>
 <div id="menu"></div>
+<div id="touch">
+  <div id="stick"><div id="stickNub"></div></div>
+  <div class="tbtn" id="btnFire">FIRE</div>
+  <div class="tbtn" id="btnAB">PUNCH</div>
+  <div class="tbtn" id="btnEnter">E</div>
+  <div class="tbtn" id="btnInteract">F</div>
+  <div class="tbtn" id="btnReload">RLD</div>
+  <div class="tbtn" id="btnRun">RUN</div>
+  <div class="tbtn" id="btnUp">▲</div>
+  <div class="tbtn" id="btnDown">▼</div>
+  <div class="tbtn" id="btnWpn">WPN</div>
+</div>
 <div id="intro">
   <canvas id="face" width="200" height="180"></canvas>
   <h1>BLANK CITY 3D</h1>

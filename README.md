@@ -90,6 +90,12 @@ Click to capture the mouse (aim). **WASD** move/drive · **E** vehicles · **F**
 **Shift** sprint/nitro · **Space** handbrake / heli up · **Ctrl** heli down · **LMB** fire ·
 **R** reload · **1-9 / wheel** weapons · hold aim on armor/gunships to lock AA rockets.
 
+**On mobile / touch** the game auto-switches to an on-screen layout: a left virtual **stick**
+to move and drive, **drag anywhere on the screen** to look around and aim, and touch buttons —
+**FIRE**, **PUNCH**, **E** (enter), **F** (shops), **RLD**, **RUN** (toggle sprint/nitro),
+**▲/▼** (handbrake & heli up/down), and **WPN** (weapon wheel). The minimap moves to the
+bottom-right so it stays clear of your thumbs.
+
 ## Design constraints
 
 No music (procedural SFX only), no female characters (every inhabitant is the same blank-faced
