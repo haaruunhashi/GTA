@@ -454,19 +454,20 @@ function neutralTime(mesh, u) {
 function animMan(g, phase, moving, aiming, rate) {
   const u = g.userData;
   if (u.mixer) {
-    const runA = (rate || 1) > 1.9 ? actionFor(u, 'run') : null;
-    if (moving) {
-      const a = (runA && (rate || 1) > 1.9) ? runA : u.actions.walk;
-      if (u.current !== a) { if (u.current) u.current.fadeOut(0.16); a.reset().fadeIn(0.16).play(); u.current = a; }
-      a.paused = false;
-      a.timeScale = a === runA ? (rate || 2) / 1.9 : (rate || 1.2);
-    } else {
-      // hold the clean neutral frame of the walk clip (legs together) — no contortion
-      const a = u.actions.walk;
-      if (u.current !== a) { if (u.current) u.current.fadeOut(0.16); a.reset().fadeIn(0.16).play(); u.current = a; }
-      a.paused = true;
-      a.time = neutralTime(g, u);
+    const speed = rate || 1;
+    let target;
+    if (moving) target = (speed > 1.9 ? (actionFor(u, 'run') || u.actions.walk) : (u.actions.walk || actionFor(u, 'idle')));
+    else target = (u.actions.idle || actionFor(u, 'idle') || u.actions.walk);
+    if (!target) return;
+    if (u.current !== target) {
+      if (u.current) u.current.fadeOut(0.2);
+      target.reset().fadeIn(0.2).play();
+      u.current = target;
     }
+    target.paused = false; target.enabled = true;
+    if (target === u.actions.run) target.timeScale = clamp(speed / 1.9, 0.85, 1.7);
+    else if (target === u.actions.walk) target.timeScale = clamp(speed, 0.8, 1.6);
+    else target.timeScale = 1; // idle plays at its natural rate
     return;
   }
   if (!u.legL) return;
@@ -688,7 +689,8 @@ function registerModel(key, gltf, cfg) {
       }
     }
   }
-  if (key === 'man' && gltf.animations && gltf.animations[0]) gltf.animations[0].name = 'walk';
+  // only synthesize a name when a single unnamed clip is present (AI models); Xbot already names idle/walk/run
+  if (key === 'man' && gltf.animations && gltf.animations.length === 1 && gltf.animations[0]) gltf.animations[0].name = 'walk';
   MODELS[key] = { tpl: normalizeModel(gltf.scene, cfg), clips: gltf.animations || [] };
   for (const [e2, m2] of meshMap) scene.remove(m2);
   meshMap.clear();
@@ -708,10 +710,29 @@ function cloneModel(key, tint) {
     holder.userData.mixer = mixer;
     holder.userData.clips = rec.clips;
     holder.userData.actions = {};
-    const a = mixer.clipAction(rec.clips[0]); a.play();
-    holder.userData.actions.walk = a;
-    holder.userData.current = a;
-    holder.userData.action = a; // legacy path
+    const byName = n => rec.clips.find(k => k.name === n);
+    const setup = (n) => { const cl = byName(n); if (cl) { const act = mixer.clipAction(cl); holder.userData.actions[n] = act; return act; } return null; };
+    const idle = setup('idle') || (function () { const act = mixer.clipAction(rec.clips[0]); holder.userData.actions.idle = act; return act; })();
+    setup('walk'); setup('run');
+    idle.play();
+    holder.userData.current = idle;
+    // attach a held weapon to the right-hand bone so it's carried naturally
+    let hand = null;
+    c.traverse(o => { if (o.isBone && !hand && /RightHand$/.test(o.name)) hand = o; });
+    if (hand) {
+      const gun = new T3.Group();
+      const body = new T3.Mesh(new T3.BoxGeometry(0.06, 0.11, 0.55), M.dark);
+      body.position.set(0, 0, 0.2); gun.add(body);
+      const mag = new T3.Mesh(new T3.BoxGeometry(0.05, 0.16, 0.08), M.dark);
+      mag.position.set(0, -0.11, 0.12); gun.add(mag);
+      const tube = new T3.Mesh(new T3.CylinderGeometry(0.05, 0.05, 0.85, 8), new T3.MeshLambertMaterial({ color: 0x6f7a62 }));
+      tube.rotation.x = Math.PI / 2; tube.position.set(0, 0, 0.25);
+      gun.scale.setScalar(100);            // hand bone space is in cm (Mixamo) — scale up
+      gun.position.set(0, 0, 0);
+      gun.visible = false; hand.add(gun);
+      const tubeHolder = new T3.Group(); tubeHolder.scale.setScalar(100); tubeHolder.add(tube); tubeHolder.visible = false; hand.add(tubeHolder);
+      holder.userData.gun = gun; holder.userData.tube = tubeHolder; holder.userData.handBone = hand;
+    }
   }
   holder.userData.glb = true;
   return holder;
@@ -1557,7 +1578,7 @@ $('newbtn').addEventListener('click', () => {
   g.beginPath(); g.ellipse(cx, H2 - 122, 32, 40, 0, 0, TAU); g.fill();
 })();
 
-window.__FC3D = { scene, camera, renderer, get started() { return started; } };
+window.__FC3D = { scene, camera, renderer, get started() { return started; }, get playerMesh() { return playerMesh; } };
 
 // ================= FLAVOR PASS: CC0 Kenney kit, stunts, neon, weapon wheel =================
 (function flavor() {
@@ -1868,8 +1889,9 @@ window.__FC3D = { scene, camera, renderer, get started() { return started; } };
         .catch(() => {});
     }
   }
-  loadClip('man_idle', 'idle');
-  loadClip('man_run', 'run');
+  // Xbot ships authored idle/walk/run clips, so the AI stand-in clips are no longer loaded.
+  // (loadClip stays available for the procedural fallback model.)
+  void loadClip;
   // CC0 coin (Kenney) for visible cash pickups
   let coinTpl = null;
   if (window.GLTFLoader) {

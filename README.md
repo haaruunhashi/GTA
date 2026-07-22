@@ -121,6 +121,11 @@ combatants — soldiers, tanks, gunships — plus classic GTA chaos.
   OpenStreetMap contributors, licensed **ODbL**. Regenerate with the OSM pipeline
   (Overpass fetch → `convert-osm.mjs`). If this file is absent, the game falls back to the
   original procedural block grid, so it always runs.
+- `assets/man.glb` — the character: a featureless grey mannequin (the "X Bot" rig) with
+  authored skeletal **idle / walk / run** animations, replacing the earlier procedurally
+  animated body. This is what gives smooth, natural motion and a stable standing pose (the
+  old idle was contorted because it was hand-animated). A gun is parented to the right-hand
+  bone so it's carried in the hand. From the three.js example assets (Mixamo, royalty-free).
 - `vendor/three.min.js` — Three.js r160, vendored.
 - `classic.html` + `game.js` — the original 2D top-down version, kept playable.
 - `assets/*.glb` — AI-generated models (Higgsfield/Meshy). `assets/kenney/*.glb` — CC0 city
