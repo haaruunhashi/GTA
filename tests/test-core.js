@@ -15,6 +15,17 @@ function stepAlive(n, i) { // keep the test player alive & un-arrested: we test 
   S.player.hp = 100;
 }
 const P = S.player;
+function holdAt(n, x, z, i) {   // keep the player pinned on an objective while stepping
+  for (let k = 0; k < n; k++) {
+    const pl = S.player;
+    pl.hp = 100; pl.armor = 100; pl.veh = null;
+    pl.x = x; pl.z = z; pl.y = C.groundY(x, z);
+    C.step(1 / 60, i || inp());
+    if (S.state !== 'play') { S.state = 'play'; S.stateT = 0; }
+  }
+  C.drainEvents();
+  S.player.x = x; S.player.z = z;
+}
 
 // --- preloaded arsenal + supercar starter (pristine new game) ---
 assert(Object.keys(P.weapons).length === Object.keys(C.WEAPONS).length, 'every weapon preloaded in the inventory');
@@ -438,13 +449,13 @@ assert(S.enemies.filter(e => String(e.gmTag||'').startsWith('war:')).length >= 6
 // standing on a contested point must NOT capture it
 const sec0 = W[0];
 PL.x = sec0.x; PL.z = sec0.z; PL.y = C.groundY(PL.x, PL.z); PL.veh = null;
-stepAlive(120, inp());
+holdAt(120, sec0.x, sec0.z);
 assert(S.war.sectors[0].prog === 0 && S.war.sectors[0].contested, 'contested sector does not capture');
 // clear the defenders, then it captures
 for (const e of S.enemies) if (String(e.gmTag||'').startsWith('war:')) { e.state = 'down'; e.dead = true; }
 S.enemies = S.enemies.filter(e => !e.dead);
 const sup0 = S.war.supplies;
-stepAlive(420, inp());
+holdAt(480, sec0.x, sec0.z);
 assert(S.war.supplies > sup0, 'holding the objective earns supplies (' + Math.round(S.war.supplies) + ')');
 assert(S.war.idx === 1 && S.war.sectors[0].owned, 'sector captured, front advances to ' + W[1].name);
 // garrison economy
