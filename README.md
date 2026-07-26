@@ -97,8 +97,9 @@ Click to capture the mouse (aim). **WASD** move/drive · **E** vehicles · **F**
 **R** reload · **1-9 / wheel** weapons · hold aim on armor/gunships to lock AA rockets.
 In the helicopter or fighter jet, **LMB** fires the guns and **B** drops bombs.
 
-**On mobile / touch** the game auto-switches to an on-screen layout: a left virtual **stick**
-to move and drive, **drag anywhere on the screen** to look around and aim, and touch buttons —
+**On mobile / touch** the game auto-switches to an on-screen layout: a **floating left stick**
+(touch anywhere in the left zone and it springs up under your thumb, then returns home on
+release), the right side is **free-look** to aim, and touch buttons —
 **FIRE**, **PUNCH**, **E** (enter), **F** (shops), **RLD**, **RUN** (toggle sprint/nitro),
 **▲/▼** (handbrake & heli up/down), and **WPN** (weapon wheel). The minimap moves to the
 bottom-right so it stays clear of your thumbs.

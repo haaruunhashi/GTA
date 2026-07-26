@@ -498,27 +498,29 @@ function makeWheel(radius) {
 }
 function buildCar(cls, colorSeed) {
   const g = new T3.Group();
-  const D = { sedan: [4.4, 1.2, 2], taxi: [4.4, 1.2, 2], van: [5, 1.9, 2.25], pickup: [4.9, 1.3, 2.15], muscle: [4.8, 1.15, 2.1], sports: [4.4, 1.0, 2.02], super: [4.7, 0.86, 2.06], cop: [4.5, 1.2, 2.05], apc: [5.4, 1.8, 2.6] }[cls] || [4.4, 1.2, 2];
+  const D = { sedan: [4.55, 1.0, 2.0], taxi: [4.55, 1.0, 2.0], van: [5, 1.75, 2.25], pickup: [4.95, 1.05, 2.18], muscle: [4.9, 0.94, 2.16], sports: [4.4, 0.82, 2.08], super: [4.78, 0.66, 2.14], cop: [4.6, 1.0, 2.06], apc: [5.4, 1.8, 2.6] }[cls] || [4.5, 1.0, 2.0];
   const len = D[0], bh = D[1], wid = D[2];
   const col = cls === 'cop' ? 0x20242e : cls === 'taxi' ? 0xe8b62a : cls === 'super' ? SUPER_COLORS[(colorSeed * SUPER_COLORS.length) | 0] : CAR_COLORS[(colorSeed * CAR_COLORS.length) | 0];
   const bodyMat = new T3.MeshLambertMaterial({ color: col });
   const glass = M.glassDark;
   const isTall = cls === 'van';
-  const groundClr = 0.36;
-  // --- body: a low chassis + a shoulder + a set-back glasshouse (reads as a real silhouette, not one box) ---
-  const chassisH = bh * 0.5;
+  const low = cls === 'super' || cls === 'sports';
+  const groundClr = 0.30;
+  // --- body: a low main mass + a thin beltline + a set-back, low glasshouse (real silhouette, low stance) ---
+  const chassisH = bh * 0.64;
   const chassis = new T3.Mesh(new T3.BoxGeometry(len, chassisH, wid), bodyMat);
   chassis.position.y = groundClr + chassisH / 2; g.add(chassis);
-  const shoulderH = bh * 0.42;
-  const shoulder = new T3.Mesh(new T3.BoxGeometry(len * 0.97, shoulderH, wid * 0.9), bodyMat);
-  shoulder.position.y = chassis.position.y + chassisH / 2 + shoulderH / 2 - 0.02; g.add(shoulder);
-  const cabLen = isTall ? len * 0.62 : len * 0.44;
-  const cabH = isTall ? bh * 0.7 : 0.52;
-  const cabY = shoulder.position.y + shoulderH / 2 + cabH / 2 - 0.02;
+  const beltH = bh * 0.16;
+  const belt = new T3.Mesh(new T3.BoxGeometry(len * 0.99, beltH, wid * 1.01), bodyMat); // a defined waistline
+  belt.position.y = chassis.position.y + chassisH / 2; g.add(belt);
+  const cabLen = isTall ? len * 0.6 : cls === 'super' ? len * 0.32 : low ? len * 0.42 : len * 0.46;
+  const cabH = isTall ? bh * 0.55 : low ? bh * 0.62 : bh * 0.5;
+  const cabX = cls === 'super' ? len * 0.05 : -len * 0.06;
+  const cabY = groundClr + chassisH + cabH / 2 - 0.05;
   const cabin = new T3.Mesh(new T3.BoxGeometry(cabLen, cabH, wid * 0.8), glass);
-  cabin.position.set(cls === 'super' ? len * 0.04 : -len * 0.05, cabY, 0); g.add(cabin);
-  const roof = new T3.Mesh(new T3.BoxGeometry(cabLen * 0.92, 0.09, wid * 0.78), bodyMat);
-  roof.position.set(cabin.position.x, cabY + cabH / 2, 0); g.add(roof);
+  cabin.position.set(cabX, cabY, 0); g.add(cabin);
+  const roof = new T3.Mesh(new T3.BoxGeometry(cabLen * 0.9, 0.08, wid * 0.78), bodyMat);
+  roof.position.set(cabX, cabY + cabH / 2, 0); g.add(roof);
   // bumpers + grille
   for (const sx of [1, -1]) { const b = new T3.Mesh(new T3.BoxGeometry(0.22, 0.3, wid * 0.98), CHROME_MAT); b.position.set(sx * (len / 2 - 0.03), groundClr + 0.22, 0); g.add(b); }
   const grille = new T3.Mesh(new T3.BoxGeometry(0.06, 0.26, wid * 0.62), CHROME_MAT); grille.position.set(len / 2 - 0.01, groundClr + 0.34, 0); g.add(grille);
@@ -538,8 +540,8 @@ function buildCar(cls, colorSeed) {
   // --- class extras ---
   if (cls === 'cop') { const bar = new T3.Mesh(new T3.BoxGeometry(0.5, 0.2, 1.2), new T3.MeshBasicMaterial({ color: 0xff4a4a })); bar.position.set(-0.2, cabY + cabH / 2 + 0.18, 0); g.add(bar); g.userData.lightbar = bar; }
   if (cls === 'taxi') { const sign = new T3.Mesh(new T3.BoxGeometry(0.6, 0.24, 0.42), new T3.MeshBasicMaterial({ color: 0xf2ede2 })); sign.position.set(-0.2, cabY + cabH / 2 + 0.2, 0); g.add(sign); }
-  if (cls === 'pickup') { chassis.scale.z = 1; const bed = new T3.Mesh(new T3.BoxGeometry(len * 0.42, 0.34, wid * 0.86), bodyMat); bed.position.set(-len * 0.28, shoulder.position.y, 0); g.add(bed); }
-  if (cls === 'sports' || cls === 'muscle') { const sp = new T3.Mesh(new T3.BoxGeometry(0.18, 0.26, wid * 0.85), CHROME_MAT); sp.position.set(-len / 2 + 0.2, shoulder.position.y + shoulderH / 2 + 0.16, 0); g.add(sp); }
+  if (cls === 'pickup') { const bed = new T3.Mesh(new T3.BoxGeometry(len * 0.42, 0.32, wid * 0.86), bodyMat); bed.position.set(-len * 0.28, belt.position.y + 0.14, 0); g.add(bed); }
+  if (cls === 'sports' || cls === 'muscle') { const sp = new T3.Mesh(new T3.BoxGeometry(0.18, 0.22, wid * 0.85), CHROME_MAT); sp.position.set(-len / 2 + 0.2, belt.position.y + 0.2, 0); g.add(sp); }
   if (cls === 'super') {
     const wingMat = CHROME_MAT;
     const wing = new T3.Mesh(new T3.BoxGeometry(0.55, 0.07, wid + 0.28), wingMat); wing.position.set(-len / 2 + 0.2, cabY, 0); g.add(wing);
@@ -1093,53 +1095,48 @@ function wireTouch() {
   const stick = document.getElementById('stick');
   const nub = document.getElementById('stickNub');
   if (!stick) return;
-  const R = 46; // max nub travel px
-  let stickId = null;
+  const R = 54, SIZE = 138; // nub travel / stick diameter (px)
   const setNub = (dx, dy) => { nub.style.transform = 'translate(' + dx + 'px,' + dy + 'px)'; };
-  const onStickMove = (cx, cy, rect) => {
-    let dx = cx - (rect.left + rect.width / 2);
-    let dy = cy - (rect.top + rect.height / 2);
-    const len = Math.hypot(dx, dy) || 1;
-    if (len > R) { dx = dx / len * R; dy = dy / len * R; }
-    setNub(dx, dy);
-    touch.mx = dx / R; touch.my = -dy / R; touch.on = true;
-  };
-  stick.addEventListener('touchstart', e => {
-    e.preventDefault(); audioInit();
-    const t = e.changedTouches[0]; stickId = t.identifier;
-    onStickMove(t.clientX, t.clientY, stick.getBoundingClientRect());
-  }, { passive: false });
-  stick.addEventListener('touchmove', e => {
-    e.preventDefault();
-    for (const t of e.changedTouches) if (t.identifier === stickId) onStickMove(t.clientX, t.clientY, stick.getBoundingClientRect());
-  }, { passive: false });
-  const endStick = e => {
-    for (const t of e.changedTouches) if (t.identifier === stickId) { stickId = null; touch.on = false; touch.mx = touch.my = 0; setNub(0, 0); }
-  };
-  stick.addEventListener('touchend', endStick);
-  stick.addEventListener('touchcancel', endStick);
-
-  // right-side drag = look around (camera)
-  let lookId = null, lx = 0, ly = 0;
+  const place = (l, t, op) => { stick.style.left = l + 'px'; stick.style.top = t + 'px'; stick.style.bottom = 'auto'; stick.style.opacity = op; };
+  const goHome = () => { place(26, window.innerHeight - 30 - SIZE, '0.4'); setNub(0, 0); };
+  const onButton = (x, y) => { const el = document.elementFromPoint(x, y); return !!(el && (el.closest('#touch .tbtn') || el.closest('#menu') || el.closest('#wheel'))); };
+  let stickId = null, baseX = 0, baseY = 0, lookId = null, lx = 0, ly = 0;
+  // FLOATING joystick: touching anywhere in the left zone spawns the stick under the thumb;
+  // the right zone is free-look. One unified router so multitouch never gets confused.
   window.addEventListener('touchstart', e => {
     if (!started || menuOpen || window.__cutsceneOpen) return;
+    audioInit();
     for (const t of e.changedTouches) {
-      if (lookId !== null) continue;
-      const el = document.elementFromPoint(t.clientX, t.clientY);
-      if (el && (el.closest('#touch .tbtn') || el.closest('#stick') || el.closest('#menu') || el.closest('#wheel'))) continue;
-      lookId = t.identifier; lx = t.clientX; ly = t.clientY;
+      if (onButton(t.clientX, t.clientY)) continue;
+      if (stickId === null && t.clientX < window.innerWidth * 0.46) {
+        stickId = t.identifier; baseX = t.clientX; baseY = t.clientY;
+        place(t.clientX - SIZE / 2, t.clientY - SIZE / 2, '1'); setNub(0, 0);
+        touch.on = true; touch.mx = touch.my = 0; e.preventDefault();
+      } else if (lookId === null) { lookId = t.identifier; lx = t.clientX; ly = t.clientY; }
     }
-  }, { passive: true });
+  }, { passive: false });
   window.addEventListener('touchmove', e => {
-    for (const t of e.changedTouches) if (t.identifier === lookId) {
-      camYaw += (t.clientX - lx) * 0.005;
-      camPitch = clamp(camPitch - (t.clientY - ly) * 0.005, -1.1, 0.7);
-      lx = t.clientX; ly = t.clientY; lastTouchLookT = performance.now();
+    for (const t of e.changedTouches) {
+      if (t.identifier === stickId) {
+        let dx = t.clientX - baseX, dy = t.clientY - baseY;
+        const len = Math.hypot(dx, dy) || 1; if (len > R) { dx = dx / len * R; dy = dy / len * R; }
+        setNub(dx, dy); touch.mx = dx / R; touch.my = -dy / R; touch.on = true; e.preventDefault();
+      } else if (t.identifier === lookId) {
+        camYaw += (t.clientX - lx) * 0.0052;
+        camPitch = clamp(camPitch - (t.clientY - ly) * 0.0052, -1.1, 0.7);
+        lx = t.clientX; ly = t.clientY; lastTouchLookT = performance.now();
+      }
     }
-  }, { passive: true });
-  const endLook = e => { for (const t of e.changedTouches) if (t.identifier === lookId) lookId = null; };
-  window.addEventListener('touchend', endLook);
-  window.addEventListener('touchcancel', endLook);
+  }, { passive: false });
+  const end = e => {
+    for (const t of e.changedTouches) {
+      if (t.identifier === stickId) { stickId = null; touch.on = false; touch.mx = touch.my = 0; goHome(); }
+      if (t.identifier === lookId) lookId = null;
+    }
+  };
+  window.addEventListener('touchend', end);
+  window.addEventListener('touchcancel', end);
+  goHome();
 
   // action buttons
   const hold = (id, on, off) => {
@@ -1472,7 +1469,7 @@ function handleEvents() {
 }
 
 // ---------- camera ----------
-let shake = 0;
+let shake = 0, smoothLook = null;
 function updateCamera(dt) {
   const p = S.player;
   moon.position.set(p.x - 60, p.y + 140, p.z + 45);
@@ -1496,7 +1493,10 @@ function updateCamera(dt) {
     shake -= shake * 4 * dt;
   }
   const look = new T3.Vector3(p.x + Math.cos(camYaw) * 8 * cp, p.y + 1.6 + Math.sin(camPitch) * 8, p.z + Math.sin(camYaw) * 8 * cp);
-  camera.lookAt(look);
+  if (!smoothLook) smoothLook = look.clone();
+  if (smoothLook.distanceTo(look) > 60) smoothLook.copy(look); // snap on teleport
+  else smoothLook.lerp(look, clamp(dt * 14, 0, 1));
+  camera.lookAt(smoothLook);
   // speed-based FOV: the world rushes past faster the quicker you go
   const spd = (p.veh && (p.veh.kind === 'car' || p.veh.kind === 'plane')) ? Math.abs(p.veh.spd) : 0;
   const targetFov = 70 + clamp(spd - 20, 0, 45) * 0.5 + (p.veh && (keys.ShiftLeft || keys.ShiftRight) && spd > 20 ? 6 : 0);
