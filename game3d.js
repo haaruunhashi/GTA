@@ -10,10 +10,10 @@ const clamp = U.clamp;
 const canvas = document.getElementById('game');
 const renderer = new T3.WebGLRenderer({ canvas, antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.6));
-renderer.toneMapping = T3.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 0.95;
+renderer.toneMapping = T3.AgXToneMapping || T3.ACESFilmicToneMapping; // AgX: cinematic filmic grade
+renderer.toneMappingExposure = T3.AgXToneMapping ? 1.35 : 0.95;
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = T3.PCFShadowMap;
+renderer.shadowMap.type = T3.PCFSoftShadowMap;
 const scene = new T3.Scene();
 const DUSK = 0x1d2438;
 scene.fog = new T3.Fog(0x30344f, 200, 1600);
@@ -907,8 +907,9 @@ function updateEffects(dt) {
   for (; bi < bombMeshes.length; bi++) bombMeshes[bi].visible = false;
 }
 
-// ---------- audio (SFX only — no music by design) ----------
+// ---------- audio (SFX only — no music, no audio files; everything synthesized live) ----------
 let AC = null, engOsc = null, engGain = null, sirenOsc = null, sirenGain = null;
+let gunBus = null, noiseBuf = null;
 function audioInit() {
   if (AC) return;
   try {
@@ -918,7 +919,67 @@ function audioInit() {
     engOsc.connect(engGain); engGain.connect(AC.destination); engOsc.start();
     sirenOsc = AC.createOscillator(); sirenGain = AC.createGain();
     sirenGain.gain.value = 0; sirenOsc.connect(sirenGain); sirenGain.connect(AC.destination); sirenOsc.start();
+    // shared gunfire bus with a limiter so rapid automatic fire never clips
+    gunBus = AC.createDynamicsCompressor();
+    gunBus.threshold.value = -16; gunBus.knee.value = 22; gunBus.ratio.value = 8;
+    gunBus.attack.value = 0.002; gunBus.release.value = 0.18;
+    gunBus.connect(AC.destination);
+    // one second of pink-ish noise, reused by every layered shot
+    const n = AC.sampleRate | 0;
+    noiseBuf = AC.createBuffer(1, n, AC.sampleRate);
+    const d = noiseBuf.getChannelData(0); let b0 = 0, b1 = 0, b2 = 0;
+    for (let i = 0; i < n; i++) {
+      const w = Math.random() * 2 - 1;
+      b0 = 0.99765 * b0 + w * 0.0990460; b1 = 0.96300 * b1 + w * 0.2965164; b2 = 0.57000 * b2 + w * 1.0526913;
+      d[i] = (b0 + b1 + b2 + w * 0.1848) * 0.25;
+    }
   } catch (e) { AC = null; }
+}
+// Layered gunshot synthesis: a transient click, a low body thump, a bright bandpass
+// crack, a noise tail, and a mechanical bolt — round-robin pitch jitter so automatic
+// fire never sounds looped, plus distance modelling (far = muffled, boomy, delayed).
+const GUN_SND = {
+  pistol:  { dur: 0.14, thump: 175, thumpG: 0.50, crackF: 1900, crackG: 0.55, tailG: 0.30, tail: 0.10, bolt: true },
+  rifle:   { dur: 0.17, thump: 135, thumpG: 0.55, crackF: 2300, crackG: 0.75, tailG: 0.40, tail: 0.14, bolt: true },
+  shotgun: { dur: 0.30, thump: 82,  thumpG: 0.95, crackF: 1100, crackG: 0.60, tailG: 0.65, tail: 0.26, bolt: false },
+  sniper:  { dur: 0.42, thump: 108, thumpG: 0.80, crackF: 2700, crackG: 1.00, tailG: 0.60, tail: 0.36, bolt: false },
+  mg:      { dur: 0.20, thump: 100, thumpG: 0.78, crackF: 2000, crackG: 0.72, tailG: 0.52, tail: 0.19, bolt: true }
+};
+function gunSound(cls, dist) {
+  if (!AC || !gunBus) return;
+  try {
+    const P = GUN_SND[cls] || GUN_SND.rifle;
+    const t = AC.currentTime;
+    const near = clamp(1 - (dist || 0) / 140, 0.12, 1), far = 1 - near;
+    const pj = 1 + (Math.random() - 0.5) * 0.14;
+    const master = AC.createGain(); master.gain.value = 0.9;
+    const lp = AC.createBiquadFilter(); lp.type = 'lowpass';
+    lp.frequency.value = 1200 + near * near * 16000; // distant shots lose the highs
+    master.connect(lp); lp.connect(gunBus);
+    const when = t + (far > 0.06 ? (dist || 0) / 340 : 0); // speed-of-sound delay when far
+    const nz = (rate) => { const s = AC.createBufferSource(); s.buffer = noiseBuf; if (rate) s.playbackRate.value = rate; return s; };
+    // 1) transient click
+    { const s = nz(pj), hp = AC.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 3500;
+      const g = AC.createGain(); g.gain.setValueAtTime(0.9 * near, when); g.gain.exponentialRampToValueAtTime(0.001, when + 0.02);
+      s.connect(hp); hp.connect(g); g.connect(master); s.start(when); s.stop(when + 0.03); }
+    // 2) body thump
+    { const o = AC.createOscillator(); o.type = 'triangle'; o.frequency.setValueAtTime(P.thump * pj, when); o.frequency.exponentialRampToValueAtTime(P.thump * 0.4, when + P.dur * 0.6);
+      const g = AC.createGain(); g.gain.setValueAtTime(P.thumpG * (0.55 + 0.5 * far + 0.4 * near), when); g.gain.exponentialRampToValueAtTime(0.001, when + P.dur);
+      o.connect(g); g.connect(master); o.start(when); o.stop(when + P.dur + 0.02); }
+    // 3) bright crack (dominant up close)
+    { const s = nz(pj), bp = AC.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = P.crackF * pj; bp.Q.value = 0.8;
+      const g = AC.createGain(); g.gain.setValueAtTime(P.crackG * near, when); g.gain.exponentialRampToValueAtTime(0.001, when + P.dur * 0.5);
+      s.connect(bp); bp.connect(g); g.connect(master); s.start(when); s.stop(when + P.dur * 0.6); }
+    // 4) tail (rolling boom when far)
+    { const s = nz(0.7), lp2 = AC.createBiquadFilter(); lp2.type = 'lowpass'; lp2.frequency.value = 600 + near * 1400;
+      const tailLen = P.tail * (1 + far * 1.8);
+      const g = AC.createGain(); g.gain.setValueAtTime(P.tailG * (0.45 + far), when + 0.01); g.gain.exponentialRampToValueAtTime(0.001, when + tailLen);
+      s.connect(lp2); lp2.connect(g); g.connect(master); s.start(when); s.stop(when + tailLen + 0.02); }
+    // 5) mechanical bolt
+    if (P.bolt && near > 0.5) { const o = AC.createOscillator(); o.type = 'square'; o.frequency.value = 1800 + Math.random() * 400;
+      const g = AC.createGain(); g.gain.setValueAtTime(0.05 * near, when + 0.03); g.gain.exponentialRampToValueAtTime(0.001, when + 0.06);
+      o.connect(g); g.connect(master); o.start(when + 0.03); o.stop(when + 0.07); }
+  } catch (e) { /* ignore */ }
 }
 function sfx(kind) {
   if (!AC) return;
@@ -947,6 +1008,9 @@ const keys = {};
 let pendingEnter = false;
 let camYaw = 0, camPitch = -0.18, mouseDown = false, locked = false;
 let baseYaw = 0, mouseNorm = { x: 0, y: 0 }, lastMouseT = 0;
+// procedural recoil: each shot kicks the aim up (muzzle climb) and springs back
+let recoilPitch = 0, recoilYaw = 0, muzzleClass = null;
+const RECOIL_KICK = { pistol: 0.011, rifle: 0.013, shotgun: 0.030, sniper: 0.052, mg: 0.015 };
 // pointer lock is unavailable in sandboxed iframes (e.g. the published artifact);
 // when we detect that, the cursor aims and left-click fires directly instead.
 let canLock = true;
@@ -1007,7 +1071,8 @@ function buildInput() {
     run: keys.ShiftLeft || keys.ShiftRight || touch.run, nitro: keys.ShiftLeft || keys.ShiftRight || touch.run,
     fire: ((mouseDown && (locked || !canLock)) || touch.fire) && !menuOpen, enter: pendingEnter ? (pendingEnter = false, true) : false,
     handbrake: keys.Space || touch.up, up: keys.Space || touch.up, down: keys.ControlLeft || keys.KeyC || touch.down,
-    reload: keys.KeyR || touch.reload, bomb: keys.KeyB || touch.reload, camYaw, camPitch
+    reload: keys.KeyR || touch.reload, bomb: keys.KeyB || touch.reload,
+    camYaw: camYaw + recoilYaw, camPitch: clamp(camPitch + recoilPitch, -1.1, 0.7)
   };
 }
 
@@ -1376,7 +1441,8 @@ function showPassed(name, reward, rep) {
 // ---------- events from core ----------
 function handleEvents() {
   for (const e of C.drainEvents()) {
-    if (e.t === 'sfx') sfx(e.k);
+    if (e.t === 'sfx') { if (e.k === 'shot' || e.k === 'eshot') gunSound(e.cls, e.dist); else sfx(e.k); }
+    else if (e.t === 'recoil') { const k = RECOIL_KICK[e.cls] || 0.012; recoilPitch += k; recoilYaw += (Math.random() - 0.5) * k * 0.5; muzzleClass = e.cls; }
     else if (e.t === 'toast') { hud.toast.textContent = e.msg; hud.toast.style.display = 'block'; toastT = e.secs || 3; }
     else if (e.t === 'zone') { hud.zone.textContent = e.name; hud.zone.style.opacity = 1; zoneT = 3; }
     else if (e.t === 'boom') {
@@ -1385,7 +1451,13 @@ function handleEvents() {
       for (let i = 0; i < 6; i++) spawnSprite(e.x + (Math.random() - 0.5) * e.r, e.y + 2 + Math.random() * 3, e.z + (Math.random() - 0.5) * e.r, smokeTex, e.r * 0.6, 1.4, 8);
       shake = Math.min(1.4, shake + e.r / 30);
     }
-    else if (e.t === 'flash') spawnSprite(e.x, e.y, e.z, sparkTex || fireTex, sparkTex ? 2.2 : 1.4, 0.07, 0, sparkTex ? 0xffe6a0 : undefined);
+    else if (e.t === 'flash') {
+      const playerMuzzle = !S.player.veh && Math.hypot(e.x - S.player.x, e.z - S.player.z) < 3;
+      const fc = playerMuzzle ? muzzleClass : null;
+      const size = fc === 'shotgun' ? 3.3 : fc === 'sniper' ? 3.5 : fc === 'mg' ? 2.9 : fc === 'pistol' ? 1.8 : 2.2;
+      const life = fc === 'sniper' ? 0.09 : 0.06;
+      spawnSprite(e.x, e.y, e.z, sparkTex || fireTex, sparkTex ? size : size * 0.6, life, 0, sparkTex ? 0xffe6a0 : undefined);
+    }
     else if (e.t === 'smoke') spawnSprite(e.x, e.y, e.z, smokeTex, 2, 0.7, 4);
     else if (e.t === 'popup') { const d = document.createElement('div'); d.className = 'pop'; d.textContent = e.msg; hud.pops.appendChild(d); setTimeout(() => d.remove(), 1400); }
     else if (e.t === 'shake') shake = Math.min(1.4, shake + e.n / 12);
@@ -1518,6 +1590,9 @@ function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000);
   last = now; elapsed += dt;
   if (!started) return;
+  // spring the recoil offset back toward zero (muzzle-climb recovery)
+  const rk = clamp(13 * dt, 0, 1);
+  recoilPitch += (0 - recoilPitch) * rk; recoilYaw += (0 - recoilYaw) * rk;
   {
     const p2 = S.player;
     if (isTouch) {

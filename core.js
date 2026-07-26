@@ -663,7 +663,7 @@ function updateInfantry(e, dt, weaponDmg) {
     const pitch = Math.atan2((py + 1.2) - (e.y + 1.5), d);
     fireBullet(e.x + Math.cos(e.yaw) * 1, e.y + 1.5, e.z + Math.sin(e.yaw) * 1,
       e.yaw, pitch, false, weaponDmg || 9, 0.03 + d * 0.0004);
-    ev('sfx', { k: 'eshot' });
+    ev('sfx', { k: 'eshot', cls: 'rifle', dist: d });
     e.volley--;
     e.cd = e.volley > 0 ? R(0.12, 0.2) : R(1.0, 2.2);
     if (e.volley <= 0) e.volley = e.elite ? 8 : 5;
@@ -933,7 +933,7 @@ function updateHeliAI(h, dt) {
       const fy = Math.atan2(lz - h.z, lx - h.x);
       const fp = Math.atan2((p.y + 1) - h.y, d2(h.x, h.z, lx, lz));
       fireBullet(h.x, h.y - 1, h.z, fy, fp, false, 10, 0.05);
-      ev('sfx', { k: 'eshot' });
+      ev('sfx', { k: 'eshot', cls: 'mg', dist: dd });
     }
   }
 }
@@ -1128,7 +1128,8 @@ function playerFoot(dt, inp) {
       for (let i = 0; i < n; i++)
         fireBullet(p.x + Math.cos(p.yaw) * 0.8, p.y + 1.5, p.z + Math.sin(p.yaw) * 0.8,
           p.yaw, p.pitch, true, w.dmg, w.spread + (p.moving ? 0.02 : 0));
-      ev('sfx', { k: 'shot' });
+      ev('sfx', { k: 'shot', cls: w.cls, wid, dist: 0 });
+      ev('recoil', { cls: w.cls });
       if (inCity(p.x, p.z)) { scare(p.x, p.z, 45); addWanted(S.wanted ? 0 : 1); if (S.wanted === 0) addWanted(1); }
       if (p.weapons[wid].mag === 0 && p.ammo[w.cls] > 0) { p.reloadT = 1.5; ev('sfx', { k: 'reload' }); }
     }
@@ -1344,7 +1345,7 @@ function playerVehicle(dt, inp) {
         v.gcd = isPlane ? 0.06 : 0.09; // the jet's cannons rip faster
         const pitch = isPlane ? clamp(inp.camPitch, -0.7, 0.3) : clamp(inp.camPitch, -1, 0.3);
         fireBullet(v.x + Math.cos(v.yaw) * 3.2, v.y - (isPlane ? 0.2 : 1), v.z + Math.sin(v.yaw) * 3.2, v.yaw, pitch, true, isPlane ? 26 : 18, isPlane ? 0.014 : 0.03);
-        ev('sfx', { k: 'shot' });
+        ev('sfx', { k: 'shot', cls: isPlane ? 'sniper' : 'mg', dist: 0 });
       }
     } else v.gcd = 0;
     if (armedAir) {
@@ -1352,7 +1353,7 @@ function playerVehicle(dt, inp) {
       if (inp.bomb && v.bcd <= 0) {
         v.bcd = 0.6;
         S.bombs.push({ x: v.x, y: v.y - 1.2, z: v.z, dx: Math.cos(v.yaw) * v.spd, dz: Math.sin(v.yaw) * v.spd, vy: -1.5, ttl: 9, friendly: true });
-        ev('sfx', { k: 'shot' });
+        ev('sfx', { k: 'reload' });
       }
     }
   }

@@ -145,4 +145,11 @@ combatants — soldiers, tanks, gunships — plus classic GTA chaos.
   under acceleration, bob over the road, and the camera FOV widens with speed. On-foot movement
   accelerates and decelerates smoothly instead of snapping.
 - **Visible loot** — downed enemies drop spinning gold coins (CC0 Kenney); muzzle flashes use a
-  real spark sprite.
+  real spark sprite, sized per weapon class.
+- **Layered gunfire audio** — every shot is synthesized live in Web Audio (no sound files): a
+  transient click, a low body thump, a bright bandpass crack, a noise tail and a mechanical bolt,
+  with round-robin pitch jitter so automatic fire never sounds looped. Each weapon class (pistol,
+  rifle, shotgun, sniper, MG) has its own voice, and distant fire is muffled, boomy and delayed by
+  the speed of sound. Firing kicks the aim up (procedural recoil / muzzle climb) and springs back.
+- **AgX cinematic grade** — an AgX filmic tone-map over soft (PCF) shadows for richer highlights
+  and a less harsh night look.
