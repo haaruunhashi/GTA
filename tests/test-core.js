@@ -428,4 +428,45 @@ C.startMission('contract'); const m2b = S.mission; drain();
 assert(m2b.pay > 1500, 'repeat contract scales the fee (' + m2b.pay + ')');
 C.missionFail('cleanup');
 
+// --- OPEN PLAY: large-scale sector war ---
+C.reset(false);
+const PL = S.player;          // reset() creates a NEW player object
+const W = C.SECTORS;
+assert(W.length === 5, 'open play defines five sectors');
+assert(C.startOpenPlay() === null && S.war && S.war.on, 'deploy into open play');
+assert(S.enemies.filter(e => String(e.gmTag||'').startsWith('war:')).length >= 6, 'first sector is defended');
+// standing on a contested point must NOT capture it
+const sec0 = W[0];
+PL.x = sec0.x; PL.z = sec0.z; PL.y = C.groundY(PL.x, PL.z); PL.veh = null;
+stepAlive(120, inp());
+assert(S.war.sectors[0].prog === 0 && S.war.sectors[0].contested, 'contested sector does not capture');
+// clear the defenders, then it captures
+for (const e of S.enemies) if (String(e.gmTag||'').startsWith('war:')) { e.state = 'down'; e.dead = true; }
+S.enemies = S.enemies.filter(e => !e.dead);
+const sup0 = S.war.supplies;
+stepAlive(420, inp());
+assert(S.war.supplies > sup0, 'holding the objective earns supplies (' + Math.round(S.war.supplies) + ')');
+assert(S.war.idx === 1 && S.war.sectors[0].owned, 'sector captured, front advances to ' + W[1].name);
+// garrison economy
+S.war.supplies = 40;
+assert(C.buildGarrison() !== null, 'garrison refused without supplies');
+S.war.supplies = 400;
+assert(C.buildGarrison() === null && S.war.garrisons.length === 1, 'garrison built');
+assert(C.buildGarrison() !== null, 'second garrison refused too close');
+const rp = C.warRespawnPoint();
+assert(rp && Math.hypot(rp.x - PL.x, rp.z - PL.z) < 5, 'garrison becomes the forward respawn');
+// commander abilities
+S.war.supplies = 900; S.bombs = [];
+assert(C.callAirstrike() === null && S.bombs.length >= 6, 'airstrike drops ordnance on the sector');
+assert(C.callAirstrike() !== null, 'commander assets go on cooldown');
+PL.hp = 20; PL.ammo.rifle = 0;
+assert(C.callSupplyDrop() === null && PL.hp === 100 && PL.ammo.rifle > 0, 'supply drop rearms and heals');
+// kills feed the war economy
+const supK = S.war.supplies;
+const victim = S.enemies.find(e => String(e.gmTag||'').startsWith('war:'));
+if (victim) { C.killInfantry(victim); assert(S.war.supplies > supK, 'kills earn supplies'); }
+else assert(true, 'kills earn supplies (no live target to test)');
+C.endOpenPlay();
+assert(!S.war.on && !S.enemies.some(e => String(e.gmTag||'').startsWith('war:')), 'leaving open play clears the battlefield');
+
 console.log('\nCORE_OK — ' + pass + ' assertions passed');

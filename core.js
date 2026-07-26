@@ -347,6 +347,7 @@ const S = {
   pickups: [], wanted: 0, evadeT: 0, time: 0, rentT: 0,
   mission: null,           // active mission object
   done: {},                // mission id -> true
+  war: null,               // OPEN PLAY: large-scale sector war (see openplay section)
   events: []               // renderer/sfx queue
 };
 C.S = S;
@@ -410,7 +411,7 @@ function reset(keepProgress) {
   }
   S.cars = []; S.peds = []; S.cops = []; S.footCops = []; S.soldiers = [];
   S.enemies = []; S.tanks = []; S.helis = []; S.bullets = []; S.rockets = []; S.shellsList = []; S.bombs = [];
-  S.pickups = []; S.wanted = 0; S.evadeT = 0; S.mission = null; S.state = 'play';
+  S.pickups = []; S.wanted = 0; S.evadeT = 0; S.mission = null; S.state = 'play'; S.war = null;
   // starter supercar + owned garage vehicles at spawn
   S.cars.push(mkCar(1505, 2036, Math.PI / 2, 'free', 'super'));
   let off = 0;
@@ -588,6 +589,9 @@ function killInfantry(e) {
   if (e.kind === 'soldier' && !e.gmTag) addWanted(1); // killing the military is noticed
   if (S.mission && S.mission.def.onKill) S.mission.def.onKill(e);
   if (S.mission && S.mission.mark === e) S.mission.killed = true;
+  if (S.war && S.war.on && e.gmTag && String(e.gmTag).startsWith('war:')) {
+    S.war.kills++; S.war.supplies = Math.min(999, S.war.supplies + C.WAR_CFG.killSupply);
+  }
   ev('sfx', { k: 'punch' });
 }
 C.killInfantry = killInfantry;
@@ -2123,6 +2127,168 @@ defMission('contract', {
   outro: [['THE BROKER', 'Another name off the list. There is always another name.']]
 });
 
+// ---------- OPEN PLAY: large-scale sector war ----------
+// Original implementation of a front-line capture mode: sequential sectors, a
+// supply economy, buildable garrisons that move your spawn up, and commander
+// abilities. Mechanics only — no third-party code or assets.
+const SECTORS = [
+  { id: 's1', name: 'RIVER CROSSING', x: 3250, z: 1250, r: 110 },
+  { id: 's2', name: 'RUBBER PLANTATION', x: 3650, z: 2050, r: 115 },
+  { id: 's3', name: 'HILL 88', x: 4050, z: 1500, r: 110 },
+  { id: 's4', name: 'THE VILLAGE', x: 4500, z: 2400, r: 120 },
+  { id: 's5', name: 'FIREBASE RIDGE', x: 4950, z: 1650, r: 125 }
+];
+C.SECTORS = SECTORS;
+const WAR_CFG = {
+  capRate: 0.16,          // capture progress per second, alone and uncontested
+  decayRate: 0.10,        // progress bleeds back while hostiles hold the point
+  garrisonCost: 150,
+  airstrikeCost: 250,
+  supplyDropCost: 120,
+  supplyRate: 3.5,        // supplies per second while you hold ground
+  killSupply: 8,
+  garrisonRadius: 45,
+  maxGarrisons: 3
+};
+C.WAR_CFG = WAR_CFG;
+
+function warSpawnDefenders(sec, n) {
+  for (let i = 0; i < n; i++) {
+    const a = R(0, TAU), d = R(25, sec.r * 0.85);
+    const e = mkSoldier(sec.x + Math.cos(a) * d, sec.z + Math.sin(a) * d, Math.random() < 0.25);
+    e.kind = 'hostile'; e.gmTag = 'war:' + sec.id;
+    S.enemies.push(e);
+  }
+}
+
+C.startOpenPlay = function () {
+  if (S.war && S.war.on) return 'already deployed';
+  S.war = {
+    on: true, t: 0, supplies: 200, garrisons: [], kills: 0,
+    idx: 0,                              // the sector currently on the front line
+    sectors: SECTORS.map((s, i) => ({ id: s.id, owned: i < 0, prog: 0, contested: false })),
+    cooldown: 0, done: false
+  };
+  const first = SECTORS[0];
+  warSpawnDefenders(first, 6);
+  ev('cutscene', { lines: [
+    'OPEN PLAY — SECTOR WAR',
+    'Five sectors. Take them in order; the front only moves forward.',
+    'Hold ground to earn supplies. Build garrisons to push your spawn up.',
+    'Call an airstrike when it gets thick. Lose your foothold and you start the sector again.'
+  ] });
+  toast('OPEN PLAY: capture ' + first.name, 5);
+  return null;
+};
+C.endOpenPlay = function () {
+  if (!S.war) return;
+  S.enemies = S.enemies.filter(e => !(e.gmTag && String(e.gmTag).startsWith('war:')));
+  S.war.on = false;
+};
+/** Build a garrison at the player: a forward respawn that also feeds supplies. */
+C.buildGarrison = function () {
+  const w = S.war, p = S.player;
+  if (!w || !w.on) return 'not deployed';
+  if (w.supplies < WAR_CFG.garrisonCost) return 'not enough supplies';
+  if (w.garrisons.length >= WAR_CFG.maxGarrisons) return 'garrison limit reached';
+  for (const g of w.garrisons) if (d2(g.x, g.z, p.x, p.z) < 90) return 'too close to another garrison';
+  w.supplies -= WAR_CFG.garrisonCost;
+  w.garrisons.push({ x: p.x, z: p.z, y: groundY(p.x, p.z), hp: 100 });
+  toast('GARRISON BUILT — you respawn here now.', 3.5);
+  ev('sfx', { k: 'win' });
+  return null;
+};
+C.callAirstrike = function () {
+  const w = S.war;
+  if (!w || !w.on) return 'not deployed';
+  if (w.supplies < WAR_CFG.airstrikeCost) return 'not enough supplies';
+  if (w.cooldown > 0) return 'commander assets rearming';
+  const sec = SECTORS[w.idx];
+  if (!sec) return 'no target';
+  w.supplies -= WAR_CFG.airstrikeCost; w.cooldown = 25;
+  // walk a line of bombs across the contested sector
+  for (let i = 0; i < 6; i++) {
+    const bx = sec.x + R(-sec.r * 0.7, sec.r * 0.7), bz = sec.z + R(-sec.r * 0.7, sec.r * 0.7);
+    S.bombs.push({ x: bx, y: groundY(bx, bz) + 220 + i * 12, z: bz, dx: 0, dz: 0, vy: -6, ttl: 9, friendly: true });
+  }
+  toast('AIRSTRIKE INBOUND — ' + sec.name, 3);
+  return null;
+};
+C.callSupplyDrop = function () {
+  const w = S.war, p = S.player;
+  if (!w || !w.on) return 'not deployed';
+  if (w.supplies < WAR_CFG.supplyDropCost) return 'not enough supplies';
+  w.supplies -= WAR_CFG.supplyDropCost;
+  p.hp = 100; p.armor = 100;
+  p.ammo.rifle += 120; p.ammo.mg += 200; p.ammo.rocket += 2;
+  for (const id in p.weapons) if (p.weapons[id].mag !== undefined && WEAPONS[id].mag) p.weapons[id].mag = WEAPONS[id].mag;
+  toast('SUPPLY DROP — rearmed and patched up.', 3);
+  ev('sfx', { k: 'cash' });
+  return null;
+};
+C.warRespawnPoint = function () {
+  const w = S.war;
+  if (!w || !w.on || !w.garrisons.length) return null;
+  const g = w.garrisons[w.garrisons.length - 1];
+  return { x: g.x, z: g.z };
+};
+
+function updateOpenPlay(dt) {
+  const w = S.war, p = S.player;
+  if (!w || !w.on || w.done) return;
+  w.t += dt;
+  if (w.cooldown > 0) w.cooldown -= dt;
+  const sec = SECTORS[w.idx];
+  if (!sec) return;
+  const st = w.sectors[w.idx];
+  const inSector = d2(p.x, p.z, sec.x, sec.z) < sec.r;
+  // hostiles still alive inside the sector contest it
+  let hostiles = 0;
+  for (const e of S.enemies) {
+    if (e.dead || e.state === 'down') continue;
+    if (d2(e.x, e.z, sec.x, sec.z) < sec.r) hostiles++;
+  }
+  st.contested = inSector && hostiles > 0;
+  if (inSector && hostiles === 0) {
+    st.prog = clamp(st.prog + WAR_CFG.capRate * dt, 0, 1);
+  } else if (!inSector && st.prog > 0 && st.prog < 1) {
+    st.prog = clamp(st.prog - WAR_CFG.decayRate * dt, 0, 1);
+  }
+  // supplies accrue while you are on the objective, faster with garrisons up
+  if (inSector) w.supplies += (WAR_CFG.supplyRate + w.garrisons.length * 1.2) * dt;
+  if (w.supplies > 999) w.supplies = 999;
+  // sector taken -> advance the front
+  if (st.prog >= 1 && !st.owned) {
+    st.owned = true;
+    S.player.rep += 30;
+    S.player.money += 1200;
+    ev('popup', { msg: '+$1200' });
+    ev('sfx', { k: 'win' });
+    w.idx++;
+    if (w.idx >= SECTORS.length) {
+      w.done = true; w.on = false;
+      S.player.money += 15000; S.player.rep += 120;
+      ev('passed', { name: 'OPEN PLAY — SECTOR WAR', reward: 15000, rep: 120 });
+      toast('ALL SECTORS TAKEN. The valley is yours.', 6);
+      return;
+    }
+    const next = SECTORS[w.idx];
+    toast('SECTOR TAKEN — push to ' + next.name, 5);
+    warSpawnDefenders(next, 6 + w.idx * 2);   // each sector is defended harder
+  }
+  // keep the current sector garrisoned by the enemy so the front stays alive
+  const tag = 'war:' + sec.id;
+  const alive = S.enemies.filter(e => e.gmTag === tag && !e.dead && e.state !== 'down').length;
+  const want = 4 + w.idx;
+  if (alive < want && d2(p.x, p.z, sec.x, sec.z) < 700) {
+    const a = R(0, TAU), d = sec.r * R(0.9, 1.25);
+    const e = mkSoldier(sec.x + Math.cos(a) * d, sec.z + Math.sin(a) * d, Math.random() < 0.2);
+    e.kind = 'hostile'; e.gmTag = tag;
+    if (d2(e.x, e.z, p.x, p.z) > 45) S.enemies.push(e);
+  }
+}
+C.updateOpenPlay = updateOpenPlay;
+
 // ---------- ambient spawning ----------
 function spawnAmbient() {
   const p = S.player;
@@ -2233,6 +2399,7 @@ C.step = function (dt, inp) {
       if (d2(p.x, p.z, def.marker.x, def.marker.z) < 7) { startMission(id); break; }
     }
   } else S.mission.def.update(S.mission, dt);
+  updateOpenPlay(dt);
   // rent from properties
   S.rentT += dt;
   if (S.rentT > 60) {

@@ -1053,6 +1053,11 @@ window.addEventListener('keydown', e => {
   audioInit();
   if (e.code === 'KeyE') pendingEnter = true;
   if (e.code === 'KeyF') tryInteract();
+  // OPEN PLAY commander controls
+  if (e.code === 'KeyG') { const r = C.buildGarrison(); if (r) toast2(r); }
+  if (e.code === 'KeyH') { const r = C.callAirstrike(); if (r) toast2(r); }
+  if (e.code === 'KeyJ') { const r = C.callSupplyDrop(); if (r) toast2(r); }
+  if (e.code === 'KeyO') { const r = C.startOpenPlay(); if (r) toast2(r); }
   if (e.code === 'Escape') closeMenu();
   const num = parseInt(e.code.replace('Digit', ''), 10);
   if (num >= 1 && num <= 9) {
@@ -1265,6 +1270,20 @@ function drawHUD(dt) {
   hud.crosshair.style.display = (!p.veh || p.veh.kind === 'tank' || p.veh.kind === 'heli') && (locked || isTouch || !canLock) ? 'block' : 'none';
   hud.lock.textContent = p.lockTgt ? (p.lockT >= 1 ? 'LOCKED' : 'locking…') : '';
   hud.lock.style.color = p.lockT >= 1 ? '#ff5a5a' : '#ffd23f';
+  // OPEN PLAY war banner (takes the slot when no scripted mission is running)
+  const war = S.war;
+  if (war && war.on && !S.mission) {
+    const sec = C.SECTORS[war.idx];
+    const st = war.sectors[war.idx];
+    if (sec && st) {
+      hud.banner.textContent = 'OPEN PLAY — ' + sec.name +
+        ' ' + Math.round(st.prog * 100) + '%' + (st.contested ? ' [CONTESTED]' : '') +
+        ' · SUPPLIES ' + Math.round(war.supplies) +
+        ' · [G] garrison  [H] airstrike  [J] supply';
+      hud.banner.style.display = 'block';
+      hud.banner.style.color = st.contested ? '#ff8a5a' : '#ffd23f';
+    }
+  }
   // mission banner
   const m = S.mission;
   if (m) {

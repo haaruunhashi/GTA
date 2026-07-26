@@ -104,6 +104,27 @@ release), the right side is **free-look** to aim, and touch buttons —
 **▲/▼** (handbrake & heli up/down), and **WPN** (weapon wheel). The minimap moves to the
 bottom-right so it stays clear of your thumbs.
 
+## OPEN PLAY — large-scale sector war
+
+A front-line capture mode across the Outfield and Sierra, in the spirit of squad-based
+war shooters. **Press `O`** anywhere to deploy.
+
+- **Five sectors, taken in order** — RIVER CROSSING → RUBBER PLANTATION → HILL 88 →
+  THE VILLAGE → FIREBASE RIDGE. Standing on an objective only captures it once the
+  defenders there are dead; while hostiles hold it the point is **CONTESTED** and your
+  progress stalls. Walk away mid-capture and the progress bleeds back.
+- **Supply economy** — supplies tick up while you hold the objective (faster per garrison)
+  and every kill on the front pays out.
+- **Garrisons** (`G`, 150) — build a forward post; it becomes your respawn and boosts
+  supply income. Max three, and they can't be stacked on top of each other.
+- **Commander abilities** — **airstrike** (`H`, 250) walks a line of bombs across the
+  contested sector, on a cooldown; **supply drop** (`J`, 120) heals, re-armors and
+  refills every magazine.
+- Each sector is defended harder than the last, and the enemy reinforces the front while
+  you're near it. Take all five for $15,000 and 120 rep.
+
+*Mechanics are an original implementation — no third-party game code or assets.*
+
 ## Design constraints
 
 No music (procedural SFX only), no female characters (every inhabitant is the same blank-faced
