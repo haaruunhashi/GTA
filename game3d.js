@@ -658,8 +658,9 @@ function buildPlane(cls) {
 // ---------- AI-generated GLB assets (via Higgsfield / Meshy) ----------
 const MODELS = {};
 const MODEL_CFG = {
-  sports: { length: 4.4, rotY: Math.PI }, sedan: { length: 4.5, rotY: Math.PI }, heli: { length: 9.5, rotY: Math.PI },
-  tank: { length: 7.2, rotY: Math.PI }, man: { height: 1.8 }
+  heli: { length: 9.5, rotY: Math.PI },
+  tank: { length: 7.2, rotY: Math.PI }, man: { height: 1.8 },
+  super: { length: 4.55, rotY: 0, pbr: true } // AI-generated detailed supercar (Higgsfield/Tripo), keeps its PBR materials
 };
 function normalizeModel(root, cfg) {
   // transforms live on wrapper groups the animation mixer can never overwrite
@@ -697,6 +698,7 @@ function normalizeModel(root, cfg) {
     if (o.isMesh) {
       o.castShadow = true;
       o.frustumCulled = false;
+      if (cfg.pbr) return; // keep the model's own PBR materials (glossy paint reflects scene.environment)
       const old2 = o.material;
       if (old2) {
         const map = old2.map || null;
@@ -808,8 +810,8 @@ function meshFor(e) {
     m = cloneModel('man', 0x90a0c8);
     if (!m) { m = buildMan(0x2e3a5e, 0x1d2027, { hat: 0x1d2440 }); m.userData.gun.visible = true; }
   } else if (e.kind === 'car') {
-    // all cars are procedural now — real silhouette + wheels that spin and steer
-    m = buildCar(e.type === 'cop' ? 'cop' : e.cls, e.colorSeed);
+    if (e.cls === 'super' && e.type !== 'cop' && MODELS.super) m = cloneModel('super'); // detailed AI supercar mesh
+    else m = buildCar(e.type === 'cop' ? 'cop' : e.cls, e.colorSeed); // procedural silhouette + articulated wheels
   } else if (e.kind === 'tank') { m = cloneModel('tank') || buildTank(); if (!m.userData.turret) m.userData.turret = new T3.Group(); }
   else if (e.kind === 'heli') { m = cloneModel('heli'); if (m) { const r = buildHeli(e.cls).userData.rotor; r.position.set(0, MODELS.heli ? 3.1 : 2.75, 0); m.add(r); m.userData.rotor = r; } else m = buildHeli(e.cls); }
   else if (e.kind === 'plane') m = buildPlane(e.cls);

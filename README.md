@@ -145,7 +145,11 @@ combatants — soldiers, tanks, gunships — plus classic GTA chaos.
 - **Vehicle handling feel** — cars lean into turns (suspension roll), dive on braking and squat
   under acceleration, bob over the road, and the camera FOV widens with speed. On-foot movement
   accelerates and decelerates smoothly instead of snapping.
-- **Real cars with live wheels** — every car is built from a proper multi-part silhouette (low
+- **The Supercar is a real 3D model** — a detailed mid-engine exotic generated with Higgsfield's
+  Tripo H3.1 image-to-3D (from an AI studio render), decimated to ~37k tris and 1-megapixel
+  textures, keeping its own PBR paint so it reflects the scene. It replaces the procedural box
+  for the hero car. (Every other car stays procedural with articulated wheels.)
+- **Real cars with live wheels** — every other car is built from a proper multi-part silhouette (low
   chassis, shoulder line, set-back glasshouse, roof, bumpers, grille, lights) rather than a single
   box, and each has four **articulated wheels that spin with speed and steer at the front** (rear
   wheels stay fixed). Class variants: sedan, taxi (roof sign), van, pickup (bed), muscle/sports
