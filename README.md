@@ -144,6 +144,11 @@ combatants — soldiers, tanks, gunships — plus classic GTA chaos.
 - **Vehicle handling feel** — cars lean into turns (suspension roll), dive on braking and squat
   under acceleration, bob over the road, and the camera FOV widens with speed. On-foot movement
   accelerates and decelerates smoothly instead of snapping.
+- **Real cars with live wheels** — every car is built from a proper multi-part silhouette (low
+  chassis, shoulder line, set-back glasshouse, roof, bumpers, grille, lights) rather than a single
+  box, and each has four **articulated wheels that spin with speed and steer at the front** (rear
+  wheels stay fixed). Class variants: sedan, taxi (roof sign), van, pickup (bed), muscle/sports
+  (spoiler), the wedge Supercar (wing + splitter), and the police cruiser (light bar).
 - **Visible loot** — downed enemies drop spinning gold coins (CC0 Kenney); muzzle flashes use a
   real spark sprite, sized per weapon class.
 - **Layered gunfire audio** — every shot is synthesized live in Web Audio (no sound files): a

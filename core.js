@@ -1224,6 +1224,8 @@ function playerVehicle(dt, inp) {
     const prevSpd = v.spd;
     const turnRate = steer * (inp.handbrake ? 2.6 : isTank ? 0.9 : 1.8) * dt * clamp(v.spd / (isTank ? 4 : 12), -1, 1);
     v.yaw += turnRate;
+    v.steer = (v.steer || 0) + (steer - (v.steer || 0)) * clamp(10 * dt, 0, 1); // for the renderer's front wheels
+    v.wheelSpin = (v.wheelSpin || 0) + v.spd * dt;                              // rolled distance
     v.braking = inp.back && v.spd > 3;
     // body dynamics (for the renderer): roll leans into turns, pitch dives on brake / squats on accel, plus a bob
     if (!isTank) {

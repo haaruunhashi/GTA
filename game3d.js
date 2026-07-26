@@ -480,61 +480,73 @@ function animMan(g, phase, moving, aiming, rate) {
 // ---------- vehicle models ----------
 const CAR_COLORS = [0x7d3b3b, 0x3b5a7d, 0x6e6a52, 0x42425a, 0x7a6a3f, 0x513f5e, 0x3f5e51, 0x8a8578];
 const SUPER_COLORS = [0xd11f2a, 0xf0a000, 0x1560d0, 0x18a558, 0xe8e8ea, 0x1a1c22];
+const TIRE_MAT = new T3.MeshLambertMaterial({ color: 0x0d0e12 });
+const HUB_MAT = new T3.MeshLambertMaterial({ color: 0xaab0ba });
+const SPOKE_MAT = new T3.MeshLambertMaterial({ color: 0x6b7078 });
+const CHROME_MAT = new T3.MeshLambertMaterial({ color: 0x1a1c22 });
+const HEAD_MAT = new T3.MeshBasicMaterial({ color: 0xffe9a3 });
+function makeWheel(radius) {
+  const steerG = new T3.Group();      // steers (front wheels turn around Y)
+  const spinG = new T3.Group();       // rolls (around the axle, Z)
+  steerG.add(spinG);
+  const tire = new T3.Mesh(new T3.CylinderGeometry(radius, radius, 0.30, 18), TIRE_MAT);
+  tire.rotation.x = Math.PI / 2; spinG.add(tire);
+  const hub = new T3.Mesh(new T3.CylinderGeometry(radius * 0.52, radius * 0.52, 0.32, 12), HUB_MAT);
+  hub.rotation.x = Math.PI / 2; spinG.add(hub);
+  for (let k = 0; k < 4; k++) { const spoke = new T3.Mesh(new T3.BoxGeometry(radius * 1.7, 0.06, 0.07), SPOKE_MAT); spoke.rotation.z = k * Math.PI / 4; spinG.add(spoke); }
+  return { steerG, spinG };
+}
 function buildCar(cls, colorSeed) {
   const g = new T3.Group();
-  const dims = { sedan: [4.4, 1.15, 2], taxi: [4.4, 1.15, 2], van: [5, 1.9, 2.2], pickup: [4.8, 1.2, 2.1], muscle: [4.7, 1.1, 2.05], sports: [4.4, 0.92, 2], super: [4.7, 0.78, 2.06], cop: [4.5, 1.15, 2], apc: [5.4, 1.8, 2.6] }[cls] || [4.4, 1.15, 2];
-  const col = cls === 'cop' ? 0xe8e8ea : cls === 'taxi' ? 0xd8b23a : cls === 'super' ? SUPER_COLORS[(colorSeed * SUPER_COLORS.length) | 0] : CAR_COLORS[(colorSeed * CAR_COLORS.length) | 0];
+  const D = { sedan: [4.4, 1.2, 2], taxi: [4.4, 1.2, 2], van: [5, 1.9, 2.25], pickup: [4.9, 1.3, 2.15], muscle: [4.8, 1.15, 2.1], sports: [4.4, 1.0, 2.02], super: [4.7, 0.86, 2.06], cop: [4.5, 1.2, 2.05], apc: [5.4, 1.8, 2.6] }[cls] || [4.4, 1.2, 2];
+  const len = D[0], bh = D[1], wid = D[2];
+  const col = cls === 'cop' ? 0x20242e : cls === 'taxi' ? 0xe8b62a : cls === 'super' ? SUPER_COLORS[(colorSeed * SUPER_COLORS.length) | 0] : CAR_COLORS[(colorSeed * CAR_COLORS.length) | 0];
   const bodyMat = new T3.MeshLambertMaterial({ color: col });
-  const body = new T3.Mesh(new T3.BoxGeometry(dims[0], dims[1], dims[2]), bodyMat);
-  body.position.y = 0.75; g.add(body);
-  const cabin = new T3.Mesh(new T3.BoxGeometry(dims[0] * 0.5, 0.72, dims[2] * 0.86), M.glassDark);
-  cabin.position.set(-dims[0] * 0.06, 0.75 + dims[1] / 2 + 0.3, 0); g.add(cabin);
-  const wg = new T3.CylinderGeometry(0.42, 0.42, 0.3, 10);
-  wg.rotateX(Math.PI / 2);
-  const wm = new T3.MeshLambertMaterial({ color: 0x14161c });
-  for (const [wx, wz] of [[dims[0] * 0.33, dims[2] / 2], [dims[0] * 0.33, -dims[2] / 2], [-dims[0] * 0.33, dims[2] / 2], [-dims[0] * 0.33, -dims[2] / 2]]) {
-    const w = new T3.Mesh(wg, wm); w.position.set(wx, 0.42, wz); g.add(w);
+  const glass = M.glassDark;
+  const isTall = cls === 'van';
+  const groundClr = 0.36;
+  // --- body: a low chassis + a shoulder + a set-back glasshouse (reads as a real silhouette, not one box) ---
+  const chassisH = bh * 0.5;
+  const chassis = new T3.Mesh(new T3.BoxGeometry(len, chassisH, wid), bodyMat);
+  chassis.position.y = groundClr + chassisH / 2; g.add(chassis);
+  const shoulderH = bh * 0.42;
+  const shoulder = new T3.Mesh(new T3.BoxGeometry(len * 0.97, shoulderH, wid * 0.9), bodyMat);
+  shoulder.position.y = chassis.position.y + chassisH / 2 + shoulderH / 2 - 0.02; g.add(shoulder);
+  const cabLen = isTall ? len * 0.62 : len * 0.44;
+  const cabH = isTall ? bh * 0.7 : 0.52;
+  const cabY = shoulder.position.y + shoulderH / 2 + cabH / 2 - 0.02;
+  const cabin = new T3.Mesh(new T3.BoxGeometry(cabLen, cabH, wid * 0.8), glass);
+  cabin.position.set(cls === 'super' ? len * 0.04 : -len * 0.05, cabY, 0); g.add(cabin);
+  const roof = new T3.Mesh(new T3.BoxGeometry(cabLen * 0.92, 0.09, wid * 0.78), bodyMat);
+  roof.position.set(cabin.position.x, cabY + cabH / 2, 0); g.add(roof);
+  // bumpers + grille
+  for (const sx of [1, -1]) { const b = new T3.Mesh(new T3.BoxGeometry(0.22, 0.3, wid * 0.98), CHROME_MAT); b.position.set(sx * (len / 2 - 0.03), groundClr + 0.22, 0); g.add(b); }
+  const grille = new T3.Mesh(new T3.BoxGeometry(0.06, 0.26, wid * 0.62), CHROME_MAT); grille.position.set(len / 2 - 0.01, groundClr + 0.34, 0); g.add(grille);
+  // lights
+  for (const s of [-1, 1]) { const hl = new T3.Mesh(new T3.BoxGeometry(0.07, 0.15, 0.36), HEAD_MAT); hl.position.set(len / 2 - 0.02, groundClr + 0.42, s * wid * 0.31); g.add(hl); }
+  const tls = [];
+  for (const s of [-1, 1]) { const tl = new T3.Mesh(new T3.BoxGeometry(0.06, 0.15, 0.36), new T3.MeshBasicMaterial({ color: 0xc03030 })); tl.position.set(-len / 2 + 0.02, groundClr + 0.44, s * wid * 0.31); g.add(tl); tls.push(tl); }
+  // --- articulated wheels ---
+  const wr = (cls === 'van' || cls === 'pickup') ? 0.47 : (cls === 'super' || cls === 'sports') ? 0.41 : 0.44;
+  const wheels = [];
+  const axleX = len * 0.33, axleZ = wid / 2 - 0.02;
+  for (const [wx, front] of [[axleX, true], [-axleX, false]]) for (const s of [-1, 1]) {
+    const w = makeWheel(wr); w.steerG.position.set(wx, wr, s * axleZ); w.front = front;
+    g.add(w.steerG); wheels.push(w);
   }
-  const hl = new T3.Mesh(new T3.BoxGeometry(0.1, 0.16, 0.4), new T3.MeshBasicMaterial({ color: 0xffe9a3 }));
-  hl.position.set(dims[0] / 2, 0.8, dims[2] * 0.3); g.add(hl);
-  const hl2 = hl.clone(); hl2.position.z = -dims[2] * 0.3; g.add(hl2);
-  const tl = new T3.Mesh(new T3.BoxGeometry(0.1, 0.16, 0.4), new T3.MeshBasicMaterial({ color: 0xc03030 }));
-  tl.position.set(-dims[0] / 2, 0.8, dims[2] * 0.3); g.add(tl);
-  const tl2 = tl.clone(); tl2.position.z = -dims[2] * 0.3; g.add(tl2);
-  if (cls === 'cop') {
-    const bar = new T3.Mesh(new T3.BoxGeometry(0.5, 0.22, 1.4), new T3.MeshBasicMaterial({ color: 0xff4a4a }));
-    bar.position.set(-0.2, 1.75, 0); g.add(bar);
-    g.userData.lightbar = bar;
-  }
-  if (cls === 'taxi') {
-    const sign = new T3.Mesh(new T3.BoxGeometry(0.7, 0.3, 0.5), new T3.MeshBasicMaterial({ color: 0xf2ede2 }));
-    sign.position.set(-0.2, 1.75, 0); g.add(sign);
-  }
-  if (cls === 'sports') {
-    const sp = new T3.Mesh(new T3.BoxGeometry(0.2, 0.3, 1.8), bodyMat);
-    sp.position.set(-dims[0] / 2 + 0.2, 1.35, 0); g.add(sp);
-  }
+  g.userData.wheels = wheels; g.userData.wheelR = wr; g.userData.tl = tls;
+  // --- class extras ---
+  if (cls === 'cop') { const bar = new T3.Mesh(new T3.BoxGeometry(0.5, 0.2, 1.2), new T3.MeshBasicMaterial({ color: 0xff4a4a })); bar.position.set(-0.2, cabY + cabH / 2 + 0.18, 0); g.add(bar); g.userData.lightbar = bar; }
+  if (cls === 'taxi') { const sign = new T3.Mesh(new T3.BoxGeometry(0.6, 0.24, 0.42), new T3.MeshBasicMaterial({ color: 0xf2ede2 })); sign.position.set(-0.2, cabY + cabH / 2 + 0.2, 0); g.add(sign); }
+  if (cls === 'pickup') { chassis.scale.z = 1; const bed = new T3.Mesh(new T3.BoxGeometry(len * 0.42, 0.34, wid * 0.86), bodyMat); bed.position.set(-len * 0.28, shoulder.position.y, 0); g.add(bed); }
+  if (cls === 'sports' || cls === 'muscle') { const sp = new T3.Mesh(new T3.BoxGeometry(0.18, 0.26, wid * 0.85), CHROME_MAT); sp.position.set(-len / 2 + 0.2, shoulder.position.y + shoulderH / 2 + 0.16, 0); g.add(sp); }
   if (cls === 'super') {
-    // flatten the cabin and drop it forward for a mid-engine wedge look
-    cabin.scale.set(1.15, 0.72, 0.94); cabin.position.set(dims[0] * 0.06, 0.75 + dims[1] / 2 + 0.2, 0);
-    // wide rear wing on two struts
-    const wingMat = new T3.MeshLambertMaterial({ color: 0x14161c });
-    const wing = new T3.Mesh(new T3.BoxGeometry(0.6, 0.08, dims[2] + 0.3), wingMat);
-    wing.position.set(-dims[0] / 2 + 0.15, 1.28, 0); g.add(wing);
-    for (const s of [-1, 1]) {
-      const strut = new T3.Mesh(new T3.BoxGeometry(0.16, 0.4, 0.1), wingMat);
-      strut.position.set(-dims[0] / 2 + 0.15, 1.05, s * dims[2] * 0.35); g.add(strut);
-    }
-    // front splitter + rocker skirts
-    const splitter = new T3.Mesh(new T3.BoxGeometry(0.4, 0.08, dims[2] + 0.16), wingMat);
-    splitter.position.set(dims[0] / 2 - 0.1, 0.4, 0); g.add(splitter);
-    for (const s of [-1, 1]) {
-      const skirt = new T3.Mesh(new T3.BoxGeometry(dims[0] * 0.6, 0.16, 0.1), wingMat);
-      skirt.position.set(0, 0.5, s * (dims[2] / 2 + 0.02)); g.add(skirt);
-    }
-    body.position.y = 0.68; // sit lower
+    const wingMat = CHROME_MAT;
+    const wing = new T3.Mesh(new T3.BoxGeometry(0.55, 0.07, wid + 0.28), wingMat); wing.position.set(-len / 2 + 0.2, cabY, 0); g.add(wing);
+    for (const s of [-1, 1]) { const strut = new T3.Mesh(new T3.BoxGeometry(0.14, 0.34, 0.09), wingMat); strut.position.set(-len / 2 + 0.2, cabY - 0.22, s * wid * 0.33); g.add(strut); }
+    const splitter = new T3.Mesh(new T3.BoxGeometry(0.4, 0.07, wid + 0.14), wingMat); splitter.position.set(len / 2 - 0.08, groundClr + 0.06, 0); g.add(splitter);
+    for (const s of [-1, 1]) { const skirt = new T3.Mesh(new T3.BoxGeometry(len * 0.58, 0.14, 0.09), wingMat); skirt.position.set(0, groundClr + 0.12, s * (wid / 2 + 0.01)); g.add(skirt); }
   }
-  g.userData.tl = [tl, tl2];
   return g;
 }
 function buildTank() {
@@ -777,18 +789,9 @@ function meshFor(e) {
   } else if (e.kind === 'footcop') {
     m = cloneModel('man', 0x90a0c8);
     if (!m) { m = buildMan(0x2e3a5e, 0x1d2027, { hat: 0x1d2440 }); m.userData.gun.visible = true; }
-  } else if (e.kind === 'car' && e.cls === 'super') {
-    m = buildCar('super', e.colorSeed); // the wedge supercar is procedural, not a GLB
   } else if (e.kind === 'car') {
-    const key = (e.cls === 'sports' || e.cls === 'muscle') ? 'sports' : 'sedan';
-    const tint = e.type === 'cop' ? 0xffffff : e.cls === 'taxi' ? 0xe8c84a : CAR_TINTS[(e.colorSeed * CAR_TINTS.length) | 0];
-    m = cloneModel(key, tint);
-    if (m && e.type === 'cop') {
-      const bar = new T3.Mesh(new T3.BoxGeometry(0.5, 0.22, 1.4), new T3.MeshBasicMaterial({ color: 0xff4a4a }));
-      bar.position.set(-0.2, 1.9, 0); m.add(bar);
-      m.userData.lightbar = bar;
-    }
-    if (!m) m = buildCar(e.cls, e.colorSeed);
+    // all cars are procedural now — real silhouette + wheels that spin and steer
+    m = buildCar(e.type === 'cop' ? 'cop' : e.cls, e.colorSeed);
   } else if (e.kind === 'tank') { m = cloneModel('tank') || buildTank(); if (!m.userData.turret) m.userData.turret = new T3.Group(); }
   else if (e.kind === 'heli') { m = cloneModel('heli'); if (m) { const r = buildHeli(e.cls).userData.rotor; r.position.set(0, MODELS.heli ? 3.1 : 2.75, 0); m.add(r); m.userData.rotor = r; } else m = buildHeli(e.cls); }
   else if (e.kind === 'plane') m = buildPlane(e.cls);
@@ -1509,6 +1512,19 @@ function applyBodyDynamics(mesh, c) {
   mesh.rotation.x = c.pitch || 0;
   mesh.position.y = c.y + (c.bob || 0);
 }
+function animWheels(mesh, c, dt) {
+  const ws = mesh.userData.wheels; if (!ws) return;
+  const spin = (c.spd || 0) * dt / (mesh.userData.wheelR || 0.44);
+  // steering: use the sim's smoothed steer for the player's car, else infer from turn rate
+  let steer = 0;
+  if (c.steer !== undefined) steer = c.steer * 0.55;
+  else {
+    const ly = mesh.userData._ly;
+    if (ly !== undefined && dt > 0) { let d = c.yaw - ly; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; steer = clamp(d / dt * 0.14, -0.5, 0.5); }
+    mesh.userData._ly = c.yaw;
+  }
+  for (const w of ws) { w.spinG.rotation.z -= spin; if (w.front) w.steerG.rotation.y = steer; }
+}
 
 // ---------- sync all meshes ----------
 function syncScene(dt, t) {
@@ -1518,10 +1534,13 @@ function syncScene(dt, t) {
     live.add(c); const m = syncEntity(c);
     if (m.userData.tl) m.userData.tl.forEach(x => x.material.color.setHex(c.braking ? 0xff2222 : 0xc03030));
     applyBodyDynamics(m, c);
+    animWheels(m, c, dt);
   }
   for (const c of S.cops) {
     live.add(c); const m = syncEntity(c);
     if (m.userData.lightbar) m.userData.lightbar.material.color.setHex(((t * 6 | 0) % 2) ? 0xff4a4a : 0x3f7dff);
+    applyBodyDynamics(m, c);
+    animWheels(m, c, dt);
   }
   for (const tk of S.tanks) { if (tk.dead) continue; live.add(tk); const m = syncEntity(tk); m.userData.turret.rotation.y = -(tk.ta - tk.yaw); }
   for (const h of S.helis) { if (h.dead) continue; live.add(h); const m = syncEntity(h); m.userData.rotor.rotation.y = h.rotor * 2; }
