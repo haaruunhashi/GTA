@@ -58,6 +58,21 @@ moon.shadow.camera.top = 85; moon.shadow.camera.bottom = -85;
 moon.shadow.bias = -0.00015;
 moon.shadow.normalBias = 0.6;
 scene.add(moon); scene.add(moon.target);
+// environment map so PBR surfaces (car paint, glass, chrome, rims) get real reflections
+{
+  const ec = document.createElement('canvas'); ec.width = 256; ec.height = 128;
+  const g = ec.getContext('2d');
+  const grd = g.createLinearGradient(0, 0, 0, 128);
+  grd.addColorStop(0, '#0a0f20'); grd.addColorStop(0.42, '#1c2444'); grd.addColorStop(0.5, '#5b6088');
+  grd.addColorStop(0.56, '#7a5a44'); grd.addColorStop(0.62, '#26304a'); grd.addColorStop(1, '#080a12');
+  g.fillStyle = grd; g.fillRect(0, 0, 256, 128);
+  g.fillStyle = 'rgba(230,238,255,0.95)'; g.beginPath(); g.arc(70, 38, 9, 0, Math.PI * 2); g.fill(); // moon highlight
+  for (let i = 0; i < 60; i++) { g.fillStyle = 'rgba(255,220,150,' + (0.15 + Math.random() * 0.3) + ')'; g.fillRect(Math.random() * 256, 58 + Math.random() * 12, 2, 3); } // city window glints
+  const et = new T3.CanvasTexture(ec); et.mapping = T3.EquirectangularReflectionMapping;
+  const pmrem = new T3.PMREMGenerator(renderer);
+  scene.environment = pmrem.fromEquirectangular(et).texture;
+  et.dispose(); pmrem.dispose();
+}
 
 // ---------- shared materials / textures ----------
 function canvasTex(w, h, fn) {
@@ -156,7 +171,7 @@ const M = {
     const rgeo = new T3.BufferGeometry();
     rgeo.setAttribute('position', new T3.Float32BufferAttribute(pos, 3));
     rgeo.computeVertexNormals();
-    const roadMesh = new T3.Mesh(rgeo, new T3.MeshLambertMaterial({ color: 0x34373e, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }));
+    const roadMesh = new T3.Mesh(rgeo, new T3.MeshStandardMaterial({ color: 0x2f323a, metalness: 0.35, roughness: 0.55, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }));
     roadMesh.position.y = 0.02; roadMesh.receiveShadow = true; scene.add(roadMesh);
     const dashMat = new T3.MeshBasicMaterial({ color: 0xc9b45a, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
     const dashGeo = new T3.PlaneGeometry(2.6, 0.32); dashGeo.rotateX(-Math.PI / 2);
@@ -480,10 +495,11 @@ function animMan(g, phase, moving, aiming, rate) {
 // ---------- vehicle models ----------
 const CAR_COLORS = [0x7d3b3b, 0x3b5a7d, 0x6e6a52, 0x42425a, 0x7a6a3f, 0x513f5e, 0x3f5e51, 0x8a8578];
 const SUPER_COLORS = [0xd11f2a, 0xf0a000, 0x1560d0, 0x18a558, 0xe8e8ea, 0x1a1c22];
-const TIRE_MAT = new T3.MeshLambertMaterial({ color: 0x0d0e12 });
-const HUB_MAT = new T3.MeshLambertMaterial({ color: 0xaab0ba });
-const SPOKE_MAT = new T3.MeshLambertMaterial({ color: 0x6b7078 });
-const CHROME_MAT = new T3.MeshLambertMaterial({ color: 0x1a1c22 });
+const TIRE_MAT = new T3.MeshStandardMaterial({ color: 0x0c0d11, metalness: 0.1, roughness: 0.82 });
+const HUB_MAT = new T3.MeshStandardMaterial({ color: 0xc6ccd6, metalness: 0.95, roughness: 0.24 });   // polished alloy
+const SPOKE_MAT = new T3.MeshStandardMaterial({ color: 0x9aa0a8, metalness: 0.9, roughness: 0.3 });
+const CHROME_MAT = new T3.MeshStandardMaterial({ color: 0x2b2e37, metalness: 0.85, roughness: 0.32 });
+const CAR_GLASS = new T3.MeshStandardMaterial({ color: 0x0b111c, metalness: 0.95, roughness: 0.06 }); // reflective glass
 const HEAD_MAT = new T3.MeshBasicMaterial({ color: 0xffe9a3 });
 function makeWheel(radius) {
   const steerG = new T3.Group();      // steers (front wheels turn around Y)
@@ -501,8 +517,8 @@ function buildCar(cls, colorSeed) {
   const D = { sedan: [4.55, 1.0, 2.0], taxi: [4.55, 1.0, 2.0], van: [5, 1.75, 2.25], pickup: [4.95, 1.05, 2.18], muscle: [4.9, 0.94, 2.16], sports: [4.4, 0.82, 2.08], super: [4.78, 0.66, 2.14], cop: [4.6, 1.0, 2.06], apc: [5.4, 1.8, 2.6] }[cls] || [4.5, 1.0, 2.0];
   const len = D[0], bh = D[1], wid = D[2];
   const col = cls === 'cop' ? 0x20242e : cls === 'taxi' ? 0xe8b62a : cls === 'super' ? SUPER_COLORS[(colorSeed * SUPER_COLORS.length) | 0] : CAR_COLORS[(colorSeed * CAR_COLORS.length) | 0];
-  const bodyMat = new T3.MeshLambertMaterial({ color: col });
-  const glass = M.glassDark;
+  const bodyMat = new T3.MeshStandardMaterial({ color: col, metalness: 0.55, roughness: cls === 'cop' ? 0.42 : 0.3 }); // glossy paint
+  const glass = CAR_GLASS;
   const isTall = cls === 'van';
   const low = cls === 'super' || cls === 'sports';
   const groundClr = 0.30;

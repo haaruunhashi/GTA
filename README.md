@@ -159,3 +159,7 @@ combatants — soldiers, tanks, gunships — plus classic GTA chaos.
   the speed of sound. Firing kicks the aim up (procedural recoil / muzzle climb) and springs back.
 - **AgX cinematic grade** — an AgX filmic tone-map over soft (PCF) shadows for richer highlights
   and a less harsh night look.
+- **PBR reflections** — a procedural environment map (dusk sky + moon + city glints) drives real
+  reflections on the cars: glossy metallic paint, reflective glass, polished alloy rims and chrome
+  trim (PBR `MeshStandard` materials), plus a subtle wet sheen on the streets — instead of the old
+  flat-shaded look.
