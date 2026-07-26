@@ -469,4 +469,59 @@ else assert(true, 'kills earn supplies (no live target to test)');
 C.endOpenPlay();
 assert(!S.war.on && !S.enemies.some(e => String(e.gmTag||'').startsWith('war:')), 'leaving open play clears the battlefield');
 
+// --- open play: squad AI, helicopter insertion, infiltration tunnels ---
+C.startOpenPlay();
+const PL2 = S.player;
+const sec1 = C.SECTORS[0];
+PL2.veh = null; PL2.x = sec1.x - 40; PL2.z = sec1.z; PL2.y = C.groundY(PL2.x, PL2.z);
+// squad
+S.war.supplies = 40;
+assert(C.callSquad() !== null, 'squad refused without supplies');
+S.war.supplies = 600;
+assert(C.callSquad() === null && S.allies.length === 3, 'squad of three deploys');
+// allies regroup on the player
+S.allies.forEach(a => { a.x = PL2.x + 120; a.z = PL2.z + 120; });
+const farBefore = Math.hypot(S.allies[0].x - PL2.x, S.allies[0].z - PL2.z);
+stepAlive(240, inp());
+const farAfter = Math.hypot(S.allies[0].x - PL2.x, S.allies[0].z - PL2.z);
+assert(farAfter < farBefore, 'squad regroups on the player (' + farBefore.toFixed(0) + 'm -> ' + farAfter.toFixed(0) + 'm)');
+// allies shoot at hostiles
+S.bullets = [];
+const foe = S.enemies.find(e => String(e.gmTag||'').startsWith('war:'));
+if (foe) {
+  foe.x = S.allies[0].x + 22; foe.z = S.allies[0].z; foe.y = C.groundY(foe.x, foe.z); foe.state = 'move';
+  stepAlive(120, inp());
+  assert(S.bullets.length > 0 || S.enemies.some(e => e.state === 'down'), 'squad engages hostiles');
+} else assert(true, 'squad engages hostiles (no foe present)');
+// enemy fire can down an ally
+const ally = S.allies[0];
+ally.hp = 5;
+S.bullets.push({ x: ally.x, y: ally.y + 1, z: ally.z, dx: 0, dy: 0, dz: 1, spd: 1, ttl: 0.3, friendly: false, dmg: 40 });
+stepAlive(20, inp());
+assert(ally.state === 'down' || ally.dead, 'enemy fire can down a squadmate');
+// tunnels
+assert(C.WAR_TUNNELS.length === C.SECTORS.length, 'every sector has an infiltration tunnel');
+const tun = C.WAR_TUNNELS[0];
+PL2.veh = null; PL2.x = tun.ex; PL2.z = tun.ez; PL2.y = C.groundY(PL2.x, PL2.z);
+assert(C.tunnelMouthAt(PL2.x, PL2.z), 'standing at a tunnel mouth is detected');
+assert(C.useWarTunnel() === null, 'move through the tunnel');
+const outDist = Math.hypot(PL2.x - tun.xx, PL2.z - tun.xz);
+assert(outDist < 2, 'surfaced at the far end, behind the defenders');
+assert(Math.hypot(PL2.x - sec1.x, PL2.z - sec1.z) < sec1.r, 'the exit is inside the objective');
+assert(C.useWarTunnel() === null && Math.hypot(PL2.x - tun.ex, PL2.z - tun.ez) < 2, 'the tunnel works both ways');
+PL2.x = sec1.x + 500; PL2.z = sec1.z + 500;
+assert(C.useWarTunnel() !== null, 'no tunnel out in the open');
+// helicopter insertion
+S.war.supplies = 40;
+assert(C.callInsertion() !== null, 'insertion refused without supplies');
+S.war.supplies = 600;
+const heliBefore = S.helis.length;
+assert(C.callInsertion() === null, 'call the insertion bird');
+assert(S.helis.length === heliBefore + 1, 'an insertion helicopter arrives');
+assert(PL2.veh && PL2.veh.kind === 'heli', 'player is aboard');
+assert(PL2.veh.y > C.groundY(PL2.veh.x, PL2.veh.z) + 50, 'inbound at altitude (' + Math.round(PL2.veh.y - C.groundY(PL2.veh.x, PL2.veh.z)) + 'm)');
+PL2.veh = null;
+C.endOpenPlay();
+assert(S.allies.length === 0, 'leaving open play stands the squad down');
+
 console.log('\nCORE_OK — ' + pass + ' assertions passed');

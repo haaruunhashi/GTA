@@ -120,6 +120,14 @@ war shooters. **Press `O`** anywhere to deploy.
 - **Commander abilities** — **airstrike** (`H`, 250) walks a line of bombs across the
   contested sector, on a cooldown; **supply drop** (`J`, 120) heals, re-armors and
   refills every magazine.
+- **Squad AI** (`K`, 100) — three riflemen deploy on you. They regroup when you move out,
+  break off to engage hostiles inside ~95 m with real line-of-sight checks, and **can be shot
+  down** by enemy fire (max six alive).
+- **Helicopter insertion** (`L`, 180) — a bird spawns 140 m out at 120 m altitude with you
+  aboard, inbound on the contested sector. Fly it in and bail over the objective.
+- **Infiltration tunnels** (`T`) — every sector has a hidden tunnel: the mouth sits outside
+  the perimeter and surfaces **behind the defenders**, inside the objective. You come up
+  unseen (every hostile loses its lock on you). Works in both directions.
 - Each sector is defended harder than the last, and the enemy reinforces the front while
   you're near it. Take all five for $15,000 and 120 rep.
 

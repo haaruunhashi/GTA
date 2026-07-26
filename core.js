@@ -343,7 +343,7 @@ C.VEH = VEH;
 const S = {
   state: 'play', stateT: 0,
   player: null, cars: [], peds: [], cops: [], footCops: [], soldiers: [],
-  enemies: [], tanks: [], helis: [], bullets: [], rockets: [], shellsList: [], bombs: [],
+  enemies: [], tanks: [], helis: [], bullets: [], rockets: [], shellsList: [], bombs: [], allies: [],
   pickups: [], wanted: 0, evadeT: 0, time: 0, rentT: 0,
   mission: null,           // active mission object
   done: {},                // mission id -> true
@@ -410,7 +410,7 @@ function reset(keepProgress) {
       S.player[k] = prev[k];
   }
   S.cars = []; S.peds = []; S.cops = []; S.footCops = []; S.soldiers = [];
-  S.enemies = []; S.tanks = []; S.helis = []; S.bullets = []; S.rockets = []; S.shellsList = []; S.bombs = [];
+  S.enemies = []; S.tanks = []; S.helis = []; S.bullets = []; S.rockets = []; S.shellsList = []; S.bombs = []; S.allies = [];
   S.pickups = []; S.wanted = 0; S.evadeT = 0; S.mission = null; S.state = 'play'; S.war = null;
   // starter supercar + owned garage vehicles at spawn
   S.cars.push(mkCar(1505, 2036, Math.PI / 2, 'free', 'super'));
@@ -988,10 +988,20 @@ function updateBullets(dt) {
           if (d2(c.x, c.z, b.x, b.z) < 3 && b.y < c.y + 2.5) { c.hp -= b.dmg * 0.6; b.ttl = 0; break; }
         }
       } else {
-        if (p.veh) {
-          if (d2(p.veh.x, p.veh.z, b.x, b.z) < 3.5 && Math.abs(b.y - (p.veh.y + 1.5)) < 4) { p.veh.hp -= b.dmg * 0.5; b.ttl = 0; }
-        } else if (d2(p.x, p.z, b.x, b.z) < 1.1 && b.y > p.y - 0.2 && b.y < p.y + 2.2) {
-          damagePlayer(b.dmg); b.ttl = 0;
+        for (const a of S.allies) {            // enemy fire can cut down your squad
+          if (a.state === 'down' || a.dead) continue;
+          if (d2(a.x, a.z, b.x, b.z) < 1.3 && b.y > a.y - 0.2 && b.y < a.y + 2.2) {
+            a.hp -= b.dmg; b.ttl = 0;
+            if (a.hp <= 0) { a.state = 'down'; a.downT = 25; }
+            break;
+          }
+        }
+        if (b.ttl > 0) {
+          if (p.veh) {
+            if (d2(p.veh.x, p.veh.z, b.x, b.z) < 3.5 && Math.abs(b.y - (p.veh.y + 1.5)) < 4) { p.veh.hp -= b.dmg * 0.5; b.ttl = 0; }
+          } else if (d2(p.x, p.z, b.x, b.z) < 1.1 && b.y > p.y - 0.2 && b.y < p.y + 2.2) {
+            damagePlayer(b.dmg); b.ttl = 0;
+          }
         }
       }
     }
@@ -2147,6 +2157,9 @@ const WAR_CFG = {
   supplyDropCost: 120,
   supplyRate: 3.5,        // supplies per second while you hold ground
   killSupply: 8,
+  squadCost: 100,         // call in three riflemen
+  maxSquad: 6,
+  insertionCost: 180,     // helicopter insertion onto the objective
   garrisonRadius: 45,
   maxGarrisons: 3
 };
@@ -2183,6 +2196,7 @@ C.startOpenPlay = function () {
 C.endOpenPlay = function () {
   if (!S.war) return;
   S.enemies = S.enemies.filter(e => !(e.gmTag && String(e.gmTag).startsWith('war:')));
+  S.allies = [];
   S.war.on = false;
 };
 /** Build a garrison at the player: a forward respawn that also feeds supplies. */
@@ -2233,6 +2247,125 @@ C.warRespawnPoint = function () {
   return { x: g.x, z: g.z };
 };
 
+// ---- squad AI: friendly riflemen who advance with you and engage hostiles ----
+function mkAlly(x, z) {
+  return { kind: 'ally', x, z, y: groundY(x, z), yaw: R(0, TAU), hp: 100,
+    cd: R(0.4, 1.2), phase: Math.random() * TAU, state: 'move', downT: 0, dead: false, moveT: 0 };
+}
+C.factories.mkAlly = mkAlly;
+function nearestHostile(x, z, range) {
+  let best = null, bd = range * range;
+  for (const e of S.enemies) {
+    if (e.dead || e.state === 'down') continue;
+    const dx = e.x - x, dz = e.z - z, dd = dx * dx + dz * dz;
+    if (dd < bd) { bd = dd; best = e; }
+  }
+  return best;
+}
+function updateAlly(a, dt) {
+  if (a.state === 'down') { a.downT -= dt; if (a.downT <= 0) a.dead = true; return; }
+  const p = S.player;
+  const tgt = nearestHostile(a.x, a.z, 95);
+  const dp = d2(a.x, a.z, p.x, p.z);
+  let mx = 0, mz = 0, moving = false;
+  if (tgt) {
+    // hold a firing position near the target, but never stray far from the player
+    const dt2 = d2(a.x, a.z, tgt.x, tgt.z);
+    a.yaw = angLerp(a.yaw, Math.atan2(tgt.z - a.z, tgt.x - a.x), clamp(8 * dt, 0, 1));
+    if (dt2 > 45 || dp > 70) { const ang = Math.atan2(tgt.z - a.z, tgt.x - a.x); mx = Math.cos(ang); mz = Math.sin(ang); moving = true; }
+    a.cd -= dt;
+    if (a.cd <= 0 && dt2 < 90 && losClear(a.x, a.y + 1.5, a.z, tgt.x, tgt.y + 1.2, tgt.z)) {
+      a.cd = R(0.35, 0.8);
+      const pitch = Math.atan2((tgt.y + 1.2) - (a.y + 1.5), dt2);
+      fireBullet(a.x + Math.cos(a.yaw) * 1, a.y + 1.5, a.z + Math.sin(a.yaw) * 1, a.yaw, pitch, true, 12, 0.045);
+      ev('sfx', { k: 'eshot', cls: 'rifle', dist: d2(a.x, a.z, p.x, p.z) });
+    }
+  } else if (dp > 14) { // regroup on the player
+    const ang = Math.atan2(p.z - a.z, p.x - a.x);
+    mx = Math.cos(ang); mz = Math.sin(ang); moving = true;
+    a.yaw = angLerp(a.yaw, ang, clamp(8 * dt, 0, 1));
+  }
+  if (moving) {
+    const sp = dp > 40 ? 6.2 : 4.4;
+    const nx = a.x + mx * sp * dt, nz = a.z + mz * sp * dt;
+    if (!solidAt(nx, a.y + 1, nz)) { a.x = nx; a.z = nz; }
+    a.phase += sp * dt * 2;
+  }
+  a.y = groundY(a.x, a.z);
+  a.moving = moving;
+}
+C.updateAlly = updateAlly;
+C.callSquad = function () {
+  const w = S.war, p = S.player;
+  if (!w || !w.on) return 'not deployed';
+  if (w.supplies < WAR_CFG.squadCost) return 'not enough supplies';
+  const live = S.allies.filter(a => !a.dead && a.state !== 'down').length;
+  if (live >= WAR_CFG.maxSquad) return 'squad already at full strength';
+  w.supplies -= WAR_CFG.squadCost;
+  for (let i = 0; i < 3 && S.allies.length < 12; i++) {
+    const ang = R(0, TAU);
+    S.allies.push(mkAlly(p.x + Math.cos(ang) * R(5, 10), p.z + Math.sin(ang) * R(5, 10)));
+  }
+  toast('SQUAD UP — riflemen on you.', 3);
+  ev('sfx', { k: 'win' });
+  return null;
+};
+
+// ---- helicopter insertion: fly in and drop onto the front ----
+C.callInsertion = function () {
+  const w = S.war, p = S.player;
+  if (!w || !w.on) return 'not deployed';
+  if (w.supplies < WAR_CFG.insertionCost) return 'not enough supplies';
+  const sec = SECTORS[w.idx];
+  if (!sec) return 'no objective';
+  w.supplies -= WAR_CFG.insertionCost;
+  // spawn a bird on the edge of the objective with the player (and squad) aboard
+  const ang = R(0, TAU), d = sec.r + 140;
+  const hx = sec.x + Math.cos(ang) * d, hz = sec.z + Math.sin(ang) * d;
+  const h = mkHeli(hx, hz, 'heli');
+  h.owned = true; h.y = groundY(hx, hz) + 120; h.yaw = Math.atan2(sec.z - hz, sec.x - hx); h.spd = 26; h.fall = -1;
+  S.helis.push(h);
+  if (p.veh) p.veh = null;
+  p.veh = h; p.x = h.x; p.z = h.z; p.y = h.y;
+  for (const a of S.allies) { if (a.dead || a.state === 'down') continue; a.x = hx + R(-4, 4); a.z = hz + R(-4, 4); a.y = groundY(a.x, a.z); }
+  toast('INSERTION — inbound on ' + sec.name + '. Bail out over the objective.', 5);
+  ev('sfx', { k: 'win' });
+  return null;
+};
+
+// ---- tunnels: hidden infiltration routes into each contested sector ----
+const WAR_TUNNELS = SECTORS.map((s, i) => {
+  const ang = 2.4 + i * 1.1;
+  return {
+    id: 'tun' + i, sector: s.id,
+    ex: s.x + Math.cos(ang) * (s.r + 95), ez: s.z + Math.sin(ang) * (s.r + 95),  // entrance, outside the point
+    xx: s.x + Math.cos(ang + Math.PI) * (s.r * 0.45), xz: s.z + Math.sin(ang + Math.PI) * (s.r * 0.45) // exit, behind the defenders
+  };
+});
+C.WAR_TUNNELS = WAR_TUNNELS;
+/** The tunnel mouth you're standing at, if any (entrance or exit — it works both ways). */
+C.tunnelMouthAt = function (x, z) {
+  for (const t of WAR_TUNNELS) {
+    if (d2(x, z, t.ex, t.ez) < 8) return { t, dir: 'in' };
+    if (d2(x, z, t.xx, t.xz) < 8) return { t, dir: 'out' };
+  }
+  return null;
+};
+/** Move through the tunnel; you surface hidden (enemies lose track of you). */
+C.useWarTunnel = function () {
+  const p = S.player;
+  if (p.veh) return 'on foot only';
+  const m = C.tunnelMouthAt(p.x, p.z);
+  if (!m) return 'no tunnel here';
+  const dest = m.dir === 'in' ? { x: m.t.xx, z: m.t.xz } : { x: m.t.ex, z: m.t.ez };
+  p.x = dest.x; p.z = dest.z; p.y = groundY(p.x, p.z);
+  // surfacing unseen: drop every hostile's lock on you
+  for (const e of S.enemies) { e.los = false; e.losT = R(0.6, 1.4); }
+  toast(m.dir === 'in' ? 'THROUGH THE TUNNEL — you came up behind them.' : 'Back through the tunnel.', 3.5);
+  ev('sfx', { k: 'door' });
+  return null;
+};
+
 function updateOpenPlay(dt) {
   const w = S.war, p = S.player;
   if (!w || !w.on || w.done) return;
@@ -2281,7 +2414,8 @@ function updateOpenPlay(dt) {
   const alive = S.enemies.filter(e => e.gmTag === tag && !e.dead && e.state !== 'down').length;
   const want = 4 + w.idx;
   if (alive < want && d2(p.x, p.z, sec.x, sec.z) < 700) {
-    const a = R(0, TAU), d = sec.r * R(0.9, 1.25);
+    // reinforcements walk in from beyond the perimeter — they never pop into the objective
+    const a = R(0, TAU), d = sec.r * R(1.2, 1.55);
     const e = mkSoldier(sec.x + Math.cos(a) * d, sec.z + Math.sin(a) * d, Math.random() < 0.2);
     e.kind = 'hostile'; e.gmTag = tag;
     if (d2(e.x, e.z, p.x, p.z) > 45) S.enemies.push(e);
@@ -2412,6 +2546,8 @@ C.step = function (dt, inp) {
   for (const c of S.cars) if (c.type === 'traffic') updateTraffic(c, dt);
   for (const c of S.cops) updateCopCar(c, dt);
   for (const pd of S.peds) updatePed(pd, dt);
+  for (const a of S.allies) updateAlly(a, dt);
+  S.allies = S.allies.filter(a => !a.dead);
   for (const e of S.enemies) updateInfantry(e, dt, 10);
   for (const s2 of S.soldiers) updateInfantry(s2, dt, 12);
   for (const f of S.footCops) updateInfantry(f, dt, 8);

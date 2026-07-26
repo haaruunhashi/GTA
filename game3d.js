@@ -811,6 +811,10 @@ function meshFor(e) {
   } else if (e.kind === 'hostile' || e.kind === 'soldier') {
     m = cloneModel('man', e.kind === 'soldier' ? 0x9aa890 : 0x98a098);
     if (!m) { m = buildMan(e.kind === 'soldier' ? 0x44503e : 0x3a4036, 0x33382c, { vest: e.elite ? 0x454b58 : 0x2e332c }); m.userData.gun.visible = true; }
+  } else if (e.kind === 'ally') {
+    m = cloneModel('man', 0x9ad6a0);
+    if (!m) { m = buildMan(0x3f5e42, 0x2e332c, { vest: 0x4a5a44 }); m.userData.gun.visible = true; }
+    else if (m.userData.gun) m.userData.gun.visible = true;
   } else if (e.kind === 'footcop') {
     m = cloneModel('man', 0x90a0c8);
     if (!m) { m = buildMan(0x2e3a5e, 0x1d2027, { hat: 0x1d2440 }); m.userData.gun.visible = true; }
@@ -1057,6 +1061,9 @@ window.addEventListener('keydown', e => {
   if (e.code === 'KeyG') { const r = C.buildGarrison(); if (r) toast2(r); }
   if (e.code === 'KeyH') { const r = C.callAirstrike(); if (r) toast2(r); }
   if (e.code === 'KeyJ') { const r = C.callSupplyDrop(); if (r) toast2(r); }
+  if (e.code === 'KeyK') { const r = C.callSquad(); if (r) toast2(r); }
+  if (e.code === 'KeyL') { const r = C.callInsertion(); if (r) toast2(r); }
+  if (e.code === 'KeyT') { const r = C.useWarTunnel(); if (r) toast2(r); }
   if (e.code === 'KeyO') { const r = C.startOpenPlay(); if (r) toast2(r); }
   if (e.code === 'Escape') closeMenu();
   const num = parseInt(e.code.replace('Digit', ''), 10);
@@ -1279,7 +1286,7 @@ function drawHUD(dt) {
       hud.banner.textContent = 'OPEN PLAY — ' + sec.name +
         ' ' + Math.round(st.prog * 100) + '%' + (st.contested ? ' [CONTESTED]' : '') +
         ' · SUPPLIES ' + Math.round(war.supplies) +
-        ' · [G] garrison  [H] airstrike  [J] supply';
+        ' · [G]arrison [H] air [J] supply [K] squad [L] heli [T] tunnel';
       hud.banner.style.display = 'block';
       hud.banner.style.color = st.contested ? '#ff8a5a' : '#ffd23f';
     }
@@ -1298,9 +1305,13 @@ function drawHUD(dt) {
     hud.banner.textContent = txt;
     hud.banner.style.display = 'block';
   } else hud.banner.style.display = 'none';
-  // interact prompt
+  // interact prompt — a tunnel mouth takes priority over shops/houses
+  const tm = (S.war && S.war.on && !p.veh) ? C.tunnelMouthAt(p.x, p.z) : null;
   const shop = C.shopAt(), house = C.houseAt();
-  if (!p.veh && (shop || house) && !menuOpen) {
+  if (tm && !menuOpen) {
+    hud.prompt.textContent = tm.dir === 'in' ? '[T] enter the tunnel — come up behind them' : '[T] tunnel back out';
+    hud.prompt.style.display = 'block';
+  } else if (!p.veh && (shop || house) && !menuOpen) {
     hud.prompt.textContent = shop ? '[F] ' + shop.name : '[F] ' + houseLabel(house);
     hud.prompt.style.display = 'block';
   } else hud.prompt.style.display = 'none';
@@ -1591,6 +1602,12 @@ function syncScene(dt, t) {
     const m = syncEntity(pd);
     if (pd.state === 'down') { m.rotation.x = Math.PI / 2; m.position.y = pd.y + 0.4; }
     else { m.rotation.x = 0; animMan(m, pd.phase, pd.state !== 'down', false, pd.state === 'flee' ? 2.4 : clamp(pd.spd / 1.3, 0.7, 2.4)); }
+  }
+  for (const a of S.allies) {
+    if (a.dead) continue; live.add(a);
+    const m = syncEntity(a);
+    if (a.state === 'down') { m.rotation.x = Math.PI / 2; m.position.y = a.y + 0.4; }
+    else { m.rotation.x = 0; animMan(m, a.phase, !!a.moving, true, a.moving ? 2.1 : 1); }
   }
   for (const e of S.enemies.concat(S.soldiers, S.footCops)) {
     if (e.dead) continue; live.add(e);
