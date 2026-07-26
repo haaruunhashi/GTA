@@ -1,1 +1,7 @@
 node_modules/
+
+# local secrets — never commit API keys
+map-config.local.js
+.env
+.env.local
+node_modules/
