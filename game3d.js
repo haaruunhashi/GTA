@@ -569,14 +569,14 @@ function buildCar(cls, colorSeed) {
 }
 function buildTank() {
   const g = new T3.Group();
-  const hull = new T3.Mesh(new T3.BoxGeometry(7, 1.6, 3.6), new T3.MeshLambertMaterial({ color: 0x4a5140 }));
+  const hull = new T3.Mesh(new T3.BoxGeometry(7, 1.6, 3.6), new T3.MeshStandardMaterial({ color: 0x4a5140, metalness: 0.55, roughness: 0.5 }));
   hull.position.y = 1.1; g.add(hull);
   for (const s of [-1, 1]) {
-    const tr = new T3.Mesh(new T3.BoxGeometry(7.4, 1.1, 0.9), new T3.MeshLambertMaterial({ color: 0x33382c }));
+    const tr = new T3.Mesh(new T3.BoxGeometry(7.4, 1.1, 0.9), new T3.MeshStandardMaterial({ color: 0x33382c, metalness: 0.55, roughness: 0.5 }));
     tr.position.set(0, 0.55, s * 1.9); g.add(tr);
   }
   const tur = new T3.Group();
-  const dome = new T3.Mesh(new T3.CylinderGeometry(1.5, 1.7, 1, 10), new T3.MeshLambertMaterial({ color: 0x3d4436 }));
+  const dome = new T3.Mesh(new T3.CylinderGeometry(1.5, 1.7, 1, 10), new T3.MeshStandardMaterial({ color: 0x3d4436, metalness: 0.55, roughness: 0.5 }));
   dome.position.y = 0.5; tur.add(dome);
   const barrel = new T3.Mesh(new T3.CylinderGeometry(0.14, 0.17, 5.6, 8), M.dark);
   barrel.rotation.z = Math.PI / 2; barrel.position.set(3.2, 0.55, 0); tur.add(barrel);
@@ -587,11 +587,11 @@ function buildTank() {
 function buildHeli(cls) {
   const g = new T3.Group();
   const mil = cls === 'hind';
-  const body = new T3.Mesh(new T3.SphereGeometry(1.7, 10, 8), new T3.MeshLambertMaterial({ color: mil ? 0x3c4234 : 0x3c424c }));
+  const body = new T3.Mesh(new T3.SphereGeometry(1.7, 10, 8), new T3.MeshStandardMaterial({ color: mil ? 0x3c4234 : 0x3c424c, metalness: 0.6, roughness: 0.4 }));
   body.scale.set(1.7, 0.85, 0.9); body.position.y = 1.6; g.add(body);
   const canopy = new T3.Mesh(new T3.SphereGeometry(0.9, 8, 6), M.glassDark);
   canopy.scale.set(1, 0.8, 0.85); canopy.position.set(1.7, 1.8, 0); g.add(canopy);
-  const tail = new T3.Mesh(new T3.BoxGeometry(4.6, 0.4, 0.4), new T3.MeshLambertMaterial({ color: mil ? 0x2c3126 : 0x232833 }));
+  const tail = new T3.Mesh(new T3.BoxGeometry(4.6, 0.4, 0.4), new T3.MeshStandardMaterial({ color: mil ? 0x2c3126 : 0x232833, metalness: 0.6, roughness: 0.42 }));
   tail.position.set(-3.6, 1.9, 0); g.add(tail);
   const fin = new T3.Mesh(new T3.BoxGeometry(0.3, 1.2, 0.2), tail.material);
   fin.position.set(-5.6, 2.5, 0); g.add(fin);
@@ -612,7 +612,7 @@ function buildPlane(cls) {
   const g = new T3.Group();
   if (cls === 'jet') {
     // sleek dark fighter: pointed nose, swept wings, twin tail, canopy, wingtip missiles
-    const skin = new T3.MeshLambertMaterial({ color: 0x3b4048 });
+    const skin = new T3.MeshStandardMaterial({ color: 0x3b4048, metalness: 0.7, roughness: 0.35 });
     const fus = new T3.Mesh(new T3.CylinderGeometry(0.55, 0.32, 8.4, 12), skin);
     fus.rotation.z = Math.PI / 2; fus.position.y = 1.9; g.add(fus);
     const nose = new T3.Mesh(new T3.ConeGeometry(0.32, 1.8, 12), skin);
@@ -636,9 +636,9 @@ function buildPlane(cls) {
     g.userData.rotor = new T3.Group(); // no prop; keep the field the syncer expects
     return g;
   }
-  const fus = new T3.Mesh(new T3.CylinderGeometry(0.8, 0.6, 7, 10), new T3.MeshLambertMaterial({ color: 0x8a4444 }));
+  const fus = new T3.Mesh(new T3.CylinderGeometry(0.8, 0.6, 7, 10), new T3.MeshStandardMaterial({ color: 0x8a4444, metalness: 0.5, roughness: 0.5 }));
   fus.rotation.z = Math.PI / 2; fus.position.y = 1.6; g.add(fus);
-  const wing = new T3.Mesh(new T3.BoxGeometry(1.6, 0.14, 11), new T3.MeshLambertMaterial({ color: 0xa0a4ad }));
+  const wing = new T3.Mesh(new T3.BoxGeometry(1.6, 0.14, 11), new T3.MeshStandardMaterial({ color: 0xa0a4ad, metalness: 0.6, roughness: 0.45 }));
   wing.position.set(0.4, 2.1, 0); g.add(wing);
   const tailw = new T3.Mesh(new T3.BoxGeometry(0.9, 0.12, 3.4), wing.material);
   tailw.position.set(-3.1, 1.9, 0); g.add(tailw);
@@ -658,7 +658,7 @@ function buildPlane(cls) {
 // ---------- AI-generated GLB assets (via Higgsfield / Meshy) ----------
 const MODELS = {};
 const MODEL_CFG = {
-  heli: { length: 9.5, rotY: Math.PI },
+  heli: { length: 9.5, rotY: Math.PI, metal: true }, // reflective metallic skin
   tank: { length: 7.2, rotY: Math.PI }, man: { height: 1.8 },
   super: { length: 4.55, rotY: 0, pbr: true } // AI-generated detailed supercar (Higgsfield/Tripo), keeps its PBR materials
 };
@@ -700,6 +700,11 @@ function normalizeModel(root, cfg) {
       o.frustumCulled = false;
       if (cfg.pbr) return; // keep the model's own PBR materials (glossy paint reflects scene.environment)
       const old2 = o.material;
+      if (cfg.metal && old2) { // reflective metallic skin (aircraft): reflects scene.environment
+        const map = old2.map || null; if (map) map.colorSpace = T3.SRGBColorSpace;
+        o.material = new T3.MeshStandardMaterial({ map, color: map ? 0xffffff : (old2.color || 0x8c93a0), metalness: 0.6, roughness: 0.42 });
+        return;
+      }
       if (old2) {
         const map = old2.map || null;
         if (map) map.colorSpace = T3.SRGBColorSpace;
