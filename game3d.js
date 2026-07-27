@@ -660,7 +660,9 @@ const MODELS = {};
 const MODEL_CFG = {
   heli: { length: 9.5, rotY: Math.PI, metal: true }, // reflective metallic skin
   tank: { length: 7.2, rotY: Math.PI }, man: { height: 1.8 },
-  super: { length: 4.55, rotY: 0, pbr: true } // AI-generated detailed supercar (Higgsfield/Tripo), keeps its PBR materials
+  super: { length: 4.55, rotY: 0, pbr: true },  // AI-generated detailed cars (Higgsfield/Tripo),
+  sedan: { length: 4.6, rotY: 0, pbr: true },   // each keeps its own PBR materials so it
+  muscle: { length: 4.75, rotY: 0, pbr: true }  // reflects the environment map
 };
 function normalizeModel(root, cfg) {
   // transforms live on wrapper groups the animation mixer can never overwrite
@@ -819,8 +821,10 @@ function meshFor(e) {
     m = cloneModel('man', 0x90a0c8);
     if (!m) { m = buildMan(0x2e3a5e, 0x1d2027, { hat: 0x1d2440 }); m.userData.gun.visible = true; }
   } else if (e.kind === 'car') {
-    if (e.cls === 'super' && e.type !== 'cop' && MODELS.super) m = cloneModel('super'); // detailed AI supercar mesh
-    else m = buildCar(e.type === 'cop' ? 'cop' : e.cls, e.colorSeed); // procedural silhouette + articulated wheels
+    // detailed AI meshes where we have them; everything else is procedural with articulated wheels
+    const detailed = e.type !== 'cop' && MODELS[e.cls] ? e.cls : null;
+    if (detailed) m = cloneModel(detailed);
+    else m = buildCar(e.type === 'cop' ? 'cop' : e.cls, e.colorSeed);
   } else if (e.kind === 'tank') { m = cloneModel('tank') || buildTank(); if (!m.userData.turret) m.userData.turret = new T3.Group(); }
   else if (e.kind === 'heli') { m = cloneModel('heli'); if (m) { const r = buildHeli(e.cls).userData.rotor; r.position.set(0, MODELS.heli ? 3.1 : 2.75, 0); m.add(r); m.userData.rotor = r; } else m = buildHeli(e.cls); }
   else if (e.kind === 'plane') m = buildPlane(e.cls);
