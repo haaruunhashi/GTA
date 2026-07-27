@@ -1083,7 +1083,7 @@ function sfx(kind) {
 // ---------- input ----------
 const keys = {};
 let pendingEnter = false;
-let camYaw = 0, camPitch = -0.18, mouseDown = false, locked = false;
+let camYaw = 0, camPitch = -0.18, mouseDown = false, locked = false, rmbDown = false;
 let baseYaw = 0, mouseNorm = { x: 0, y: 0 }, lastMouseT = 0;
 // procedural recoil: each shot kicks the aim up (muzzle climb) and springs back
 let recoilPitch = 0, recoilYaw = 0, muzzleClass = null;
@@ -1140,8 +1140,9 @@ window.addEventListener('mousemove', e => {
     mouseNorm.y = e.clientY / window.innerHeight - 0.5;
   }
 });
-window.addEventListener('mousedown', e => { if (e.button === 0) mouseDown = true; audioInit(); });
-window.addEventListener('mouseup', e => { if (e.button === 0) mouseDown = false; });
+window.addEventListener('mousedown', e => { if (e.button === 0) mouseDown = true; if (e.button === 2) rmbDown = true; audioInit(); });
+window.addEventListener('mouseup', e => { if (e.button === 0) mouseDown = false; if (e.button === 2) rmbDown = false; });
+window.addEventListener('contextmenu', e => { if (started) e.preventDefault(); });   // RMB is aim, not a menu
 window.addEventListener('wheel', e => { if (locked || !canLock) C.switchWeapon(e.deltaY > 0 ? 1 : -1); });
 
 function buildInput() {
@@ -1157,6 +1158,7 @@ function buildInput() {
     fire: ((mouseDown && (locked || !canLock)) || touch.fire) && !menuOpen, enter: pendingEnter ? (pendingEnter = false, true) : false,
     handbrake: keys.Space || touch.up, up: keys.Space || touch.up, down: keys.ControlLeft || keys.KeyC || touch.down,
     reload: keys.KeyR || touch.reload, bomb: keys.KeyB || touch.reload,
+    aim: rmbDown || touch.aim,
     camYaw: camYaw + recoilYaw, camPitch: clamp(camPitch + recoilPitch, -1.1, 0.7)
   };
 }
@@ -1705,7 +1707,9 @@ function syncScene(dt, t) {
   playerMesh.visible = !p.veh;
   if (!p.veh) {
     playerMesh.position.set(p.x, p.y, p.z);
-    playerMesh.rotation.y = -p.yaw + (playerMesh.userData.glb ? Math.PI / 2 : 0);
+    const bodyYaw = (p.faceYaw !== undefined ? p.faceYaw : p.yaw);
+    playerMesh.rotation.y = -bodyYaw + (playerMesh.userData.glb ? Math.PI / 2 : 0);
+    playerMesh.rotation.z = -(p.lean || 0);   // bank into a sidestep
     const armed2 = p.cur !== 'fists';
     if (playerMesh.userData.gun) {
       playerMesh.userData.gun.visible = armed2 && C.WEAPONS[p.cur].cls !== 'rocket' && C.WEAPONS[p.cur].cls !== 'aa';

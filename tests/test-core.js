@@ -535,4 +535,35 @@ PL2.veh = null;
 C.endOpenPlay();
 assert(S.allies.length === 0, 'leaving open play stands the squad down');
 
+// --- on-foot facing: strafing must move the BODY, not slide the character ---
+C.reset(false);
+const PM = S.player;
+const mv = (o) => Object.assign({ fwd:0,back:0,left:0,right:0,run:0,fire:0,aim:0,enter:0,handbrake:0,
+  nitro:0,up:0,down:0,reload:0,bomb:0,camYaw:0,camPitch:0 }, o);
+const degOf = a => ((a * 180 / Math.PI) % 360 + 360) % 360;
+const angGap = (a, b) => { let d = Math.abs(degOf(a) - degOf(b)); return d > 180 ? 360 - d : d; };
+PM.veh = null; PM.x = 1500; PM.z = 2000; PM.y = C.groundY(PM.x, PM.z);
+// carrying a rifle but NOT aiming: the body must turn to face where you actually go
+for (let i = 0; i < 90; i++) C.step(1/60, mv({ right: 1, camYaw: 0 }));
+assert(PM.cur !== 'fists', 'player is carrying a weapon (the case that used to break)');
+assert(angGap(PM.faceYaw, PM.moveAng) < 12,
+  'strafing: the body faces the movement direction, not the camera (' + degOf(PM.faceYaw).toFixed(0) + 'deg)');
+assert(angGap(PM.faceYaw, 0) > 45, 'the body is NOT welded to the camera while free-moving');
+// moving left and right must actually go left and right relative to the camera
+PM.x = 1500; PM.z = 2000; PM.mvx = 0; PM.mvz = 0;
+for (let i = 0; i < 60; i++) C.step(1/60, mv({ right: 1, camYaw: 0 }));
+const wentRight = PM.z - 2000;
+PM.x = 1500; PM.z = 2000; PM.mvx = 0; PM.mvz = 0;
+for (let i = 0; i < 60; i++) C.step(1/60, mv({ left: 1, camYaw: 0 }));
+const wentLeft = PM.z - 2000;
+assert(wentRight > 1 && wentLeft < -1, 'left and right move opposite ways in camera space');
+// while AIMING the body holds the aim line but still angles into the step
+PM.x = 1500; PM.z = 2000; PM.mvx = 0; PM.mvz = 0; PM.faceYaw = 0;
+for (let i = 0; i < 90; i++) C.step(1/60, mv({ right: 1, camYaw: 0, aim: 1 }));
+assert(PM.aiming, 'holding aim sets the aiming state');
+assert(angGap(PM.yaw, 0) < 5, 'aiming keeps the shooting direction on the camera line');
+const off = angGap(PM.faceYaw, 0);
+assert(off > 8 && off < 80, 'aiming: the body angles into the sidestep (' + off.toFixed(0) + 'deg) instead of sliding');
+assert(Math.abs(PM.lean) > 0.01, 'the torso banks into the step (lean ' + PM.lean.toFixed(2) + ')');
+
 console.log('\nCORE_OK — ' + pass + ' assertions passed');

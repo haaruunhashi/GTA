@@ -141,6 +141,12 @@ war shooters. **Press `O`** anywhere to deploy.
 - **Motion-sensor look (mobile)** — the **GYRO** button turns on device-orientation aiming:
   tilt the phone to pan and pitch the camera (iOS permission is requested on tap). It rides
   on top of drag-look, and toggles off again from the same button.
+- **Body facing & strafing** — your character turns to face where it is actually moving.
+  Free movement turns the whole body toward the direction of travel (speed-scaled, so sprint
+  turns are responsive); **holding aim** (RMB, or firing) locks the shooting line to the
+  camera while the body still angles up to ~50 deg into a sidestep and banks the torso, so a
+  strafe reads as stepping sideways rather than sliding. Movement is always camera-relative:
+  left is screen-left regardless of which way the body is turned.
 
 ## Design constraints
 

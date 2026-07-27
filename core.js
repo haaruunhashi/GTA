@@ -1067,18 +1067,22 @@ function playerFoot(dt, inp) {
   const p = S.player;
   if (p.downT > 0) { p.downT -= dt; return; }
   p.pitch = inp.camPitch;
-  const aiming = p.cur !== 'fists';
+  // "aiming" means actually aiming (firing / ADS) — NOT merely carrying a gun.
+  // Otherwise the body stays welded to the camera and you slide sideways when you strafe.
+  const armed = p.cur !== 'fists';
+  const aiming = armed && (inp.fire || inp.aim);
+  p.aiming = aiming;
+  // p.yaw is the AIM direction (what you shoot along); movement is always camera-relative.
   if (aiming) p.yaw = inp.camYaw;
   const sp = (inp.run ? 7.5 : 4.5);
   let mx = 0, mz = 0;
-  if (inp.fwd || inp.back || inp.left || inp.right) {
-    const f = (inp.fwd ? 1 : 0) - (inp.back ? 1 : 0);
-    const r = (inp.right ? 1 : 0) - (inp.left ? 1 : 0);
-    const a = p.yaw + Math.atan2(r, f) * (f < 0 && !r ? -1 : 1);
-    const ang = p.yaw + Math.atan2(r, Math.max(f, -1) === f && f !== 0 ? f : (f || 0.0001));
-    // simpler: move vector in camera space
-    mx = Math.cos(p.yaw) * f + Math.cos(p.yaw + Math.PI / 2) * r;
-    mz = Math.sin(p.yaw) * f + Math.sin(p.yaw + Math.PI / 2) * r;
+  const f = (inp.fwd ? 1 : 0) - (inp.back ? 1 : 0);
+  const r = (inp.right ? 1 : 0) - (inp.left ? 1 : 0);
+  if (f || r) {
+    // move relative to the CAMERA, so left really is screen-left whatever the body does
+    const cam = inp.camYaw;
+    mx = Math.cos(cam) * f + Math.cos(cam + Math.PI / 2) * r;
+    mz = Math.sin(cam) * f + Math.sin(cam + Math.PI / 2) * r;
     const L = Math.hypot(mx, mz) || 1;
     mx /= L; mz /= L;
   }
@@ -1091,7 +1095,36 @@ function playerFoot(dt, inp) {
   p.mvz += (tvz - p.mvz) * clamp(accel * dt, 0, 1);
   const vmag = Math.hypot(p.mvx, p.mvz);
   p.moving = vmag > 0.3;
-  if (!aiming && vmag > 0.3) p.yaw = angLerp(p.yaw, Math.atan2(p.mvz, p.mvx), clamp(10 * dt, 0, 1));
+  // ---- body facing (what the renderer rotates) vs aim direction ----
+  // Free movement: the body turns to face where you're actually going, like GTA.
+  // Aiming: the body holds the aim line but still angles toward your movement (clamped),
+  // so a sidestep reads as a sidestep instead of a slide.
+  if (p.faceYaw === undefined) p.faceYaw = p.yaw;
+  if (vmag > 0.3) {
+    const moveAng = Math.atan2(p.mvz, p.mvx);
+    p.moveAng = moveAng;
+    if (!aiming) {
+      // turn faster the quicker you're going, so sprint turns feel responsive
+      const turn = clamp((7 + vmag * 1.4) * dt, 0, 1);
+      p.faceYaw = angLerp(p.faceYaw, moveAng, turn);
+      p.yaw = p.faceYaw;                    // unaimed shots follow the body
+    } else {
+      let off = moveAng - inp.camYaw;       // strafe offset relative to the aim line
+      while (off > Math.PI) off -= TAU;
+      while (off < -Math.PI) off += TAU;
+      const target = inp.camYaw + clamp(off, -0.9, 0.9);   // lean up to ~50 deg into the step
+      p.faceYaw = angLerp(p.faceYaw, target, clamp(11 * dt, 0, 1));
+    }
+    // lateral lean: +1 stepping right, -1 stepping left (renderer banks the torso)
+    let rel = moveAng - p.faceYaw;
+    while (rel > Math.PI) rel -= TAU;
+    while (rel < -Math.PI) rel += TAU;
+    p.strafe = Math.sin(rel);
+  } else {
+    if (aiming) p.faceYaw = angLerp(p.faceYaw, inp.camYaw, clamp(11 * dt, 0, 1));
+    p.strafe = (p.strafe || 0) * Math.max(0, 1 - 6 * dt);
+  }
+  p.lean = (p.lean || 0) + ((p.strafe || 0) * 0.16 - (p.lean || 0)) * clamp(6 * dt, 0, 1);
   if (vmag > 0.01) {
     const nx = p.x + p.mvx * dt, nz = p.z + p.mvz * dt;
     if (!solidAt(nx + Math.sign(p.mvx) * 0.6, p.y + 1, p.z)) p.x = clamp(nx, 5, W - 5); else p.mvx = 0;
