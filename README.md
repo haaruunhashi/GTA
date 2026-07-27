@@ -132,6 +132,15 @@ war shooters. **Press `O`** anywhere to deploy.
   you're near it. Take all five for $15,000 and 120 rep.
 
 *Mechanics are an original implementation — no third-party game code or assets.*
+- **Bloom post-processing** — three.js's own `EffectComposer` + `UnrealBloomPass` (MIT),
+  vendored for r160 into `vendor/postfx.js`, so lit windows, headlights and muzzle flashes
+  glow. Tuned to avoid double tone-mapping (the materials already apply AgX).
+- **Blended locomotion** — idle, walk and run play *simultaneously* with weights driven by
+  speed and eased over time, so accelerating reads as a continuous gait change instead of
+  clips popping between each other.
+- **Motion-sensor look (mobile)** — the **GYRO** button turns on device-orientation aiming:
+  tilt the phone to pan and pitch the camera (iOS permission is requested on tap). It rides
+  on top of drag-look, and toggles off again from the same button.
 
 ## Design constraints
 

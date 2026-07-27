@@ -2413,9 +2413,11 @@ function updateOpenPlay(dt) {
   const tag = 'war:' + sec.id;
   const alive = S.enemies.filter(e => e.gmTag === tag && !e.dead && e.state !== 'down').length;
   const want = 4 + w.idx;
-  if (alive < want && d2(p.x, p.z, sec.x, sec.z) < 700) {
+  // Once you've broken the defence (past halfway) the garrison is routed and stops
+  // trickling in — otherwise endless reinforcements could stall a capture forever.
+  if (st.prog < 0.5 && alive < want && d2(p.x, p.z, sec.x, sec.z) < 700) {
     // reinforcements walk in from beyond the perimeter — they never pop into the objective
-    const a = R(0, TAU), d = sec.r * R(1.2, 1.55);
+    const a = R(0, TAU), d = sec.r * R(1.35, 1.7);
     const e = mkSoldier(sec.x + Math.cos(a) * d, sec.z + Math.sin(a) * d, Math.random() < 0.2);
     e.kind = 'hostile'; e.gmTag = tag;
     if (d2(e.x, e.z, p.x, p.z) > 45) S.enemies.push(e);

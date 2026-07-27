@@ -14,6 +14,7 @@ renderer.toneMapping = T3.AgXToneMapping || T3.ACESFilmicToneMapping; // AgX: ci
 renderer.toneMappingExposure = T3.AgXToneMapping ? 1.35 : 0.95;
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = T3.PCFSoftShadowMap;
+let composer = null, bloomPass = null;   // declared before resize() runs (TDZ)
 const scene = new T3.Scene();
 const DUSK = 0x1d2438;
 scene.fog = new T3.Fog(0x30344f, 200, 1600);
@@ -22,8 +23,31 @@ function resize() {
   renderer.setSize(window.innerWidth, window.innerHeight);
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
+  if (typeof composer !== 'undefined' && composer) composer.setSize(window.innerWidth, window.innerHeight);
 }
 window.addEventListener('resize', resize); resize();
+
+// ---------- post-processing: Karis-style bloom over the night city ----------
+function initPostFX() {
+  const PF = window.PostFX;
+  if (!PF || !PF.EffectComposer) return;
+  try {
+    composer = new PF.EffectComposer(renderer);
+    composer.addPass(new PF.RenderPass(scene, camera));
+    bloomPass = new PF.UnrealBloomPass(
+      new T3.Vector2(window.innerWidth, window.innerHeight),
+      0.45,   // strength — lit windows and headlights glow
+      0.7,    // radius
+      0.80    // threshold: only genuinely bright things bloom
+    );
+    bloomPass.renderToScreen = true;
+    composer.addPass(bloomPass);
+    // NOTE: no OutputPass — the materials already tone-map (AgX). Adding one would
+    // apply the curve twice and wash the blacks out.
+  } catch (e) { composer = null; console.warn('postfx unavailable', e); }
+}
+initPostFX();
+
 
 // dusk sky dome with stars + horizon glow
 {
@@ -469,20 +493,37 @@ function neutralTime(mesh, u) {
 function animMan(g, phase, moving, aiming, rate) {
   const u = g.userData;
   if (u.mixer) {
-    const speed = rate || 1;
-    let target;
-    if (moving) target = (speed > 1.9 ? (actionFor(u, 'run') || u.actions.walk) : (u.actions.walk || actionFor(u, 'idle')));
-    else target = (u.actions.idle || actionFor(u, 'idle') || u.actions.walk);
-    if (!target) return;
-    if (u.current !== target) {
-      if (u.current) u.current.fadeOut(0.2);
-      target.reset().fadeIn(0.2).play();
-      u.current = target;
-    }
-    target.paused = false; target.enabled = true;
-    if (target === u.actions.run) target.timeScale = clamp(speed / 1.9, 0.85, 1.7);
-    else if (target === u.actions.walk) target.timeScale = clamp(speed, 0.8, 1.6);
-    else target.timeScale = 1; // idle plays at its natural rate
+    // Weighted locomotion blend: idle, walk and run all play at once and their
+    // weights are driven by speed, so acceleration reads as a continuous gait
+    // change instead of clips popping between each other.
+    const idle = u.actions.idle || actionFor(u, 'idle');
+    const walk = u.actions.walk || actionFor(u, 'walk');
+    const run = u.actions.run || actionFor(u, 'run');
+    if (!idle && !walk) return;
+    const speed = moving ? Math.max(0.35, rate || 1) : 0;
+    let wIdle = 0, wWalk = 0, wRun = 0;
+    if (speed <= 0.05) wIdle = 1;
+    else if (speed < 1.25) { const k = speed / 1.25; wIdle = 1 - k; wWalk = k; }        // idle -> walk
+    else if (speed < 2.1) { const k = (speed - 1.25) / 0.85; wWalk = 1 - k; wRun = k; } // walk -> run
+    else wRun = 1;
+    if (!run) { wWalk += wRun; wRun = 0; }                                              // no run clip: cap at walk
+    // ease the weights so a stutter in speed never snaps the pose
+    u.blend = u.blend || { i: 1, w: 0, r: 0 };
+    const kk = 0.18;
+    u.blend.i += (wIdle - u.blend.i) * kk;
+    u.blend.w += (wWalk - u.blend.w) * kk;
+    u.blend.r += (wRun - u.blend.r) * kk;
+    const setW = (act, w, ts) => {
+      if (!act) return;
+      if (!act.isRunning()) act.play();
+      act.enabled = true; act.paused = false;
+      act.setEffectiveWeight(w);
+      act.timeScale = ts;
+    };
+    setW(idle, u.blend.i, 1);
+    setW(walk, u.blend.w, clamp(speed, 0.8, 1.5));
+    setW(run, u.blend.r, clamp(speed / 1.9, 0.85, 1.6));
+    u.current = u.blend.r > 0.5 ? run : (u.blend.w > 0.5 ? walk : idle);
     return;
   }
   if (!u.legL) return;
@@ -1120,6 +1161,44 @@ function buildInput() {
   };
 }
 
+// ---------- motion sensors: gyroscope look (mobile) ----------
+// Tilting the device pans the camera. Off by default; the GYRO button turns it on
+// (iOS requires the permission request to happen inside a user gesture).
+const gyro = { on: false, ready: false, baseYaw: null, yaw: 0, pitch: 0 };
+function gyroHandler(e) {
+  if (!gyro.on || e.alpha === null) return;
+  const a = e.alpha * Math.PI / 180;          // compass heading
+  const b = (e.beta || 0) * Math.PI / 180;    // front-back tilt
+  if (gyro.baseYaw === null) gyro.baseYaw = a;
+  let d = gyro.baseYaw - a;
+  while (d > Math.PI) d -= Math.PI * 2;
+  while (d < -Math.PI) d += Math.PI * 2;
+  gyro.yaw = d;
+  gyro.pitch = clamp((b - 1.05) * 0.9, -1.0, 0.6);   // ~60deg upright is neutral
+  gyro.ready = true;
+}
+function enableGyro() {
+  const DOE = window.DeviceOrientationEvent;
+  if (!DOE) { toast2('this device has no motion sensors'); return; }
+  const start = () => {
+    window.addEventListener('deviceorientation', gyroHandler, true);
+    gyro.on = true; gyro.baseYaw = null;
+    toast2('GYRO look ON — tilt to aim (tap again for off)');
+  };
+  if (typeof DOE.requestPermission === 'function') {
+    DOE.requestPermission().then(r => { if (r === 'granted') start(); else toast2('motion access denied'); })
+      .catch(() => toast2('motion access denied'));
+  } else start();
+}
+function toggleGyro() {
+  if (gyro.on) {
+    window.removeEventListener('deviceorientation', gyroHandler, true);
+    gyro.on = false; gyro.ready = false;
+    toast2('GYRO look OFF');
+  } else enableGyro();
+}
+window.__toggleGyro = toggleGyro;
+
 // ---------- touch controls (mobile) ----------
 if (isTouch) {
   document.body.classList.add('touch');
@@ -1201,6 +1280,7 @@ function wireTouch() {
   tap('btnInteract', () => tryInteract());
   tap('btnRun', () => touch.run = !touch.run);
   tap('btnWpn', () => { if (window.__toggleWheel) window.__toggleWheel(); });
+  tap('btnGyro', () => toggleGyro());
   // keep RUN button visibly reflecting its toggle state
   const runBtn = document.getElementById('btnRun');
   if (runBtn) setInterval(() => runBtn.classList.toggle('on', touch.run), 200);
@@ -1672,6 +1752,12 @@ function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000);
   last = now; elapsed += dt;
   if (!started) return;
+  if (gyro.on && gyro.ready) {          // motion-sensor look rides on top of drag-look
+    camYaw += (gyro.yaw - (gyro.lastYaw || 0));
+    gyro.lastYaw = gyro.yaw;
+    camPitch += (gyro.pitch - camPitch) * clamp(4 * dt, 0, 1);
+    lastTouchLookT = performance.now();
+  }
   // spring the recoil offset back toward zero (muzzle-climb recovery)
   const rk = clamp(13 * dt, 0, 1);
   recoilPitch += (0 - recoilPitch) * rk; recoilYaw += (0 - recoilYaw) * rk;
@@ -1696,7 +1782,7 @@ function frame(now) {
   updateEffects(dt);
   updateCamera(dt);
   drawHUD(dt);
-  renderer.render(scene, camera);
+  if (composer) composer.render(); else renderer.render(scene, camera);
 }
 requestAnimationFrame(frame);
 
