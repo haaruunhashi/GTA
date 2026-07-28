@@ -20,5 +20,8 @@
     "three": "^0.180.0",
     "three-mesh-bvh": "^0.9.13",
     "ws": "^8.21.1"
+  },
+  "devDependencies": {
+    "playwright": "^1.62.0"
   }
 }

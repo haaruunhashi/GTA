@@ -1,0 +1,20 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>CLAUDE OF DUTY</title>
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; background: #05070a; overflow: hidden;
+    font-family: "Rajdhani", "Bebas Neue", "Helvetica Neue", Arial, sans-serif; color: #e8eef5; }
+  #app { position: fixed; inset: 0; }
+  canvas { display: block; width: 100%; height: 100%; }
+  #ui { position: fixed; inset: 0; pointer-events: none; }
+  #boot { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+    flex-direction: column; gap: 14px; background: #05070a; z-index: 50; letter-spacing: .35em; }
+  #boot .t { font-size: 30px; font-weight: 700; }
+  #boot .b { width: 320px; height: 3px; background: #17202b; overflow: hidden; }
+  #boot .b i { display: block; height: 100%; width: 0%; background: #cfa14a; transition: width .2s; }
+  #boot .s { font-size: 12px; color: #7c8a99; letter-spacing: .2em; }
+</style>
+<div id="app"></div>
+<div id="ui"></div>
+<div id="boot"><div class="t">CLAUDE OF DUTY</div><div class="b"><i></i></div><div class="s">LOADING</div></div>
+<script src="./build/bundle.js"></script>
