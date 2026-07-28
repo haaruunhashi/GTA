@@ -17,7 +17,6 @@ renderer.shadowMap.type = T3.PCFSoftShadowMap;
 let composer = null, bloomPass = null;   // declared before resize() runs (TDZ)
 const scene = new T3.Scene();
 const DUSK = 0x1d2438;
-scene.fog = new T3.Fog(0x30344f, 200, 1600);
 const camera = new T3.PerspectiveCamera(70, 1, 0.1, 3000);
 function resize() {
   renderer.setSize(window.innerWidth, window.innerHeight);
@@ -36,12 +35,16 @@ function initPostFX() {
     composer.addPass(new PF.RenderPass(scene, camera));
     bloomPass = new PF.UnrealBloomPass(
       new T3.Vector2(window.innerWidth, window.innerHeight),
-      0.45,   // strength — lit windows and headlights glow
-      0.7,    // radius
-      0.80    // threshold: only genuinely bright things bloom
+      0.32,   // strength — sun glints and headlights bloom, not the whole frame
+      0.6,    // radius
+      0.92    // threshold: daylight needs a high cut or everything glows
     );
-    bloomPass.renderToScreen = true;
     composer.addPass(bloomPass);
+    if (PF.SMAAPass) {
+      const smaa = new PF.SMAAPass(window.innerWidth * renderer.getPixelRatio(), window.innerHeight * renderer.getPixelRatio());
+      smaa.renderToScreen = true;
+      composer.addPass(smaa);
+    } else bloomPass.renderToScreen = true;
     // NOTE: no OutputPass — the materials already tone-map (AgX). Adding one would
     // apply the curve twice and wash the blacks out.
   } catch (e) { composer = null; console.warn('postfx unavailable', e); }
@@ -49,53 +52,62 @@ function initPostFX() {
 initPostFX();
 
 
-// dusk sky dome with stars + horizon glow
+// ---------- sky + sun (physically based) ----------
+// The old look was a flat canvas gradient lit by a weak "moon": everything read muddy.
+// This is three's Preetham Sky with a real sun, at a low golden-hour elevation so the
+// city casts long shadows and surfaces actually have form.
+const SUN = { elevation: 34, azimuth: 152 };   // degrees
+const sunPos = new T3.Vector3();
+let skyMesh = null;
 {
-  const skyC = document.createElement('canvas'); skyC.width = 1024; skyC.height = 512;
-  const sg = skyC.getContext('2d');
-  const grad = sg.createLinearGradient(0, 0, 0, 512);
-  grad.addColorStop(0, '#0a0f20'); grad.addColorStop(0.45, '#1c2444');
-  grad.addColorStop(0.72, '#39395c'); grad.addColorStop(0.85, '#6b5346'); grad.addColorStop(1, '#a5744c');
-  sg.fillStyle = grad; sg.fillRect(0, 0, 1024, 512);
-  for (let i = 0; i < 320; i++) {
-    const y = Math.random() * 300;
-    sg.fillStyle = 'rgba(255,255,255,' + (Math.random() * 0.8 * (1 - y / 320)) + ')';
-    sg.fillRect(Math.random() * 1024, y, Math.random() < 0.1 ? 2 : 1, 1);
+  if (window.PostFX && window.PostFX.Sky) {
+    skyMesh = new window.PostFX.Sky();
+    skyMesh.scale.setScalar(45000);
+    const u = skyMesh.material.uniforms;
+    u.turbidity.value = 3.2;
+    u.rayleigh.value = 1.4;
+    u.mieCoefficient.value = 0.006;
+    u.mieDirectionalG.value = 0.82;
+    scene.add(skyMesh);
   }
-  const skyTex = new T3.CanvasTexture(skyC);
-  skyTex.colorSpace = T3.SRGBColorSpace;
-  const sky = new T3.Mesh(new T3.SphereGeometry(2400, 24, 16),
-    new T3.MeshBasicMaterial({ map: skyTex, side: T3.BackSide, fog: false, depthWrite: false }));
-  sky.rotation.y = 1.2;
-  window.__skyDome = sky;
-  scene.add(sky);
+  const phi = T3.MathUtils.degToRad(90 - SUN.elevation);
+  const theta = T3.MathUtils.degToRad(SUN.azimuth);
+  sunPos.setFromSphericalCoords(1, phi, theta);
+  if (skyMesh) skyMesh.material.uniforms.sunPosition.value.copy(sunPos);
+  window.__skyDome = skyMesh;
 }
-scene.add(new T3.HemisphereLight(0x54689e, 0x38342c, 1.35));
-scene.add(new T3.AmbientLight(0x4a5470, 0.85));
-const moon = new T3.DirectionalLight(0x9fb2de, 1.15);
-moon.position.set(-60, 140, 45);
+// warm key light from the sun, cool sky fill — the contrast is what reads as "lit"
+const moon = new T3.DirectionalLight(0xffe6c2, 3.1);          // kept the name: the rest of the code uses it
+moon.position.copy(sunPos).multiplyScalar(300);
 moon.castShadow = true;
 moon.shadow.mapSize.set(2048, 2048);
-moon.shadow.camera.near = 10; moon.shadow.camera.far = 360;
-moon.shadow.camera.left = -85; moon.shadow.camera.right = 85;
-moon.shadow.camera.top = 85; moon.shadow.camera.bottom = -85;
-moon.shadow.bias = -0.00015;
-moon.shadow.normalBias = 0.6;
+moon.shadow.camera.near = 10; moon.shadow.camera.far = 520;
+moon.shadow.camera.left = -120; moon.shadow.camera.right = 120;
+moon.shadow.camera.top = 120; moon.shadow.camera.bottom = -120;
+moon.shadow.bias = -0.0002;
+moon.shadow.normalBias = 0.55;
 scene.add(moon); scene.add(moon.target);
-// environment map so PBR surfaces (car paint, glass, chrome, rims) get real reflections
+scene.add(new T3.HemisphereLight(0x9fc4ff, 0x6b5a44, 0.9));   // sky/ground bounce
+scene.add(new T3.AmbientLight(0xffffff, 0.18));
+scene.fog = new T3.Fog(0xc9d6e6, 900, 4200);                  // haze matched to the horizon
+// environment map generated FROM the sky, so paint/glass/chrome reflect the real sky
 {
-  const ec = document.createElement('canvas'); ec.width = 256; ec.height = 128;
-  const g = ec.getContext('2d');
-  const grd = g.createLinearGradient(0, 0, 0, 128);
-  grd.addColorStop(0, '#0a0f20'); grd.addColorStop(0.42, '#1c2444'); grd.addColorStop(0.5, '#5b6088');
-  grd.addColorStop(0.56, '#7a5a44'); grd.addColorStop(0.62, '#26304a'); grd.addColorStop(1, '#080a12');
-  g.fillStyle = grd; g.fillRect(0, 0, 256, 128);
-  g.fillStyle = 'rgba(230,238,255,0.95)'; g.beginPath(); g.arc(70, 38, 9, 0, Math.PI * 2); g.fill(); // moon highlight
-  for (let i = 0; i < 60; i++) { g.fillStyle = 'rgba(255,220,150,' + (0.15 + Math.random() * 0.3) + ')'; g.fillRect(Math.random() * 256, 58 + Math.random() * 12, 2, 3); } // city window glints
-  const et = new T3.CanvasTexture(ec); et.mapping = T3.EquirectangularReflectionMapping;
-  const pmrem = new T3.PMREMGenerator(renderer);
-  scene.environment = pmrem.fromEquirectangular(et).texture;
-  et.dispose(); pmrem.dispose();
+  try {
+    const pmrem = new T3.PMREMGenerator(renderer);
+    if (skyMesh) {
+      const envScene = new T3.Scene();
+      const skyClone = new window.PostFX.Sky();
+      skyClone.scale.setScalar(45000);
+      skyClone.material.uniforms.turbidity.value = 3.2;
+      skyClone.material.uniforms.rayleigh.value = 1.4;
+      skyClone.material.uniforms.mieCoefficient.value = 0.006;
+      skyClone.material.uniforms.mieDirectionalG.value = 0.82;
+      skyClone.material.uniforms.sunPosition.value.copy(sunPos);
+      envScene.add(skyClone);
+      scene.environment = pmrem.fromScene(envScene).texture;
+    }
+    pmrem.dispose();
+  } catch (e) { console.warn('env map', e); }
 }
 
 // ---------- shared materials / textures ----------
@@ -106,19 +118,34 @@ function canvasTex(w, h, fn) {
   t.wrapS = t.wrapT = T3.RepeatWrapping;
   return t;
 }
+// Daylight facades: pale cladding with tinted glass and mullion shadow.
+// (The old textures were painted for night — near-black walls — which is why the
+//  city stayed pitch dark no matter how strong the sun was.)
 const winTex = canvasTex(128, 256, (g, w, h) => {
-  g.fillStyle = '#353244'; g.fillRect(0, 0, w, h);
-  for (let y = 8; y < h - 8; y += 18) for (let x = 8; x < w - 8; x += 16) {
-    const lit = Math.random() < 0.32;
-    g.fillStyle = lit ? (Math.random() < 0.5 ? '#ffd9a0' : '#c8d8f0') : '#141824';
-    g.fillRect(x, y, 9, 11);
+  const grd = g.createLinearGradient(0, 0, 0, h);
+  grd.addColorStop(0, '#b9c0cc'); grd.addColorStop(1, '#9aa3b2');
+  g.fillStyle = grd; g.fillRect(0, 0, w, h);
+  for (let y = 8; y < h - 8; y += 18) {
+    g.fillStyle = 'rgba(0,0,0,0.16)'; g.fillRect(0, y + 12, w, 3);      // floor slab shadow
+    for (let x = 8; x < w - 8; x += 16) {
+      const r = Math.random();
+      g.fillStyle = r < 0.6 ? '#5d7793' : '#48607a';
+      g.fillRect(x, y, 9, 11);
+      g.fillStyle = 'rgba(255,255,255,0.22)'; g.fillRect(x, y, 9, 2);   // sky reflection at the top of each pane
+    }
   }
 });
 const winTex2 = canvasTex(128, 256, (g, w, h) => {
-  g.fillStyle = '#4a4438'; g.fillRect(0, 0, w, h);
+  g.fillStyle = '#a8998a'; g.fillRect(0, 0, w, h);                       // warm stone low-rise
+  for (let i = 0; i < 900; i++) {                                        // subtle grain
+    g.fillStyle = 'rgba(' + (150 + Math.random() * 40 | 0) + ',' + (135 + Math.random() * 40 | 0) + ',' + (120 + Math.random() * 40 | 0) + ',0.35)';
+    g.fillRect(Math.random() * w, Math.random() * h, 2, 2);
+  }
   for (let y = 10; y < h - 8; y += 22) for (let x = 8; x < w - 8; x += 18) {
-    g.fillStyle = Math.random() < 0.25 ? '#ffd9a0' : '#181c26';
+    g.fillStyle = '#4a5a6e';
     g.fillRect(x, y, 11, 13);
+    g.fillStyle = 'rgba(255,255,255,0.25)'; g.fillRect(x, y, 11, 3);
+    g.fillStyle = 'rgba(0,0,0,0.18)'; g.fillRect(x - 1, y + 13, 13, 2);  // sill shadow
   }
 });
 const roadTex = canvasTex(64, 256, (g, w, h) => {
@@ -129,7 +156,7 @@ const roadTex = canvasTex(64, 256, (g, w, h) => {
   g.fillRect(2, 0, 2, h); g.fillRect(w - 4, 0, 2, h);
 });
 const asphaltTex = canvasTex(256, 256, (g2, w, h) => {
-  g2.fillStyle = '#26292f'; g2.fillRect(0, 0, w, h);
+  g2.fillStyle = '#55585f'; g2.fillRect(0, 0, w, h);
   for (let i = 0; i < 2600; i++) {
     g2.fillStyle = 'rgba(' + (30 + Math.random() * 40 | 0) + ',' + (30 + Math.random() * 40 | 0) + ',' + (36 + Math.random() * 40 | 0) + ',0.5)';
     g2.fillRect(Math.random() * w, Math.random() * h, 1.6, 1.6);
@@ -137,7 +164,7 @@ const asphaltTex = canvasTex(256, 256, (g2, w, h) => {
 });
 asphaltTex.repeat.set(60, 60);
 const walkTex = canvasTex(256, 256, (g2, w, h) => {
-  g2.fillStyle = '#41454f'; g2.fillRect(0, 0, w, h);
+  g2.fillStyle = '#b4b8c0'; g2.fillRect(0, 0, w, h);
   for (let i = 0; i < 1400; i++) {
     g2.fillStyle = 'rgba(255,255,255,' + Math.random() * 0.05 + ')';
     g2.fillRect(Math.random() * w, Math.random() * h, 2, 2);
@@ -148,14 +175,14 @@ const walkTex = canvasTex(256, 256, (g2, w, h) => {
 });
 walkTex.repeat.set(12, 12);
 const M = {
-  asphalt: new T3.MeshLambertMaterial({ map: asphaltTex, color: 0x4a4e58 }),
-  sidewalk: new T3.MeshLambertMaterial({ map: walkTex, color: 0x8b90a0 }),
-  grass: new T3.MeshLambertMaterial({ color: 0x33502f }),
-  dirt: new T3.MeshLambertMaterial({ color: 0x4a4034 }),
-  concrete: new T3.MeshLambertMaterial({ color: 0x515560 }),
-  runway: new T3.MeshLambertMaterial({ color: 0x2b2e35 }),
-  wall: new T3.MeshLambertMaterial({ color: 0x565048 }),
-  roof: new T3.MeshLambertMaterial({ color: 0x2c2f3a }),
+  asphalt: new T3.MeshLambertMaterial({ map: asphaltTex, color: 0x8f939c }),
+  sidewalk: new T3.MeshLambertMaterial({ map: walkTex, color: 0xb9bdc6 }),
+  grass: new T3.MeshLambertMaterial({ color: 0x5f8a4a }),
+  dirt: new T3.MeshLambertMaterial({ color: 0x8a7a60 }),
+  concrete: new T3.MeshLambertMaterial({ color: 0xa2a6ae }),
+  runway: new T3.MeshLambertMaterial({ color: 0x5c5f66 }),
+  wall: new T3.MeshLambertMaterial({ color: 0x9a9184 }),
+  roof: new T3.MeshLambertMaterial({ color: 0x7d7f86 }),
   skin: new T3.MeshLambertMaterial({ color: 0xd9c6ad }),
   dark: new T3.MeshLambertMaterial({ color: 0x1d2027 }),
   glassDark: new T3.MeshLambertMaterial({ color: 0x141a26 }),
@@ -195,7 +222,7 @@ const M = {
     const rgeo = new T3.BufferGeometry();
     rgeo.setAttribute('position', new T3.Float32BufferAttribute(pos, 3));
     rgeo.computeVertexNormals();
-    const roadMesh = new T3.Mesh(rgeo, new T3.MeshStandardMaterial({ color: 0x2f323a, metalness: 0.35, roughness: 0.55, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }));
+    const roadMesh = new T3.Mesh(rgeo, new T3.MeshStandardMaterial({ color: 0x63666e, metalness: 0.15, roughness: 0.85, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }));
     roadMesh.position.y = 0.02; roadMesh.receiveShadow = true; scene.add(roadMesh);
     const dashMat = new T3.MeshBasicMaterial({ color: 0xc9b45a, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
     const dashGeo = new T3.PlaneGeometry(2.6, 0.32); dashGeo.rotateX(-Math.PI / 2);
@@ -305,11 +332,11 @@ const M = {
   const geo = new T3.BoxGeometry(1, 1, 1);
   geo.translate(0, 0.5, 0);
   const mats = {
-    tower: new T3.MeshLambertMaterial({ map: winTex, emissive: 0xffffff, emissiveMap: winTex, emissiveIntensity: 0.55 }),
-    block: new T3.MeshLambertMaterial({ map: winTex2, emissive: 0xffffff, emissiveMap: winTex2, emissiveIntensity: 0.45 }),
+    tower: new T3.MeshLambertMaterial({ map: winTex, emissive: 0xffffff, emissiveMap: winTex, emissiveIntensity: 0.18 }),
+    block: new T3.MeshLambertMaterial({ map: winTex2, emissive: 0xffffff, emissiveMap: winTex2, emissiveIntensity: 0.14 }),
     wall: M.wall, hangar: new T3.MeshLambertMaterial({ color: 0x44503e }),
     tower2: new T3.MeshLambertMaterial({ color: 0x5c5e63 }),
-    terminal: new T3.MeshLambertMaterial({ map: winTex, emissive: 0xffffff, emissiveMap: winTex, emissiveIntensity: 0.6 })
+    terminal: new T3.MeshLambertMaterial({ map: winTex, emissive: 0xffffff, emissiveMap: winTex, emissiveIntensity: 0.2 })
   };
   window.__bmats = mats;
   const groups = {};
@@ -1611,8 +1638,9 @@ function handleEvents() {
 let shake = 0, smoothLook = null;
 function updateCamera(dt) {
   const p = S.player;
-  moon.position.set(p.x - 60, p.y + 140, p.z + 45);
+  moon.position.set(p.x + sunPos.x * 220, p.y + sunPos.y * 220, p.z + sunPos.z * 220);
   moon.target.position.set(p.x, p.y, p.z);
+  moon.target.updateMatrixWorld();
   if (window.__skyDome) window.__skyDome.position.set(p.x, 0, p.z);
   const inVeh = !!p.veh;
   const dist = inVeh ? (p.veh.kind === 'tank' ? 16 : p.veh.kind === 'heli' || p.veh.kind === 'plane' ? 22 : 11) : 6.5;
@@ -2179,21 +2207,10 @@ window.__FC3D = { scene, camera, renderer, get started() { return started; }, ge
     else fetch('assets/tex/' + name + '.jpg').then(r => r.ok ? r.blob() : Promise.reject(0))
       .then(b => use(URL.createObjectURL(b))).catch(() => {});
   }
-  loadTex('facade-tower', t => {
-    t.repeat.set(3, 5);
-    const m = window.__bmats && window.__bmats.tower;
-    if (m) { m.map = t; m.emissiveMap = t; m.emissiveIntensity = 1.0; m.needsUpdate = true; }
-    const tm = window.__bmats && window.__bmats.terminal;
-    if (tm) { tm.map = t; tm.emissiveMap = t; tm.emissiveIntensity = 1.0; tm.needsUpdate = true; }
-  });
-  loadTex('facade-brick', t => {
-    t.repeat.set(3, 3);
-    const m = window.__bmats && window.__bmats.block;
-    if (m) { m.map = t; m.emissiveMap = t; m.emissiveIntensity = 0.9; m.needsUpdate = true; }
-  });
-  loadTex('skypano', t => {
-    if (window.__skyDome) { window.__skyDome.material.map = t; window.__skyDome.material.needsUpdate = true; }
-  });
+  // The AI facade/sky textures were painted for the old NIGHT look (fully emissive
+  // windows on black walls) and the sky is now a physical Sky shader with no .map,
+  // so applying them would blot out the daylight pass. Kept for a future night mode.
+  void loadTex;
 })();
 
 })();

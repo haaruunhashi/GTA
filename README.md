@@ -147,6 +147,14 @@ war shooters. **Press `O`** anywhere to deploy.
   camera while the body still angles up to ~50 deg into a sidestep and banks the torso, so a
   strafe reads as stepping sideways rather than sliding. Movement is always camera-relative:
   left is screen-left regardless of which way the body is turned.
+- **Daylight rendering overhaul** — the game used to render at night with facade textures
+  painted as near-black walls, so nothing had form. Now it uses three.js's physically based
+  **Sky** (Preetham) with a real sun at ~34 deg, a warm key light with 2k shadows that follow
+  the player, sky/ground hemisphere bounce, and an **environment map generated from that sky**
+  so car paint, glass and chrome reflect the actual sky. Facades, pavement, roads, roofs and
+  walls were repainted for daylight (pale cladding, tinted glass, slab and sill shadows).
+  **SMAA** cleans the edges and bloom is retuned for daylight (high threshold, so only sun
+  glints bloom).
 
 ## Design constraints
 
