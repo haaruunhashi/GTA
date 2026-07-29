@@ -9,6 +9,9 @@ import * as THREE from 'three';
 
 /* ------------------------------------------------------------------ utils */
 
+// NOTE: every canvas here is read back with getImageData (normal/AO/roughness
+// derivation), and a GPU-backed 2D context makes that readback pathologically
+// slow on software rasterisers — hence willReadFrequently on every context.
 const CV = (s) => { const c = document.createElement('canvas'); c.width = c.height = s; return c; };
 
 function mulberry32(a) {
@@ -31,7 +34,7 @@ const clamp01 = (x) => x < 0 ? 0 : x > 1 ? 1 : x;
 function fbm(g, s, rnd, { octaves = 4, cells = 4, amp = 0.55, falloff = 0.55, op = 'overlay' } = {}) {
   let c = cells, a = amp;
   for (let o = 0; o < octaves; o++) {
-    const n = CV(c), ng = n.getContext('2d');
+    const n = CV(c), ng = n.getContext('2d', { willReadFrequently: true });
     const img = ng.createImageData(c, c);
     for (let i = 0; i < c * c; i++) {
       const v = (rnd() * 255) | 0;
@@ -108,6 +111,28 @@ function speckle(g, s, rnd, { n = 3000, r = 1.6, light = 0.25, dark = 0.25 } = {
   }
 }
 
+// Per-pixel stone aggregate. Same read as thousands of tiny arcs, but it is a
+// single ImageData pass — the map covers a lot of ground with road surfaces and
+// canvas path-fills are the single most expensive thing in this file.
+function aggregate(g, s, rnd, { density = 0.2, light = 44, dark = 16, warm = 6 } = {}) {
+  const img = g.getImageData(0, 0, s, s), d = img.data;
+  for (let i = 0; i < d.length; i += 4) {
+    const k = rnd();
+    if (k < density) {
+      const v = rnd() * light;
+      d[i] = clamp01((d[i] + v + warm) / 255) * 255;
+      d[i + 1] = clamp01((d[i + 1] + v) / 255) * 255;
+      d[i + 2] = clamp01((d[i + 2] + v * 0.8) / 255) * 255;
+    } else if (k < density + 0.14) {
+      const v = rnd() * dark;
+      d[i] = clamp01((d[i] - v) / 255) * 255;
+      d[i + 1] = clamp01((d[i + 1] - v) / 255) * 255;
+      d[i + 2] = clamp01((d[i + 2] - v) / 255) * 255;
+    }
+  }
+  g.putImageData(img, 0, 0);
+}
+
 function brickCourse(g, s, rnd, o) {
   const { rows = 16, cols = 8, mortar = '#9a958c', h0 = 14, h1 = 26, sat0 = 18, sat1 = 34, hue = 14, lig = 4, gap = 0.06 } = o;
   g.fillStyle = mortar; g.fillRect(0, 0, s, s);
@@ -154,8 +179,8 @@ function texture(canvas, srgb, tile) {
 // tangent-space normal from a height canvas (wrapping sobel)
 function normalCanvas(hc, strength) {
   const s = hc.width;
-  const src = hc.getContext('2d').getImageData(0, 0, s, s).data;
-  const out = CV(s), og = out.getContext('2d');
+  const src = hc.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, s, s).data;
+  const out = CV(s), og = out.getContext('2d', { willReadFrequently: true });
   const img = og.createImageData(s, s), d = img.data;
   const H = (x, y) => src[((((y % s) + s) % s) * s + (((x % s) + s) % s)) * 4] / 255;
   for (let y = 0; y < s; y++) {
@@ -178,7 +203,7 @@ function normalCanvas(hc, strength) {
 // cheap box-blurred, inverted height = cavity AO
 function aoCanvas(hc, strength) {
   const s = hc.width;
-  const blur = CV(s), bg = blur.getContext('2d');
+  const blur = CV(s), bg = blur.getContext('2d', { willReadFrequently: true });
   bg.filter = `blur(${Math.max(1, s / 96)}px)`;
   bg.drawImage(hc, 0, 0);
   bg.filter = 'none';
@@ -195,9 +220,9 @@ function aoCanvas(hc, strength) {
 // roughness from albedo luminance + height, remapped into [r0,r1]
 function roughCanvas(albedo, height, r0, r1, rnd, fbmAmt) {
   const s = albedo.width;
-  const a = albedo.getContext('2d').getImageData(0, 0, s, s).data;
-  const h = height ? height.getContext('2d').getImageData(0, 0, s, s).data : null;
-  const out = CV(s), og = out.getContext('2d');
+  const a = albedo.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, s, s).data;
+  const h = height ? height.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, s, s).data : null;
+  const out = CV(s), og = out.getContext('2d', { willReadFrequently: true });
   const img = og.createImageData(s, s), d = img.data;
   for (let i = 0; i < d.length; i += 4) {
     const L = (a[i] * 0.3 + a[i + 1] * 0.59 + a[i + 2] * 0.11) / 255;
@@ -219,6 +244,33 @@ function roughCanvas(albedo, height, r0, r1, rnd, fbmAmt) {
 // nrm   : normal strength, ao: cavity AO strength
 
 const DEFS = {
+
+  // Worn road asphalt — the map's single biggest surface, so the aggregate is
+  // painted per-pixel (see `aggregate`) instead of with 10k canvas arcs.
+  road: {
+    tile: 6, size: 512, r0: 0.74, r1: 0.99, nrm: 1.5, ao: 0.32, metal: 0, roughFbm: 0.28,
+    albedo(g, s, rnd) {
+      g.fillStyle = '#25272b'; g.fillRect(0, 0, s, s);
+      fbm(g, s, rnd, { octaves: 4, cells: 3, amp: 0.34 });
+      aggregate(g, s, rnd, { density: 0.22, light: 46, dark: 18, warm: 7 });
+      // patch repairs — darker/lighter rectangles of newer tarmac
+      for (let i = 0; i < 5; i++) {
+        const x = rnd() * s, y = rnd() * s, w = s * (0.12 + rnd() * 0.32), h = s * (0.08 + rnd() * 0.26);
+        g.save(); g.globalAlpha = 0.32; g.fillStyle = rnd() < 0.5 ? '#191b1e' : '#34363b';
+        g.fillRect(x, y, w, h); g.restore();
+      }
+      cracks(g, s, rnd, { n: 6, steps: 26, len: 10, w: 1.5, color: 'rgba(12,12,14,0.72)' });
+      cracks(g, s, rnd, { n: 3, steps: 18, len: 8, w: 3.2, color: 'rgba(44,46,50,0.38)' });
+      blotch(g, s, rnd, { n: 9, r0: 0.06, r1: 0.22, colors: ['#101012', '#3b3b39', '#2b2722'], alpha: 0.3 });
+      grain(g, s, rnd, 22);
+    },
+    height(g, s, rnd) {
+      g.fillStyle = '#7d7d7d'; g.fillRect(0, 0, s, s);
+      fbm(g, s, rnd, { octaves: 3, cells: 6, amp: 0.5 });
+      aggregate(g, s, rnd, { density: 0.26, light: 90, dark: 30, warm: 0 });
+      cracks(g, s, rnd, { n: 6, steps: 26, len: 10, w: 2.1, color: 'rgba(0,0,0,0.9)' });
+    },
+  },
 
   asphalt: {
     tile: 7, size: 512, r0: 0.72, r1: 0.99, nrm: 1.6, ao: 0.35, metal: 0, roughFbm: 0.25,
@@ -339,7 +391,7 @@ const DEFS = {
           a ? g.lineTo(x + Math.cos(an) * rr, y + Math.sin(an) * rr) : g.moveTo(x + Math.cos(an) * rr, y + Math.sin(an) * rr);
         }
         g.closePath(); g.clip();
-        const bc = CV(128); brickCourse(bc.getContext('2d'), 128, rnd, { rows: 6, cols: 3, mortar: '#8e887c', hue: 16, sat0: 22, sat1: 36, lig: 22 });
+        const bc = CV(128); brickCourse(bc.getContext('2d', { willReadFrequently: true }), 128, rnd, { rows: 6, cols: 3, mortar: '#8e887c', hue: 16, sat0: 22, sat1: 36, lig: 22 });
         g.drawImage(bc, x - r, y - r, r * 2, r * 2);
         g.globalAlpha = 0.35; g.fillStyle = '#4a4238'; g.fillRect(x - r, y - r, r * 2, r * 2);
         g.restore();
@@ -710,11 +762,11 @@ export class Materials {
   fromDef(name, def) {
     const rnd = seeded(name + '|' + (this.ctx.config?.seed || 0));
     const s = def.size || 256;
-    const ac = CV(s); def.albedo(ac.getContext('2d'), s, rnd);
+    const ac = CV(s); def.albedo(ac.getContext('2d', { willReadFrequently: true }), s, rnd);
     let hc;
-    if (def.height) { hc = CV(s); def.height(hc.getContext('2d'), s, rnd); }
+    if (def.height) { hc = CV(s); def.height(hc.getContext('2d', { willReadFrequently: true }), s, rnd); }
     else {
-      hc = CV(s); const hg = hc.getContext('2d');
+      hc = CV(s); const hg = hc.getContext('2d', { willReadFrequently: true });
       hg.filter = 'grayscale(1) contrast(1.35)';
       hg.drawImage(ac, 0, 0);
       hg.filter = 'none';
@@ -739,7 +791,7 @@ export class Materials {
   glass(broken = false) {
     const rnd = seeded('glass' + broken);
     const s = 256;
-    const ac = CV(s), g = ac.getContext('2d');
+    const ac = CV(s), g = ac.getContext('2d', { willReadFrequently: true });
     g.fillStyle = '#0d1620'; g.fillRect(0, 0, s, s);
     // grime, water streaks, dust in the corners
     streaks(g, s, rnd, { n: 40, alpha: 0.16, color: '190,190,180', wmax: 6 });
@@ -749,7 +801,7 @@ export class Materials {
     vg.addColorStop(0, 'rgba(150,150,140,0.5)'); vg.addColorStop(0.5, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(150,150,140,0.4)');
     g.fillStyle = vg; g.fillRect(0, 0, s, s); g.restore();
     if (broken) cracks(g, s, rnd, { n: 5, steps: 12, len: 18, w: 1.6, color: 'rgba(230,230,235,0.75)', branch: 0.9 });
-    const rc = CV(s), rg = rc.getContext('2d');
+    const rc = CV(s), rg = rc.getContext('2d', { willReadFrequently: true });
     rg.fillStyle = '#1a1a1a'; rg.fillRect(0, 0, s, s);
     rg.save(); rg.globalAlpha = 0.85; fbm(rg, s, rnd, { octaves: 4, cells: 3, amp: 0.6, op: 'lighter' }); rg.restore();
     const m = new THREE.MeshPhysicalMaterial({
@@ -766,10 +818,10 @@ export class Materials {
   roadline() {
     const rnd = seeded('roadline');
     const s = 256;
-    const ac = CV(s), g = ac.getContext('2d');
+    const ac = CV(s), g = ac.getContext('2d', { willReadFrequently: true });
     g.fillStyle = '#cfc9b8'; g.fillRect(0, 0, s, s);
     fbm(g, s, rnd, { octaves: 3, cells: 4, amp: 0.35 });
-    const al = CV(s), ag = al.getContext('2d');
+    const al = CV(s), ag = al.getContext('2d', { willReadFrequently: true });
     ag.fillStyle = '#fff'; ag.fillRect(0, 0, s, s);
     ag.save(); ag.globalCompositeOperation = 'destination-out';
     for (let i = 0; i < 380; i++) {
@@ -789,9 +841,9 @@ export class Materials {
 
   chainlink() {
     const s = 128;
-    const ac = CV(s), g = ac.getContext('2d');
+    const ac = CV(s), g = ac.getContext('2d', { willReadFrequently: true });
     g.fillStyle = '#8a8f94'; g.fillRect(0, 0, s, s);
-    const al = CV(s), ag = al.getContext('2d');
+    const al = CV(s), ag = al.getContext('2d', { willReadFrequently: true });
     ag.fillStyle = '#000'; ag.fillRect(0, 0, s, s);
     ag.strokeStyle = '#fff'; ag.lineWidth = 4;
     for (let i = -1; i < 5; i++) {
@@ -814,7 +866,7 @@ export class Materials {
   // 2x2 atlas of road signs — world.js picks a quadrant per sign quad
   signs() {
     const s = 512, h = s / 2;
-    const ac = CV(s), g = ac.getContext('2d');
+    const ac = CV(s), g = ac.getContext('2d', { willReadFrequently: true });
     g.fillStyle = '#6e7278'; g.fillRect(0, 0, s, s);
     const rnd = seeded('signs');
     // 0,0 red stop-ish octagon
@@ -860,10 +912,10 @@ export class Materials {
   decalDirt() {
     const rnd = seeded('decal');
     const s = 256;
-    const ac = CV(s), g = ac.getContext('2d');
+    const ac = CV(s), g = ac.getContext('2d', { willReadFrequently: true });
     g.fillStyle = '#2c261d'; g.fillRect(0, 0, s, s);
     fbm(g, s, rnd, { octaves: 4, cells: 3, amp: 0.5 });
-    const al = CV(s), ag = al.getContext('2d');
+    const al = CV(s), ag = al.getContext('2d', { willReadFrequently: true });
     const grd = ag.createRadialGradient(s / 2, s / 2, 0, s / 2, s / 2, s / 2);
     grd.addColorStop(0, 'rgba(255,255,255,0.85)'); grd.addColorStop(0.55, 'rgba(255,255,255,0.35)'); grd.addColorStop(1, 'rgba(255,255,255,0)');
     ag.fillStyle = grd; ag.fillRect(0, 0, s, s);
@@ -880,10 +932,10 @@ export class Materials {
   foliage() {
     const rnd = seeded('foliage');
     const s = 128;
-    const ac = CV(s), g = ac.getContext('2d');
+    const ac = CV(s), g = ac.getContext('2d', { willReadFrequently: true });
     g.fillStyle = '#3f4a2a'; g.fillRect(0, 0, s, s);
     fbm(g, s, rnd, { octaves: 4, cells: 4, amp: 0.5 });
-    const al = CV(s), ag = al.getContext('2d');
+    const al = CV(s), ag = al.getContext('2d', { willReadFrequently: true });
     ag.fillStyle = '#000'; ag.fillRect(0, 0, s, s);
     ag.fillStyle = '#fff';
     for (let i = 0; i < 90; i++) {

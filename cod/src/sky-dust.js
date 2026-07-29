@@ -21,7 +21,7 @@ void main() {
 
   // motes only glint when we're looking into the sun
   vec3 viewDir = normalize( ( modelMatrix * vec4( p, 1.0 ) ).xyz - cameraPosition );
-  vGlint = pow( max( dot( viewDir, uSunDir ), 0.0 ), 6.0 );
+  vGlint = pow( max( dot( viewDir, uSunDir ), 0.0 ), 26.0 );
 }`;
 
 const FRAG = /* glsl */`
@@ -31,7 +31,7 @@ varying float vGlint;
 void main() {
   vec2 d = gl_PointCoord - 0.5;
   float a = smoothstep( 0.5, 0.0, length( d ) );
-  float i = ( 0.10 + 0.90 * vGlint ) * uIntensity;
+  float i = ( 0.02 + 0.98 * vGlint ) * uIntensity;
   gl_FragColor = vec4( uColor * i, a * i );
 }`;
 
@@ -47,7 +47,7 @@ export class DustMotes {
       pos[i * 3] = (rng() - 0.5) * this.radius * 2;
       pos[i * 3 + 1] = rng() * 9;
       pos[i * 3 + 2] = (rng() - 0.5) * this.radius * 2;
-      size[i] = 0.4 + rng() * 1.5;
+      size[i] = 0.25 + rng() * 0.75;
       phase[i] = rng() * 100;
     }
     const g = new THREE.BufferGeometry();
@@ -75,7 +75,7 @@ export class DustMotes {
   setSun(dir, color, exposure) {
     this.mat.uniforms.uSunDir.value.copy(dir);
     this.mat.uniforms.uColor.value.copy(color);
-    this.mat.uniforms.uIntensity.value = 0.55 * (exposure || 1);
+    this.mat.uniforms.uIntensity.value = 0.10 * (exposure || 1);
   }
   update(dt, cam) {
     this._t += dt;

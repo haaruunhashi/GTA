@@ -18,7 +18,7 @@ const BrightShader = {
     uSun: { value: new THREE.Vector2(0.5, 0.5) },
     uThreshold: { value: 1.1 },
     uAspect: { value: 1.777 },
-    uFalloff: { value: 0.85 },
+    uFalloff: { value: 0.42 },
   },
   vertexShader: VERT,
   fragmentShader: /* glsl */`
@@ -75,6 +75,7 @@ const CombineShader = {
     tDiffuse: { value: null },
     tShafts: { value: null },
     uIntensity: { value: 0.8 },
+    uStreak: { value: 0.5 },
     uTint: { value: new THREE.Color(1, 0.86, 0.66) },
   },
   vertexShader: VERT,
@@ -82,12 +83,30 @@ const CombineShader = {
     precision highp float;
     varying vec2 vUv;
     uniform sampler2D tDiffuse, tShafts;
-    uniform float uIntensity;
+    uniform float uIntensity, uStreak;
     uniform vec3 uTint;
     void main() {
       vec3 base = texture2D(tDiffuse, vUv).rgb;
       vec3 s = texture2D(tShafts, vUv).rgb;
-      gl_FragColor = vec4(base + s * uTint * uIntensity, 1.0);
+
+      // Anamorphic-ish horizontal streak: a short 1D smear of the shaft buffer.
+      // This is the directional signature of a real anamorphic lens flare, and
+      // reads as structure rather than as the radial smear a big blur gives.
+      vec3 st = vec3(0.0);
+      if (uStreak > 0.001) {
+        const int M = 8;
+        float tot = 0.0;
+        for (int i = -M; i <= M; i++) {
+          float fi = float(i);
+          float w = exp(-fi * fi / 26.0);
+          st += texture2D(tShafts, vUv + vec2(fi * 0.010, 0.0)).rgb * w;
+          tot += w;
+        }
+        st /= max(tot, 1e-4);
+      }
+
+      vec3 add = (s + st * uStreak * 1.6) * uTint * uIntensity;
+      gl_FragColor = vec4(base + add, 1.0);
     }
   `,
 };
@@ -125,6 +144,7 @@ export class GodRayPass extends Pass {
       this.combine.uniforms.tDiffuse.value = readBuffer.texture;
       this.combine.uniforms.tShafts.value = readBuffer.texture;
       this.combine.uniforms.uIntensity.value = 0;
+      this.combine.uniforms.uStreak.value = 0;
       this.quad.material = this.combine;
       renderer.setRenderTarget(this.renderToScreen ? null : writeBuffer);
       this.quad.render(renderer);

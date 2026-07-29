@@ -27,7 +27,8 @@ export const CompositeShader = {
     uShadowTint: { value: new THREE.Vector3(0.86, 0.96, 1.08) }, // teal-ish shadows
     uHighTint: { value: new THREE.Vector3(1.06, 1.0, 0.92) },    // warm highlights
     uSplit: { value: 0.5 },
-    uToe: { value: 0.0 },          // crush toward true black
+    uToe: { value: 0.0 },          // black point: crush toward true black
+    uWhite: { value: 0.95 },       // white point: everything above this clips
   },
   vertexShader: /* glsl */`
     varying vec2 vUv;
@@ -38,7 +39,7 @@ export const CompositeShader = {
     varying vec2 vUv;
     uniform sampler2D tDiffuse;
     uniform vec2 uResolution;
-    uniform float uTime, uExposure, uCA, uVignette, uVigSoft, uGrain, uContrast, uSaturation, uSplit, uToe;
+    uniform float uTime, uExposure, uCA, uVignette, uVigSoft, uGrain, uContrast, uSaturation, uSplit, uToe, uWhite;
     uniform vec3 uLift, uGammaC, uGain, uShadowTint, uHighTint;
 
     const vec3 LUMA = vec3(0.2126, 0.7152, 0.0722);
@@ -77,10 +78,17 @@ export const CompositeShader = {
       vec2 c = uv - 0.5;
       float r2 = dot(c, c);
 
-      // chromatic aberration: lateral, quadratic toward the corners
+      // Chromatic aberration: strictly radial and gated to the outer edge of
+      // the frame. rn is 1.0 at the edge midpoints, ~1.41 in the corners; the
+      // gate is exactly zero until rn > 0.80 (i.e. the outer ~20% of frame)
+      // and ramps as a cubic, so nothing fringes mid-frame.
+      float rn = length(c) * 2.0;
+      float gate = smoothstep(0.80, 1.34, rn);
+      gate *= gate * gate;
       vec3 col;
-      if (uCA > 0.0001) {
-        vec2 off = c * r2 * uCA * 0.02;
+      if (uCA > 0.0001 && gate > 0.0005) {
+        vec2 rd = c / max(length(c), 1e-5);
+        vec2 off = rd * gate * uCA * 2.2 / uResolution;
         col.r = texture2D(tDiffuse, uv + off).r;
         col.g = texture2D(tDiffuse, uv).g;
         col.b = texture2D(tDiffuse, uv - off).b;
@@ -111,10 +119,14 @@ export const CompositeShader = {
       col *= mix(vec3(1.0), uShadowTint, sw * uSplit);
       col *= mix(vec3(1.0), uHighTint, hw * uSplit);
 
-      // contrast around mid grey, then a filmic toe for real black
-      col = (col - 0.5) * uContrast + 0.5;
-      // black point: pull the floor down so shadows reach true black
-      col = max(col - uToe, 0.0) / max(1.0 - uToe, 0.001);
+      // contrast around a slightly low pivot (keeps the sky from blowing while
+      // the shadows still get pushed down)
+      col = (col - 0.50) * uContrast + 0.50;
+      // Black point + white point. Anything at or below uToe becomes true
+      // black; anything at or above uWhite clips to paper white, so the
+      // histogram actually touches both ends instead of sitting in a tan band.
+      col = (col - uToe) / max(uWhite - uToe, 0.05);
+      col = clamp(col, 0.0, 1.0);
 
       // saturation
       l = dot(col, LUMA);

@@ -20,15 +20,19 @@ const PRESETS = {
     ground: [0.030, 0.028, 0.030],
     cloudCover: 0.44, cloudSharp: 0.30, cloudScale: 1.0,
     cloudLit: [1.00, 0.58, 0.34], cloudDark: [0.10, 0.10, 0.14], cloudAmb: 0.55,
-    hemiSky: [0.28, 0.34, 0.48], hemiGround: [0.10, 0.08, 0.07], hemiInt: 0.30, envInt: 1.15,
-    fog: { density: 0.017, falloff: 30, base: -2, color: [0.045, 0.055, 0.078], sunColor: [0.42, 0.20, 0.10], minT: 0.05, aniso: 0.76 },
+    hemiSky: [0.30, 0.38, 0.56], hemiGround: [0.14, 0.11, 0.09], hemiInt: 1.25, envInt: 2.45,
+    bounce: [0.55, 0.34, 0.22], bounceInt: 1.05,
+    fog: { density: 0.0090, falloff: 13, base: -1, start: 14,
+           color: [0.060, 0.072, 0.100], lowColor: [0.165, 0.120, 0.090],
+           sunColor: [0.46, 0.23, 0.11], minT: 0.10, aniso: 0.74 },
     post: {
-      exposure: 1.30, contrast: 1.04, saturation: 1.00, toe: 0.020, split: 0.60,
-      lift: [-0.004, 0.002, 0.014], gamma: [1.0, 1.0, 1.02], gain: [1.02, 0.995, 0.985],
+      exposure: 2.05, contrast: 1.10, saturation: 1.02, toe: 0.022, split: 0.50, white: 0.950,
+      lift: [-0.006, 0.000, 0.010], gamma: [1.0, 1.0, 1.02], gain: [1.02, 0.995, 0.985],
       shadowTint: [0.80, 0.94, 1.16], highTint: [1.10, 0.99, 0.86],
-      vignette: 0.52, ca: 1.3, grain: 0.040, sharpen: 0.32,
-      bloom: 0.42, bloomThreshold: 0.85, bloomRadius: 0.70,
-      godrays: 1.10, godrayDensity: 0.85, godrayThreshold: 0.75, godrayTint: [1.0, 0.66, 0.40],
+      vignette: 0.46, ca: 1.5, grain: 0.038, sharpen: 0.52,
+      bloom: 0.30, bloomThreshold: 1.35, bloomRadius: 0.48,
+      godrays: 0.42, godrayDensity: 0.55, godrayThreshold: 2.0, godrayTint: [1.0, 0.66, 0.40],
+      streak: 0.55,
     },
   },
   // the default: low warm sun, long shadows, deep contrast
@@ -39,15 +43,19 @@ const PRESETS = {
     ground: [0.040, 0.038, 0.036],
     cloudCover: 0.30, cloudSharp: 0.34, cloudScale: 1.0,
     cloudLit: [1.00, 0.86, 0.70], cloudDark: [0.13, 0.14, 0.18], cloudAmb: 0.60,
-    hemiSky: [0.34, 0.44, 0.62], hemiGround: [0.13, 0.10, 0.08], hemiInt: 0.26, envInt: 1.05,
-    fog: { density: 0.0105, falloff: 26, base: -2, color: [0.052, 0.064, 0.086], sunColor: [0.50, 0.30, 0.16], minT: 0.055, aniso: 0.74 },
+    hemiSky: [0.38, 0.50, 0.72], hemiGround: [0.17, 0.14, 0.11], hemiInt: 1.15, envInt: 2.30,
+    bounce: [0.60, 0.44, 0.30], bounceInt: 0.95,
+    fog: { density: 0.0052, falloff: 15, base: -1, start: 18,
+           color: [0.070, 0.086, 0.118], lowColor: [0.170, 0.135, 0.105],
+           sunColor: [0.50, 0.30, 0.15], minT: 0.12, aniso: 0.72 },
     post: {
-      exposure: 1.05, contrast: 1.10, saturation: 1.06, toe: 0.024, split: 0.55,
-      lift: [-0.006, 0.001, 0.012], gamma: [1.0, 1.0, 1.015], gain: [1.03, 1.0, 0.975],
+      exposure: 1.70, contrast: 1.12, saturation: 1.06, toe: 0.024, split: 0.46, white: 0.945,
+      lift: [-0.008, 0.000, 0.008], gamma: [1.0, 1.0, 1.015], gain: [1.03, 1.0, 0.975],
       shadowTint: [0.82, 0.95, 1.14], highTint: [1.09, 1.00, 0.87],
-      vignette: 0.46, ca: 1.1, grain: 0.032, sharpen: 0.38,
-      bloom: 0.34, bloomThreshold: 1.00, bloomRadius: 0.62,
-      godrays: 0.95, godrayDensity: 0.80, godrayThreshold: 0.95, godrayTint: [1.0, 0.80, 0.55],
+      vignette: 0.42, ca: 1.4, grain: 0.030, sharpen: 0.55,
+      bloom: 0.28, bloomThreshold: 1.55, bloomRadius: 0.45,
+      godrays: 0.34, godrayDensity: 0.52, godrayThreshold: 2.4, godrayTint: [1.0, 0.80, 0.55],
+      streak: 0.50,
     },
   },
   // harsh, high, near-white midday
@@ -58,15 +66,19 @@ const PRESETS = {
     ground: [0.060, 0.058, 0.055],
     cloudCover: 0.20, cloudSharp: 0.38, cloudScale: 1.15,
     cloudLit: [1.00, 0.99, 0.97], cloudDark: [0.20, 0.22, 0.28], cloudAmb: 0.70,
-    hemiSky: [0.42, 0.54, 0.76], hemiGround: [0.18, 0.16, 0.13], hemiInt: 0.22, envInt: 1.0,
-    fog: { density: 0.0048, falloff: 42, base: -2, color: [0.072, 0.090, 0.120], sunColor: [0.40, 0.40, 0.42], minT: 0.10, aniso: 0.62 },
+    hemiSky: [0.46, 0.60, 0.86], hemiGround: [0.21, 0.19, 0.16], hemiInt: 0.90, envInt: 1.95,
+    bounce: [0.62, 0.58, 0.50], bounceInt: 0.70,
+    fog: { density: 0.0026, falloff: 30, base: -1, start: 26,
+           color: [0.085, 0.105, 0.145], lowColor: [0.130, 0.140, 0.165],
+           sunColor: [0.34, 0.34, 0.36], minT: 0.18, aniso: 0.60 },
     post: {
-      exposure: 0.80, contrast: 1.13, saturation: 1.02, toe: 0.026, split: 0.42,
-      lift: [-0.008, 0.000, 0.010], gamma: [1.0, 1.0, 1.0], gain: [1.01, 1.0, 0.99],
+      exposure: 1.20, contrast: 1.14, saturation: 1.02, toe: 0.026, split: 0.38, white: 0.940,
+      lift: [-0.010, 0.000, 0.006], gamma: [1.0, 1.0, 1.0], gain: [1.01, 1.0, 0.99],
       shadowTint: [0.84, 0.95, 1.12], highTint: [1.05, 1.00, 0.93],
-      vignette: 0.38, ca: 0.9, grain: 0.026, sharpen: 0.40,
-      bloom: 0.26, bloomThreshold: 1.25, bloomRadius: 0.55,
-      godrays: 0.45, godrayDensity: 0.72, godrayThreshold: 1.40, godrayTint: [1.0, 0.94, 0.82],
+      vignette: 0.36, ca: 1.2, grain: 0.024, sharpen: 0.55,
+      bloom: 0.22, bloomThreshold: 1.90, bloomRadius: 0.40,
+      godrays: 0.18, godrayDensity: 0.45, godrayThreshold: 3.2, godrayTint: [1.0, 0.94, 0.82],
+      streak: 0.35,
     },
   },
 };
@@ -139,6 +151,13 @@ export class Sky {
     this.hemi = new THREE.HemisphereLight(0xffffff, 0xffffff, 0.25);
     scene.add(this.hemi);
 
+    // Cheap single-bounce fill: an unshadowed directional from the anti-sun
+    // side, slightly above the horizon. Sun-facing surfaces barely notice it;
+    // shadow-side walls get their albedo and normal detail back.
+    this.bounce = new THREE.DirectionalLight(0xffffff, 0);
+    this.bounce.castShadow = false;
+    scene.add(this.bounce, this.bounce.target);
+
     // fog is a custom shader-chunk override (height fog + aerial perspective)
     scene.fog = new THREE.FogExp2(0x808080, 0.0001);
 
@@ -147,9 +166,10 @@ export class Sky {
       exposure: 1, contrast: 1, saturation: 1, toe: 0, split: 0.5,
       lift: new THREE.Vector3(), gamma: new THREE.Vector3(1, 1, 1), gain: new THREE.Vector3(1, 1, 1),
       shadowTint: new THREE.Vector3(1, 1, 1), highTint: new THREE.Vector3(1, 1, 1),
-      vignette: 0.4, ca: 1, grain: 0.03, sharpen: 0.35,
+      vignette: 0.4, ca: 1, grain: 0.03, sharpen: 0.35, white: 0.95,
       bloom: 0.3, bloomThreshold: 1, bloomRadius: 0.6,
       godrays: 0.9, godrayDensity: 0.8, godrayThreshold: 1.0, godrayTint: new THREE.Color(1, 1, 1),
+      streak: 0.5,
     };
 
     this.sunDir = new THREE.Vector3(0, 1, 0);
@@ -159,7 +179,7 @@ export class Sky {
     this._tmp = new THREE.Vector3();
     this._center = new THREE.Vector3();
 
-    this.dust = tier >= 2 ? new DustMotes(ctx, 900) : null;
+    this.dust = tier >= 2 ? new DustMotes(ctx, 420) : null;
 
     this.setTimeOfDay(0.075);   // cinematic golden hour by default
   }
@@ -231,6 +251,15 @@ export class Sky {
     this.hemi.intensity = p.hemiInt;
     this.ctx.scene.environmentIntensity = p.envInt;
 
+    // bounce fill: mirror of the sun across the vertical axis, lifted a little
+    // so it rakes the shadow face instead of only the undersides
+    const bd = new THREE.Vector3(-this.sunDir.x, 0.30, -this.sunDir.z).normalize();
+    this.bounce.position.copy(bd).multiplyScalar(180);
+    this.bounce.target.position.set(0, 0, 0);
+    this.bounce.target.updateMatrixWorld();
+    this.bounce.color.setRGB(p.bounce[0], p.bounce[1], p.bounce[2]);
+    this.bounce.intensity = p.bounceInt * p.sunIntensity * 0.16;
+
     // grade
     const q = this.post, s = p.post;
     q.exposure = s.exposure; q.contrast = s.contrast; q.saturation = s.saturation;
@@ -238,6 +267,7 @@ export class Sky {
     q.lift.set(...s.lift); q.gamma.set(...s.gamma); q.gain.set(...s.gain);
     q.shadowTint.set(...s.shadowTint); q.highTint.set(...s.highTint);
     q.vignette = s.vignette; q.ca = s.ca; q.grain = s.grain; q.sharpen = s.sharpen;
+    q.white = s.white; q.streak = s.streak;
     q.bloom = s.bloom; q.bloomThreshold = s.bloomThreshold; q.bloomRadius = s.bloomRadius;
     q.godrays = s.godrays; q.godrayDensity = s.godrayDensity; q.godrayThreshold = s.godrayThreshold;
     q.godrayTint.setRGB(...s.godrayTint);

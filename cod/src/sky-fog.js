@@ -40,6 +40,7 @@ export function installAtmosphericFog(ctx, fog, sunDir, sunColor) {
   varying vec3 vFogWorld;
 
   const vec3  FOG_COLOR   = vec3(${f(fog.color[0])}, ${f(fog.color[1])}, ${f(fog.color[2])});
+  const vec3  FOG_LOW     = vec3(${f((fog.lowColor || fog.color)[0])}, ${f((fog.lowColor || fog.color)[1])}, ${f((fog.lowColor || fog.color)[2])});
   const vec3  FOG_SUN     = vec3(${f(fog.sunColor[0])}, ${f(fog.sunColor[1])}, ${f(fog.sunColor[2])});
   const vec3  FOG_SUNDIR  = vec3(${f(sunDir.x)}, ${f(sunDir.y)}, ${f(sunDir.z)});
   const float FOG_DENSITY = ${f(fog.density)};
@@ -47,6 +48,10 @@ export function installAtmosphericFog(ctx, fog, sunDir, sunColor) {
   const float FOG_BASE    = ${f(fog.base)};
   const float FOG_MINT    = ${f(fog.minT)};
   const float FOG_ANISO   = ${f(fog.aniso)};
+  const float FOG_START   = ${f(fog.start === undefined ? 0 : fog.start)};
+  // Henyey-Greenstein normalised to peak at 1.0 in the forward lobe, so the
+  // in-scatter term is a *tint*, never an energy multiplier.
+  const float FOG_HGNORM  = ${f((1 - fog.aniso) * (1 - fog.aniso) / (1 + fog.aniso))};
 
   // Integral of density * exp(-(y - base)/falloff) along the ray, exact.
   float fogOpticalDepth( vec3 camPos, vec3 dir, float dist ) {
@@ -65,15 +70,26 @@ export function installAtmosphericFog(ctx, fog, sunDir, sunColor) {
     float dist = max( length( toFrag ), 1e-4 );
     vec3 dir = toFrag / dist;
 
-    float od = max( fogOpticalDepth( cameraPosition, dir, dist ), 0.0 );
+    // The near field is clean air: aerial perspective only starts accumulating
+    // past FOG_START metres, so foreground detail keeps full contrast.
+    float near = min( dist, FOG_START );
+    float od = max( fogOpticalDepth( cameraPosition + dir * near, dir, dist - near ), 0.0 );
     float trans = clamp( exp( -od ), FOG_MINT, 1.0 );
 
-    // Henyey-Greenstein in-scatter toward the sun
+    // Henyey-Greenstein in-scatter toward the sun, normalised to 0..1 so it
+    // tints the haze rather than blowing it out.
     float c = dot( dir, FOG_SUNDIR );
     float g = FOG_ANISO;
     float g2 = g * g;
-    float hg = ( 1.0 - g2 ) / ( 4.0 * 3.14159265 * pow( 1.0 + g2 - 2.0 * g * c, 1.5 ) );
-    vec3 inscatter = FOG_COLOR + FOG_SUN * hg * 2.6;
+    float hg = ( 1.0 - g2 ) / pow( max( 1.0 + g2 - 2.0 * g * c, 1e-4 ), 1.5 ) * FOG_HGNORM;
+    hg = clamp( hg, 0.0, 1.0 );
+
+    // vertical gradient: warm dense air at street level, cool thin air above,
+    // evaluated at the *midpoint* of the traversed segment.
+    float midY = cameraPosition.y + dir.y * ( dist * 0.5 );
+    float vg = clamp( ( midY - FOG_BASE ) / ( FOG_FALLOFF * 2.5 ), 0.0, 1.0 );
+    vg = vg * vg * ( 3.0 - 2.0 * vg );
+    vec3 inscatter = mix( FOG_LOW, FOG_COLOR, vg ) + FOG_SUN * hg;
 
     gl_FragColor.rgb = mix( inscatter, gl_FragColor.rgb, trans );
   }

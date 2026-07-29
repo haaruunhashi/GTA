@@ -78,7 +78,7 @@ export class Render {
         radius: 0.55,            // metres — contact shadows, not a global wash
         distanceExponent: 1.4,
         thickness: 0.35,         // thin => no dark halo behind thin geometry
-        scale: 1.35,
+        scale: 1.0,              // AO shades contact, it does not replace bounce
         samples: this.tier >= 3 ? 16 : 8,
         distanceFallOff: 0.9,
         screenSpaceRadius: false,
@@ -93,7 +93,7 @@ export class Render {
       composer.addPass(this.godrays);
     }
 
-    this.bloom = new UnrealBloomPass(new THREE.Vector2(w, h), 0.34, 0.62, 1.05);
+    this.bloom = new UnrealBloomPass(new THREE.Vector2(w, h), 0.28, 0.45, 1.55);
     composer.addPass(this.bloom);
 
     this.composite = new ShaderPass(CompositeShader);
@@ -150,6 +150,7 @@ export class Render {
       u.uVignette.value = p.vignette;
       u.uCA.value = p.ca;
       u.uGrain.value = p.grain;
+      if (p.white !== undefined) u.uWhite.value = p.white;
       if (this.sharpen) this.sharpen.uniforms.uAmount.value = p.sharpen;
       if (this.bloom) {
         this.bloom.strength = p.bloom;
@@ -171,6 +172,7 @@ export class Render {
       this.godrays.radial.uniforms.uDensity.value = p ? p.godrayDensity : 0.8;
       this.godrays.radial.uniforms.uDecay.value = 0.955;
       this.godrays.bright.uniforms.uThreshold.value = p ? p.godrayThreshold : 1.1;
+      this.godrays.combine.uniforms.uStreak.value = (p && p.streak !== undefined) ? p.streak : 0.5;
       if (p) this.godrays.combine.uniforms.uTint.value.copy(p.godrayTint);
     }
   }

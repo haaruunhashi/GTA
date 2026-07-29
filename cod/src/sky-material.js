@@ -59,10 +59,16 @@ void main() {
                  max(betaR + betaM, vec3(1e-6));
   vec3 sky = scatter * (1.0 - extinct) * uSunColor * uSkyLum * (0.25 + 0.75 * sunUp);
 
-  // sun disc + glow
-  float disc = smoothstep(0.9995 - 0.0006 * (60.0 / max(uSunDisc, 1.0)), 1.0, cosT);
-  float glow = pow(max(cosT, 0.0), 220.0) * 0.6 + pow(max(cosT, 0.0), 8.0) * 0.06;
-  sky += uSunColor * (disc * uSunDisc + glow) * (0.35 + 0.65 * sunUp);
+  // Sun disc: a real angular disc (~0.8 deg radius) with a soft limb and a
+  // tight two-lobe glow. Small and hot, so it clips white through the
+  // tonemapper instead of smearing across a sixth of the frame.
+  float ang = acos(clamp(cosT, -1.0, 1.0));
+  const float SUN_R = 0.0145;
+  float limb = 1.0 - 0.42 * smoothstep(0.0, SUN_R, ang);
+  float disc = smoothstep(SUN_R * 1.18, SUN_R * 0.70, ang) * limb;
+  float glow = exp(-(ang * ang) / 0.0022) * 0.30      // tight halo, ~3 deg
+             + exp(-(ang * ang) / 0.090) * 0.045;     // broad forward scatter
+  sky += uSunColor * (disc * uSunDisc + glow * uSkyLum * 0.30) * (0.35 + 0.65 * sunUp);
 
   // ground half
   sky = mix(uGround * (0.3 + sunUp), sky, smoothstep(-0.06, 0.06, up));
