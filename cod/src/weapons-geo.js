@@ -28,16 +28,20 @@ export function resetJitter() { _seed = 0x9e3779b9; }
 /* ------------------------------------------------------------- primitives */
 
 const GC = new Map();
+// NOTE: 2 segments per side is deliberate. Every vertex of a 1-segment box sits on a
+// corner, so a corner/edge-driven wear bake would brighten the whole part uniformly
+// instead of just its edges. The extra ring of face-centre vertices is what lets the
+// wear fall off into the middle of each face.
 export function box(w, h, d) {
   const k = `b${w},${h},${d}`;
-  if (!GC.has(k)) GC.set(k, new THREE.BoxGeometry(w, h, d));
+  if (!GC.has(k)) GC.set(k, new THREE.BoxGeometry(w, h, d, 2, 2, 2));
   return GC.get(k);
 }
 // cylinder whose axis lies along Z (so it points at the muzzle)
 export function tube(r1, r2, len, seg = 16, open = false) {
   const k = `t${r1},${r2},${len},${seg},${open}`;
   if (!GC.has(k)) {
-    const g = new THREE.CylinderGeometry(r1, r2, len, seg, 1, open);
+    const g = new THREE.CylinderGeometry(r1, r2, len, seg, 2, open);
     g.rotateX(Math.PI / 2);
     g.userData.cylR = (r1 + r2) * 0.5;
     GC.set(k, g);
@@ -109,7 +113,7 @@ function bakeWear(g, amt) {
   const p = g.attributes.position, n = p.count;
   const col = new Float32Array(n * 3);
   const tone = 0.94 + rnd() * 0.12;           // no two parts are the exact same tone
-  const wear = amt * (0.65 + rnd() * 0.7);
+  const wear = amt * (0.60 + rnd() * 0.65);
   for (let i = 0; i < n; i++) {
     let a = Math.abs(p.getX(i) - cx) / hx;
     let b = Math.abs(p.getY(i) - cy) / hy;
@@ -122,7 +126,7 @@ function bakeWear(g, amt) {
     // now a<=b<=c ; b is the second largest
     const edge = Math.max(0, Math.min(1, (b - 0.60) / 0.40));
     const corner = Math.max(0, Math.min(1, (a - 0.70) / 0.30));
-    const w = 1 + wear * (edge * 0.55 + corner * 0.55);
+    const w = 1 + wear * (edge * 0.35 + corner * 0.28);
     // slight downward-facing darkening so the underside reads as occluded
     const v = tone * w;
     col[i * 3] = v; col[i * 3 + 1] = v; col[i * 3 + 2] = v;

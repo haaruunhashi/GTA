@@ -97,10 +97,22 @@ export function shutter(B, w, h, o = {}) {
   B.box('steel', w / 2 + 0.07, h / 2, 0, 0.14, h, 0.2, { dirt: false });
 }
 
+/* ------------------------------------------------------------- contact AO */
+
+// Baked contact occlusion under a prop. Screen-space AO cannot see the tight
+// crease where a thin object meets the ground, and without it every prop in
+// the map reads as a sticker hovering a centimetre above the tarmac. One
+// multiply-blended quad, laid flat, slightly larger than the footprint.
+export function contact(B, rx, rz = rx, o = {}) {
+  B.quad('decal_ao', o.x ?? 0, o.y ?? 0.015, o.z ?? 0, rx * 2, rz * 2,
+    { rotX: -Math.PI / 2, rotZ: o.rot ?? 0, dirt: false, shadow: false });
+}
+
 /* -------------------------------------------------------- street furniture */
 
 export function lampPost(B, o = {}) {
   const h = o.h ?? 6.4;
+  contact(B, 0.75);
   B.box('concrete', 0, 0.09, 0, 0.66, 0.18, 0.66, {});
   B.cyl('paint_green', 0, h / 2, 0, 0.075, 0.11, h, { solid: true, rc: 10 });
   // ribbed base collar
@@ -120,6 +132,7 @@ export function lampPost(B, o = {}) {
 }
 
 export function hydrant(B) {
+  contact(B, 0.42);
   B.cyl('paint_red', 0, 0.06, 0, 0.24, 0.26, 0.12, { rc: 10 });
   B.cyl('paint_red', 0, 0.36, 0, 0.15, 0.17, 0.62, { rc: 10, solid: true });
   B.cyl('paint_red', 0, 0.7, 0, 0.16, 0.13, 0.1, { rc: 10 });
@@ -132,6 +145,7 @@ export function hydrant(B) {
 // New-Jersey concrete barrier — the tapered silhouette matters
 export function jerseyBarrier(B, len = 2.4, o = {}) {
   const h = 0.92;
+  contact(B, len * 0.62, 0.55);
   B.box('concrete', 0, 0.09, 0, len, 0.18, 0.62, {});
   B.box('concrete', 0, 0.3, 0, len, 0.26, 0.5, {});
   B.box('concrete', 0, 0.52, 0, len, 0.2, 0.34, {});
@@ -144,6 +158,7 @@ export function jerseyBarrier(B, len = 2.4, o = {}) {
 
 export function dumpster(B, o = {}) {
   const w = 2.15, h = 1.24, d = 1.15;
+  contact(B, w * 0.66, d * 0.82);
   const mat = o.mat || 'paint_green';
   B.box(mat, 0, h / 2 + 0.16, 0, w, h, d, { solid: false });
   // ribs
@@ -179,6 +194,7 @@ export function crate(B, s = 0.9, mat = 'wood') {
 }
 
 export function crateStack(B, rnd) {
+  contact(B, 0.85);
   const n = 2 + ((rnd() * 3) | 0);
   let y = 0;
   for (let i = 0; i < n; i++) {
@@ -191,11 +207,13 @@ export function crateStack(B, rnd) {
 }
 
 export function pallet(B, rnd) {
+  contact(B, 0.75, 0.7);
   for (let i = 0; i < 6; i++) B.box('wood', 0, 0.11, -0.5 + i * 0.2, 1.2, 0.03, 0.11, { dirt: false });
   for (let i = 0; i < 3; i++) B.box('wood', -0.45 + i * 0.45, 0.05, 0, 0.12, 0.1, 1.15, { dirt: false });
 }
 
 export function barrel(B, mat = 'rust') {
+  contact(B, 0.42);
   B.cyl(mat, 0, 0.44, 0, 0.29, 0.29, 0.88, { rc: 14, solid: false });
   B.cyl(mat, 0, 0.24, 0, 0.31, 0.31, 0.06, { rc: 14, dirt: false });
   B.cyl(mat, 0, 0.62, 0, 0.31, 0.31, 0.06, { rc: 14, dirt: false });
@@ -203,6 +221,7 @@ export function barrel(B, mat = 'rust') {
 }
 
 export function tyreStack(B, n, rnd) {
+  contact(B, 0.58);
   for (let i = 0; i < n; i++) {
     B.torus('rubber', 0, 0.11 + i * 0.19, 0, 0.34, 0.11, { rotX: Math.PI / 2, rotY: rnd() * 3, seg: [10, 14] });
   }
@@ -269,15 +288,20 @@ export function sandbagWall(B, len, rows, rnd, o = {}) {
       }
     }
   }
-  // spilled sand and dirt kicked up around the base — kills the "prop floating
-  // on a clean floor" read where the bags meet the ground
+  // Spilled sand around the base, and the tight contact crease under the
+  // bottom course. The dirt alone left the row looking laid on top of the road.
   B.quad('decal_dirt', 0, 0.014, 0, len + 0.9, dz * depth + 1.1,
     { rotX: -Math.PI / 2, dirt: false, shadow: false, tint: 0xbfae8c });
+  const seg = Math.max(1, Math.round(len / 1.2));
+  for (let i = 0; i < seg; i++) {
+    contact(B, 0.7, dz * depth * 0.5 + 0.42, { x: -len / 2 + (i + 0.5) * (len / seg), y: 0.018 });
+  }
   B.collider(-len / 2, len / 2, 0, rows * py + 0.05, -dz * depth * 0.5 - 0.14, dz * depth * 0.5 + 0.14);
 }
 
 export function roadSign(B, quad = 0, o = {}) {
   const h = o.h ?? 2.5;
+  contact(B, 0.3);
   B.cyl('steel', 0, h / 2, 0, 0.045, 0.05, h, { rc: 8, solid: false });
   B.box('concrete', 0, 0.05, 0, 0.34, 0.1, 0.34, { dirt: false });
   const s = o.size ?? 0.72;
@@ -287,12 +311,14 @@ export function roadSign(B, quad = 0, o = {}) {
 }
 
 export function trafficCone(B) {
+  contact(B, 0.36);
   B.box('paint_red', 0, 0.025, 0, 0.42, 0.05, 0.42, { dirt: false });
   B.cone('paint_red', 0, 0.34, 0, 0.16, 0.62, { rc: 10 });
   B.cone('paint_white', 0, 0.42, 0, 0.107, 0.14, { rc: 10, dirt: false });
 }
 
 export function bollard(B) {
+  contact(B, 0.26);
   B.cyl('steel', 0, 0.5, 0, 0.08, 0.09, 1.0, { rc: 10 });
   B.cyl('paint_white', 0, 0.86, 0, 0.085, 0.085, 0.1, { rc: 10, dirt: false });
 }
@@ -464,6 +490,7 @@ export function wreckedCar(B, rnd, o = {}) {
   const burnt = o.burnt !== false;
   const body = burnt ? 'rust' : (o.mat || 'paint_blue');
   const L = 4.3, W = 1.82;
+  contact(B, L * 0.58, W * 0.85);
   // chassis / sills
   B.box(body, 0, 0.55, 0, L, 0.52, W, {});
   B.box('black', 0, 0.3, 0, L - 0.5, 0.28, W - 0.12, { dirt: false });

@@ -218,11 +218,17 @@ export function fillerBlock(B, o) {
     }
     B.box('concrete', 0, h - 0.28, half + 0.12, len + 0.3, 0.34, 0.3, { dirt: false, tint: trim });
     B.box('concrete', 0, h - 0.62, half + 0.07, len + 0.1, 0.14, 0.2, { dirt: false, tint: trim });
-    // ground-floor plinth: a different, darker material where the street dirties it
-    B.box('concrete', 0, 1.1, half + 0.05, len + 0.06, 2.2, 0.1, { tint: 0x8e887c });
-    B.box('concrete', 0, 2.26, half + 0.11, len + 0.16, 0.16, 0.22, { dirt: false, tint: trim });
-    // grime where the wall meets the pavement — kills the hard clean junction
-    B.quad('decal_grime', 0, 0.7, half + 0.14, len, 1.4, { uvRect: [0, 0, Math.max(1, len / 5), 1], dirt: false, shadow: false });
+    // Ground-floor plinth. It must read DARKER than the brick above it — a
+    // pale band at the base of a sunlit wall reads as fresh render, which is
+    // the opposite of the intent.
+    B.box('concrete', 0, 1.05, half + 0.05, len + 0.06, 2.1, 0.1, { tint: 0x585349 });
+    B.box('concrete', 0, 2.18, half + 0.12, len + 0.16, 0.14, 0.24, { dirt: false, tint: 0x8e887c });
+    // Grime where the wall meets the pavement, in two passes: a tall soft wash
+    // and a dense band right at the junction, so there is no clean line.
+    B.quad('decal_grime', 0, 1.25, half + 0.15, len, 2.5, { uvRect: [0, 0, Math.max(1, len / 6), 1], dirt: false, shadow: false });
+    B.quad('decal_grime', 0, 0.42, half + 0.16, len, 0.85, { uvRect: [0.37, 0, Math.max(1, len / 3), 1], dirt: false, shadow: false });
+    // and the contact darkening on the pavement itself, at the foot of the wall
+    B.quad('decal_ao', 0, 0.02, half + 0.42, len, 0.9, { rotX: -Math.PI / 2, dirt: false, shadow: false });
 
     // Patched render, painted-over signage and drainpipes. A 4 m brick tile
     // repeating over a 30 m wall is obvious the moment nothing interrupts it;
@@ -239,8 +245,8 @@ export function fillerBlock(B, o) {
       for (let i = 0; i < 3; i++) {
         const gx = gapAt();
         const ph2 = 1.6 + rnd() * Math.max(1.2, h * 0.45);
-        B.box(rnd() < 0.5 ? 'plaster' : 'concrete', gx, 2.6 + rnd() * Math.max(0.2, h - 4.2 - ph2), half + 0.05,
-          1.0 + rnd() * 0.5, ph2, 0.1, { tint: [0xa8a294, 0xbcb2a0, 0x8f8e88][(rnd() * 3) | 0] });
+        B.box(rnd() < 0.5 ? 'plaster' : 'concrete', gx, 2.6 + rnd() * Math.max(0.2, h - 4.2 - ph2), half + 0.04,
+          1.0 + rnd() * 0.5, ph2, 0.08, { tint: [0x6d675c, 0x827a6c, 0x5e5d58][(rnd() * 3) | 0] });
       }
       // a faded painted sign band above the shopfront plinth
       if (rnd() < 0.5) {
@@ -254,35 +260,43 @@ export function fillerBlock(B, o) {
       }
     }
 
-    // window grid, properly recessed
+    // ---- windows.
+    // A perimeter block is a solid mass, not a wall with holes, so a quad set
+    // back into it is simply buried and invisible — which is exactly what the
+    // round-2 windows were. The pane therefore sits ON the face and the recess
+    // is done two ways: a proud architrave (head, cill, jambs) that throws a
+    // real shadow across the glass, and the parallax room inside the shader,
+    // which gives the pane genuine depth that slides with the camera.
     const cols = Math.max(1, Math.floor((len - 1.6) / 3.5));
-    const ww = 1.2, wh = 1.75;
-    const rec = 0.26;
+    const ww = 1.34, wh = 2.0;
     for (let s = 0; s < storeys; s++) {
       for (let c = 0; c < cols; c++) {
         const x = (c - (cols - 1) / 2) * ((len - 2.2) / Math.max(1, cols - 1 || 1));
-        const y = s * sh + sh * 0.52;
+        const y = s * sh + sh * 0.5;
         if (y + wh / 2 > h - 0.9) continue;
         const k = rnd();
-        // Head and cill only. Vertical jambs would double the trim cost of the
-        // whole skyline for an edge the sun rarely picks out; the two
-        // horizontal members carry the recess at this distance.
-        B.box('concrete', x, y + wh / 2 + 0.1, half - rec / 2 + 0.02, ww + 0.62, 0.18, rec + 0.16, { dirt: false, tint: 0x8b857b });
-        B.box('concrete', x, y - wh / 2 - 0.1, half - 0.01, ww + 0.72, 0.15, rec + 0.26, { dirt: false, tint: trim });
+        // head: projects furthest, so its shadow rakes down over the glass
+        B.box('concrete', x, y + wh / 2 + 0.13, half + 0.09, ww + 0.66, 0.26, 0.24, { dirt: false, tint: 0x9a9488 });
+        // cill: projects further still and is lit from above, a hard bright line
+        B.box('concrete', x, y - wh / 2 - 0.11, half + 0.12, ww + 0.76, 0.15, 0.3, { dirt: false, tint: trim });
+        B.box('concrete', x, y - wh / 2 - 0.2, half + 0.05, ww + 0.6, 0.09, 0.16, { dirt: false, tint: 0x7a746a });
+        if (!far) {
+          for (const sx of [-1, 1]) {
+            B.box('concrete', x + sx * (ww / 2 + 0.11), y, half + 0.05, 0.22, wh + 0.2, 0.16,
+              { dirt: false, tint: sx > 0 ? 0x8d8880 : 0xa9a396 });
+          }
+        }
         if (k < 0.09) {
-          // boarded up
-          B.quad('black', x, y, half - rec, ww, wh, { dirt: false, shadow: false });
+          // boarded up: a black void with planks nailed across it
+          B.quad('black', x, y, half + 0.012, ww, wh, { dirt: false, shadow: false });
           for (let i = 0; i < 3; i++) {
-            B.box('wood', x, y - wh / 2 + 0.28 + i * wh * 0.3, half - rec + 0.05, ww, wh * 0.26, 0.05,
+            B.box('wood', x, y - wh / 2 + 0.32 + i * wh * 0.3, half + 0.06, ww, wh * 0.26, 0.05,
               { rotZ: (i - 1) * 0.05, dirt: false });
           }
         } else {
-          B.quad(k < 0.24 ? 'window_broken' : 'window', x, y, half - rec, ww, wh,
+          B.quad(k < 0.2 ? 'window_broken' : 'window', x, y, half + 0.012, ww, wh,
             { uvRect: [0, 0, 1, 1], dirt: false, shadow: false });
         }
-        // NOTE: no per-window drip decal out here. Several hundred blended
-        // quads on the skyline cost more fill than the staining is worth at
-        // this distance; the hero walls still get them.
       }
     }
     B.pop();

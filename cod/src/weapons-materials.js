@@ -60,7 +60,7 @@ function speckle(g, s, n, a) {
 
 // Stippled / bead-blasted polymer, the classic pistol-grip finish.
 function paintPolymer(g, s) {
-  g.fillStyle = '#25272b'; g.fillRect(0, 0, s, s);
+  g.fillStyle = '#3a3d42'; g.fillRect(0, 0, s, s);
   for (let i = 0; i < s * 10; i++) {
     const x = Math.random() * s, y = Math.random() * s, r = 0.7 + Math.random() * 2.0;
     const v = Math.random() > 0.5 ? 235 : 10;
@@ -90,7 +90,7 @@ function paintPolymer(g, s) {
 
 // Manganese-phosphate steel: dark, mottled, with fine tooling lines along U.
 function paintSteel(g, s) {
-  g.fillStyle = '#2c3036'; g.fillRect(0, 0, s, s);
+  g.fillStyle = '#7b818a'; g.fillRect(0, 0, s, s);
   for (let i = 0; i < 420; i++) {
     g.fillStyle = `rgba(255,255,255,${0.015 + Math.random() * 0.05})`;
     g.fillRect(0, Math.random() * s, s, 0.5 + Math.random() * 1.2);
@@ -115,7 +115,7 @@ function paintSteel(g, s) {
 
 // Type-III hardcoat anodised aluminium: flat charcoal with extrusion lines along U.
 function paintAlu(g, s) {
-  g.fillStyle = '#3a3e44'; g.fillRect(0, 0, s, s);
+  g.fillStyle = '#6c7178'; g.fillRect(0, 0, s, s);
   for (let i = 0; i < 700; i++) {
     g.fillStyle = `rgba(255,255,255,${0.010 + Math.random() * 0.035})`;
     g.fillRect(0, Math.random() * s, s, 0.4 + Math.random() * 1.4);
@@ -138,7 +138,7 @@ function paintAlu(g, s) {
 }
 
 function paintRubber(g, s) {
-  g.fillStyle = '#141519'; g.fillRect(0, 0, s, s);
+  g.fillStyle = '#2a2c30'; g.fillRect(0, 0, s, s);
   const n = 26, c = s / n;
   for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
     const o = (y % 2) * c * 0.5;
@@ -149,7 +149,7 @@ function paintRubber(g, s) {
 }
 
 function paintWood(g, s) {
-  g.fillStyle = '#4d3119'; g.fillRect(0, 0, s, s);
+  g.fillStyle = '#6b4423'; g.fillRect(0, 0, s, s);
   for (let i = 0; i < 220; i++) {
     const y = Math.random() * s;
     g.strokeStyle = `rgba(${20 + Math.random() * 70},${10 + Math.random() * 34},0,${0.05 + Math.random() * 0.18})`;
@@ -169,7 +169,7 @@ function paintWood(g, s) {
 
 // Tactical glove: ribbed synthetic with stitching runs and a leather palm feel.
 function paintGlove(g, s) {
-  g.fillStyle = '#22242a'; g.fillRect(0, 0, s, s);
+  g.fillStyle = '#33363c'; g.fillRect(0, 0, s, s);
   // woven weft
   for (let i = 0; i < s; i += 3) {
     g.fillStyle = `rgba(255,255,255,${0.02 + Math.random() * 0.035})`;
@@ -198,7 +198,7 @@ function paintGlove(g, s) {
 
 // Ripstop sleeve: coarse square grid, dusty multicam-ish desaturated tan.
 function paintSleeve(g, s) {
-  g.fillStyle = '#4a4535'; g.fillRect(0, 0, s, s);
+  g.fillStyle = '#6a6350'; g.fillRect(0, 0, s, s);
   for (let i = 0; i < 40; i++) {
     g.fillStyle = `rgba(${60 + Math.random() * 70},${56 + Math.random() * 60},${40 + Math.random() * 40},0.5)`;
     const w = 30 + Math.random() * 90, h = 24 + Math.random() * 70;
@@ -268,60 +268,60 @@ export class GunMats {
       case 'polymer': return new THREE.MeshStandardMaterial({
         map: tex('polymer', S, paintPolymer),
         roughnessMap: tex('mrPoly', 256, mrPaint(0, 0.78, 0.02, false), { linear: true }),
-        color: 0xc4c6ca, roughness: 1.0, metalness: 0.03,
+        color: 0xffffff, roughness: 1.0, metalness: 0.03,
         envMapIntensity: 1.15, vertexColors: true,
       });
       case 'polymerTan': return new THREE.MeshStandardMaterial({
         map: tex('polymer', S, paintPolymer),
         roughnessMap: tex('mrPoly', 256, mrPaint(0, 0.78, 0.02, false), { linear: true }),
-        color: 0x8f7a52, roughness: 1.0, metalness: 0.03,
+        color: 0xc2a271, roughness: 1.0, metalness: 0.03,
         envMapIntensity: 1.1, vertexColors: true,
       });
       case 'steel': return new THREE.MeshStandardMaterial({
         map: tex('steel', S, paintSteel),
         roughnessMap: tex('mrSteel', 256, mrPaint(0, 0.34, 1.0, true), { linear: true }),
-        color: 0xc2c7ce, roughness: 1.0, metalness: 0.94,
+        color: 0xf2f5f8, roughness: 1.0, metalness: 0.94,
         envMapIntensity: 1.5, vertexColors: true,
       });
       case 'steelDark': return new THREE.MeshStandardMaterial({
         map: tex('steel', S, paintSteel),
         roughnessMap: tex('mrSteelD', 256, mrPaint(0, 0.46, 1.0, true), { linear: true }),
-        color: 0x8d9299, roughness: 1.0, metalness: 0.90,
+        color: 0xb9bec6, roughness: 1.0, metalness: 0.88,
         envMapIntensity: 1.35, vertexColors: true,
       });
       case 'alu': return new THREE.MeshStandardMaterial({
         map: tex('alu', S, paintAlu),
         roughnessMap: tex('mrAlu', 256, mrPaint(0, 0.42, 0.85, true), { linear: true }),
-        color: 0xa9aeb6, roughness: 1.0, metalness: 1.0,
+        color: 0xeef1f5, roughness: 1.0, metalness: 0.86,
         envMapIntensity: 1.45, vertexColors: true,
       });
       case 'rubber': return new THREE.MeshStandardMaterial({
         map: tex('rubber', S, paintRubber),
         roughnessMap: tex('mrRub', 256, mrPaint(0, 0.93, 0.0, false), { linear: true }),
-        color: 0xa2a2a6, roughness: 1.0, metalness: 0.0,
+        color: 0xffffff, roughness: 1.0, metalness: 0.0,
         envMapIntensity: 0.9, vertexColors: true,
       });
       case 'wood': return new THREE.MeshStandardMaterial({
         map: tex('wood', S, paintWood),
         roughnessMap: tex('mrWood', 256, mrPaint(0, 0.5, 0.0, true), { linear: true }),
-        color: 0xcdbba0, roughness: 1.0, metalness: 0.0,
+        color: 0xffffff, roughness: 1.0, metalness: 0.0,
         envMapIntensity: 1.0, vertexColors: true,
       });
       case 'glove': return new THREE.MeshStandardMaterial({
         map: tex('glove', S, paintGlove),
         roughnessMap: tex('mrGlove', 256, mrPaint(0, 0.72, 0.02, false), { linear: true }),
-        color: 0xb8bcc4, roughness: 1.0, metalness: 0.02,
+        color: 0xffffff, roughness: 1.0, metalness: 0.02,
         envMapIntensity: 1.05, vertexColors: true,
       });
       case 'gloveGrip': return new THREE.MeshStandardMaterial({
         map: tex('rubber', S, paintRubber),
-        color: 0x8e9098, roughness: 0.88, metalness: 0.02,
+        color: 0xc8ccd4, roughness: 0.88, metalness: 0.02,
         envMapIntensity: 0.9, vertexColors: true,
       });
       case 'sleeve': return new THREE.MeshStandardMaterial({
         map: tex('sleeve', S, paintSleeve),
         roughnessMap: tex('mrSleeve', 256, mrPaint(0, 0.88, 0.0, false), { linear: true }),
-        color: 0xb0ab98, roughness: 1.0, metalness: 0.0,
+        color: 0xffffff, roughness: 1.0, metalness: 0.0,
         envMapIntensity: 1.0, vertexColors: true,
       });
       case 'brass': return new THREE.MeshStandardMaterial({
@@ -330,7 +330,7 @@ export class GunMats {
       case 'optic': return new THREE.MeshStandardMaterial({
         map: tex('alu', S, paintAlu),
         roughnessMap: tex('mrOptic', 256, mrPaint(0, 0.52, 0.55, true), { linear: true }),
-        color: 0x4c4f55, roughness: 1.0, metalness: 0.62, envMapIntensity: 1.25, vertexColors: true,
+        color: 0x6f747b, roughness: 1.0, metalness: 0.40, envMapIntensity: 1.25, vertexColors: true,
       });
       case 'lens': return new THREE.MeshPhysicalMaterial({
         color: 0x2f5570, roughness: 0.04, metalness: 0.0, transparent: true, opacity: 0.36,

@@ -1,13 +1,13 @@
 
+# agent scratch/profiling files
 # local secrets — never commit API keys
 .env
 .env.local
+.lgtmp/
+.world-prof.mjs
 cod/build/
 cod/shots/
-map-config.local.js
-node_modules/
-
-# agent scratch/profiling files
-.world-prof.mjs
 cod/tools/.tmp-*
 cod/tools/_*
+map-config.local.js
+node_modules/

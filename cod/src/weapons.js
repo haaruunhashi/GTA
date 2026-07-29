@@ -7,6 +7,7 @@
 import * as THREE from 'three';
 import { GunMats } from './weapons-materials.js';
 import { BUILDERS, makeReticle } from './weapons-models.js';
+import { aimFore } from './weapons-arms.js';
 import { ScopeView } from './weapons-scope.js';
 
 const _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _v3 = new THREE.Vector3();
@@ -34,9 +35,9 @@ export const WEAPONS = {
     adsTime: 0.22, adsFov: 54, drawTime: 0.52, holsterTime: 0.28,
     rl: { out: 0.50, in: 1.15, ammo: 1.32, dur: 2.05, extra: 0.72, chargeDur: 0.34 },
     cycle: 0.062, ejectAt: 0.30, boltKind: 'auto',
-    vmScale: 0.72,
-    hip: [0.145, -0.128, -0.350], hipRot: [0.030, 0.026, 0.030],
-    adsDist: 0.235, tracerEvery: 3,
+    vmScale: 0.62,
+    hip: [0.150, -0.135, -0.340], hipRot: [0.028, 0.030, 0.030],
+    adsDist: 0.205, tracerEvery: 3,
   },
   smg: {
     name: 'VECTOR-9', model: 'smg', auto: true, sightNode: 'optic',
@@ -48,9 +49,9 @@ export const WEAPONS = {
     adsTime: 0.18, adsFov: 60, drawTime: 0.44, holsterTime: 0.24,
     rl: { out: 0.44, in: 1.00, ammo: 1.16, dur: 1.85, extra: 0.62, chargeDur: 0.30 },
     cycle: 0.048, ejectAt: 0.30, boltKind: 'auto',
-    vmScale: 0.74,
-    hip: [0.140, -0.122, -0.315], hipRot: [0.030, 0.028, 0.032],
-    adsDist: 0.225, tracerEvery: 3,
+    vmScale: 0.66,
+    hip: [0.145, -0.128, -0.305], hipRot: [0.028, 0.032, 0.032],
+    adsDist: 0.195, tracerEvery: 3,
   },
   shotgun: {
     name: 'KS-12 BREACHER', model: 'shotgun', auto: false, sightNode: 'irons',
@@ -62,9 +63,9 @@ export const WEAPONS = {
     adsTime: 0.26, adsFov: 62, drawTime: 0.58, holsterTime: 0.32,
     rl: { shell: true, start: 0.40, per: 0.44, end: 0.52 },
     cycle: 0.62, ejectAt: 0.42, boltKind: 'pump', pumpAfterShot: true,
-    vmScale: 0.72,
-    hip: [0.148, -0.132, -0.330], hipRot: [0.030, 0.026, 0.032],
-    adsDist: 0.215, tracerEvery: 1, tracerWidth: 0.014,
+    vmScale: 0.64,
+    hip: [0.150, -0.136, -0.320], hipRot: [0.028, 0.030, 0.032],
+    adsDist: 0.200, tracerEvery: 1, tracerWidth: 0.014,
   },
   sniper: {
     name: 'LR-338 BALLISTA', model: 'sniper', auto: false, sightNode: 'optic',
@@ -76,9 +77,9 @@ export const WEAPONS = {
     adsTime: 0.34, adsFov: 60, drawTime: 0.72, holsterTime: 0.38,
     rl: { out: 0.62, in: 1.42, ammo: 1.60, dur: 2.70, extra: 0.60, chargeDur: 0.40 },
     cycle: 0.90, ejectAt: 0.38, boltKind: 'bolt', boltAfterShot: true,
-    vmScale: 0.70,
-    hip: [0.150, -0.134, -0.360], hipRot: [0.030, 0.024, 0.028],
-    adsDist: 0.215, scope: true, scopeFov: 6.8, tracerEvery: 1, tracerWidth: 0.030,
+    vmScale: 0.62,
+    hip: [0.152, -0.138, -0.345], hipRot: [0.028, 0.028, 0.028],
+    adsDist: 0.190, scope: true, scopeFov: 6.8, tracerEvery: 1, tracerWidth: 0.030,
   },
 };
 
@@ -549,42 +550,44 @@ export class Weapons {
   }
 
   /**
-   * Arms ride the weapon root, so recoil / sway / sprint need no work here. What does
-   * need work is the support hand: during a magazine change it leaves the handguard,
-   * strips the mag, feeds a fresh one and slaps the bolt release.
+   * Arms ride the weapon root, so recoil / sway / sprint / draw need no work here.
+   * What does need work is the support hand: during a magazine change it leaves the
+   * handguard, strips the mag, feeds a fresh one, and on an empty reload slaps the
+   * bolt release on the way back.
    */
   _updArms(dt) {
     const m = this.model, d = this.def;
-    if (!m || !m.armL) return;
+    if (!m || !m.armL || !m.armL.rest) return;
     const a = m.armL;
-    if (!a.rest) return;
     const r = this.reloadA;
-    let w = 0, ch = 0;
+    let wMag = 0, wCh = 0;
     if (r && !r.shell) {
-      // down to the magwell and back, plus a dip to the charging handle when empty
-      w = hump(r.t, 0.04, d.rl.in + 0.16);
-      if (r.empty) ch = hump(r.t, r.chargeAt - 0.10, r.chargeAt + d.rl.chargeDur + 0.10);
+      if (a.magPose) wMag = hump(r.t, 0.02, d.rl.in + 0.18);
+      if (a.chargePose && r.empty) wCh = hump(r.t, r.chargeAt - 0.12, r.chargeAt + d.rl.chargeDur + 0.12);
     }
-    const k = Math.max(w, ch * 0.85);
-    if (k < 0.001 && !a._dirty) return;
-    a._dirty = k >= 0.001;
-
-    const p = a.rest.pos;
-    // magwell is under the receiver; the charging handle is back at the rear of it
-    const tx = ch > w ? 0.055 : -0.010;
-    const ty = ch > w ? -0.030 : -0.185;
-    const tz = ch > w ? 0.020 : -0.120;
-    a.root.position.set(
-      p.x + (tx - p.x) * k,
-      p.y + (ty - p.y) * k,
-      p.z + (tz - p.z) * k,
-    );
-    _q.copy(a.rest.quat);
-    if (k > 0.001) {
-      _q2.setFromEuler(_e2.set(0.5 * k, -0.9 * k, 0.7 * k));
-      _q.multiply(_q2);
+    // the charge grab wins while it is running; both fade to the rest pose
+    const target = wCh > wMag ? a.chargePose : a.magPose;
+    const k = smooth(clamp01(Math.max(wMag, wCh)));
+    if (k < 0.002) {
+      if (!a._posed) return;
+      a._posed = false;
+      a.root.position.copy(a.rest.pos);
+      a.root.quaternion.copy(a.rest.quat);
+      if (a.restElbow) aimFore(a.root, a.fore, a.restElbow);
+      return;
     }
-    a.root.quaternion.copy(_q);
+    a._posed = true;
+    if (!target) return;
+    a.root.position.lerpVectors(a.rest.pos, target.pos, k);
+    a.root.quaternion.copy(a.rest.quat).slerp(target.quat, k);
+    if (a.restElbow && target.elbow) {
+      _v.set(
+        a.restElbow[0] + (target.elbow[0] - a.restElbow[0]) * k,
+        a.restElbow[1] + (target.elbow[1] - a.restElbow[1]) * k,
+        a.restElbow[2] + (target.elbow[2] - a.restElbow[2]) * k,
+      );
+      aimFore(a.root, a.fore, [_v.x, _v.y, _v.z]);
+    }
   }
 
   _eject() {

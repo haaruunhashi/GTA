@@ -132,6 +132,12 @@ export class World {
         B.box('curb', sx * (ROAD_HW + WALK / 2), 0.08, cz, WALK, 0.16, 10, {});
         B.box('concrete', sx * (ROAD_HW + 0.07), 0.085, cz, 0.16, 0.19, 10, { dirt: false, tint: 0xd0cabb });
         B.collider(sx * (ROAD_HW) - 0.1, sx * (ROAD_HW + WALK) + 0.1 * sx, 0, 0.16, cz - 5, cz + 5);
+        // The kerb is only 160 mm tall, so its own shadow is a hairline and the
+        // pavement ends up looking pasted onto the road. Bake the gutter crease.
+        for (let i = 0; i < 5; i++) {
+          B.quad('decal_ao', sx * (ROAD_HW - 0.28), 0.014, cz - 4 + i * 2, 1.5, 2.2,
+            { rotX: -Math.PI / 2, dirt: false, shadow: false });
+        }
       }
     }
     // drains

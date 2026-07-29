@@ -142,12 +142,12 @@ function brickCourse(g, s, rnd, o) {
       const ox = (y % 2) * bw / 2;
       const H = hue + (rnd() - 0.5) * h1 * 0.5 + (h1 - h0) * 0;
       const S = sat0 + rnd() * (sat1 - sat0);
-      const L = lig + rnd() * 12;
+      const L = lig + rnd() * 7;
       g.fillStyle = `hsl(${H} ${S}% ${L}%)`;
       g.fillRect(x * bw + ox + gx, y * bh + gy, bw - gx * 2, bh - gy * 2);
       // per-brick tonal noise
       if (rnd() < 0.35) {
-        g.fillStyle = `hsla(${H} ${S}% ${L + (rnd() < 0.5 ? -6 : 8)}% / 0.5)`;
+        g.fillStyle = `hsla(${H} ${S}% ${L + (rnd() < 0.5 ? -3.5 : 4.5)}% / 0.42)`;
         g.fillRect(x * bw + ox + gx, y * bh + gy + bh * rnd() * 0.4, bw - gx * 2, bh * 0.35);
       }
     }
@@ -163,6 +163,63 @@ function brickHeight(g, s, o) {
     g.fillStyle = '#c8c8c8';
     g.fillRect(x * bw + ox + gx, y * bh + gy, bw - gx * 2, bh - gy * 2);
   }
+}
+
+/* ---------------------------------------------------- macro de-tiling ---- */
+
+// A 4 m masonry tile repeated across a 30 m facade is obvious the moment the
+// eye finds a landmark and then sees it again 4 m later. Detail in the tile
+// cannot fix that — the give-away is at a much lower frequency than the tile.
+// So modulate albedo, roughness and a little hue with smooth noise driven by
+// WORLD position, at scales of roughly 3 m, 9 m and 30 m. Costs a handful of
+// sines per fragment and no extra texture memory, and it kills the repeat at
+// every distance at once. `amt` scales the whole effect per material.
+function macroVariation(m, o) {
+  const amt = (typeof o === 'number' ? o : o.amt) ?? 1.0;
+  const warm = (o && o.warm) ?? 0.06;
+  const prev = m.onBeforeCompile;
+  m.onBeforeCompile = (sh, renderer) => {
+    if (prev) prev(sh, renderer);
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vMacroPos;')
+      .replace('#include <begin_vertex>',
+        '#include <begin_vertex>\nvMacroPos = (modelMatrix * vec4(position, 1.0)).xyz;');
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', `#include <common>
+varying vec3 vMacroPos;
+float macroWave(vec3 p, float f, float ph) {
+  return sin(p.x * f + ph) * sin(p.y * f * 0.83 + ph * 1.7) * sin(p.z * f * 1.11 + ph * 2.3);
+}
+float macroNoise(vec3 p) {
+  // three octaves of separable sine noise -> smooth, non-repeating at map scale
+  float v = 0.50 * macroWave(p, 0.33, 0.0)
+          + 0.32 * macroWave(p, 0.11, 2.1)
+          + 0.18 * macroWave(p, 0.041, 4.3);
+  return clamp(v * 0.5 + 0.5, 0.0, 1.0);
+}`)
+      .replace('#include <map_fragment>', `#include <map_fragment>
+{
+  float mv = macroNoise(vMacroPos);
+  float mv2 = macroNoise(vMacroPos.zxy * 1.37 + 11.0);
+  // brightness: the dominant cue, so it gets the widest swing
+  diffuseColor.rgb *= mix(0.74, 1.22, mv) * ${amt.toFixed(3)} + (1.0 - ${amt.toFixed(3)});
+  // and a slow warm/cool drift so patches of wall differ in hue, not just value
+  diffuseColor.r *= 1.0 + (mv2 - 0.5) * ${(warm * 2).toFixed(3)} * ${amt.toFixed(3)};
+  diffuseColor.b *= 1.0 - (mv2 - 0.5) * ${(warm * 2.6).toFixed(3)} * ${amt.toFixed(3)};
+}`)
+      .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
+{
+  float mr = macroNoise(vMacroPos * 0.71 + 5.0);
+  roughnessFactor = clamp(roughnessFactor * mix(0.84, 1.14, mr), 0.04, 1.0);
+}`);
+  };
+  // NOTE: three's default customProgramCacheKey reads `this.onBeforeCompile`,
+  // so it must be invoked with the material as its receiver — calling the
+  // captured reference bare throws during renderer.compile().
+  const key = `macro${amt}_${warm}`;
+  const base = m.customProgramCacheKey;
+  m.customProgramCacheKey = function () { return base.call(this) + key; };
+  return m;
 }
 
 /* ------------------------------------------------------- map construction */
@@ -312,7 +369,7 @@ const DEFS = {
   },
 
   concrete: {
-    tile: 4, size: 512, r0: 0.68, r1: 0.95, nrm: 1.1, ao: 0.4, metal: 0, roughFbm: 0.2,
+    tile: 4, size: 512, r0: 0.68, r1: 0.95, nrm: 1.1, ao: 0.4, metal: 0, roughFbm: 0.2, macro: { amt: 0.55, warm: 0.03 },
     albedo(g, s, rnd) {
       g.fillStyle = '#8d8a83'; g.fillRect(0, 0, s, s);
       fbm(g, s, rnd, { octaves: 4, cells: 2, amp: 0.4 });
@@ -380,7 +437,7 @@ const DEFS = {
   },
 
   plaster: {
-    tile: 5, size: 512, r0: 0.66, r1: 0.94, nrm: 1.5, ao: 0.5, metal: 0, roughFbm: 0.2,
+    tile: 5, size: 512, r0: 0.66, r1: 0.94, nrm: 1.5, ao: 0.5, metal: 0, roughFbm: 0.2, macro: { amt: 0.8, warm: 0.05 },
     albedo(g, s, rnd) {
       g.fillStyle = '#c8bda6'; g.fillRect(0, 0, s, s);
       fbm(g, s, rnd, { octaves: 4, cells: 2, amp: 0.3 });
@@ -421,7 +478,7 @@ const DEFS = {
   // comes from per-building tint (world.js) and from grime decals, not from
   // landmarks baked into the tile.
   brick_red: {
-    tile: 4, size: 512, r0: 0.7, r1: 0.96, nrm: 1.5, ao: 0.62, metal: 0,
+    tile: 4, size: 512, r0: 0.7, r1: 0.96, nrm: 1.5, ao: 0.62, metal: 0, macro: { amt: 1.0, warm: 0.07 },
     albedo(g, s, rnd) {
       brickCourse(g, s, rnd, { rows: 16, cols: 8, mortar: '#a49d90', hue: 9, sat0: 18, sat1: 38, lig: 20 });
       blotch(g, s, rnd, { n: 26, r0: 0.03, r1: 0.12, colors: ['#3a2a20', '#6b4a38', '#87796a'], alpha: 0.14 });
@@ -432,7 +489,7 @@ const DEFS = {
   },
 
   brick_tan: {
-    tile: 4, size: 512, r0: 0.72, r1: 0.96, nrm: 1.5, ao: 0.62, metal: 0,
+    tile: 4, size: 512, r0: 0.72, r1: 0.96, nrm: 1.5, ao: 0.62, metal: 0, macro: { amt: 1.0, warm: 0.06 },
     albedo(g, s, rnd) {
       brickCourse(g, s, rnd, { rows: 14, cols: 7, mortar: '#b0a897', hue: 34, sat0: 11, sat1: 24, lig: 36 });
       blotch(g, s, rnd, { n: 24, r0: 0.03, r1: 0.12, colors: ['#5b503f', '#9d9179', '#6e6552'], alpha: 0.13 });
@@ -443,7 +500,7 @@ const DEFS = {
   },
 
   brick_grey: {
-    tile: 4.5, size: 512, r0: 0.72, r1: 0.97, nrm: 1.45, ao: 0.58, metal: 0,
+    tile: 4.5, size: 512, r0: 0.72, r1: 0.97, nrm: 1.45, ao: 0.58, metal: 0, macro: { amt: 1.0, warm: 0.05 },
     albedo(g, s, rnd) {
       brickCourse(g, s, rnd, { rows: 12, cols: 6, mortar: '#8f8d88', hue: 30, sat0: 3, sat1: 10, lig: 29 });
       blotch(g, s, rnd, { n: 24, r0: 0.03, r1: 0.13, colors: ['#3e3c39', '#7b7873', '#585550'], alpha: 0.14 });
@@ -455,7 +512,7 @@ const DEFS = {
 
   // Fourth course rhythm so neighbouring blocks never share a brick beat.
   brick_buff: {
-    tile: 3.2, size: 512, r0: 0.74, r1: 0.97, nrm: 1.4, ao: 0.6, metal: 0,
+    tile: 3.2, size: 512, r0: 0.74, r1: 0.97, nrm: 1.4, ao: 0.6, metal: 0, macro: { amt: 1.0, warm: 0.06 },
     albedo(g, s, rnd) {
       brickCourse(g, s, rnd, { rows: 20, cols: 5, mortar: '#9b9484', hue: 26, sat0: 9, sat1: 22, lig: 30, gap: 0.05 });
       blotch(g, s, rnd, { n: 22, r0: 0.03, r1: 0.11, colors: ['#4a4034', '#8d8471', '#5e5648'], alpha: 0.14 });
@@ -772,11 +829,12 @@ export class Materials {
     switch (name) {
       case 'glass': return this.glass();
       case 'glass_broken': return this.glass(true);
-      case 'window': return this.windowGlass({ depth: 0.62 });
+      case 'window': return this.windowGlass({ depth: 0.8 });
       case 'window_deep': return this.windowGlass({ depth: 1.15, env: 2.4 });
-      case 'window_broken': return this.windowGlass({ depth: 0.62, broken: true, rough: 0.3, env: 1.4 });
+      case 'window_broken': return this.windowGlass({ depth: 0.8, broken: true, rough: 0.34, env: 1.3 });
       case 'decal_grime': return this.decalGrime('base');
       case 'decal_drip': return this.decalGrime('drip');
+      case 'decal_ao': return this.decalAO();
       case 'roadline': return this.roadline();
       case 'chainlink': return this.chainlink();
       case 'signs': return this.signs();
@@ -816,6 +874,7 @@ export class Materials {
       envMapIntensity: def.metal > 0.4 ? 1.1 : 0.75,
     });
     if (def.ao) { m.aoMap = texture(aoCanvas(hc, def.ao), false); m.aoMapIntensity = 1.0; }
+    if (def.macro) macroVariation(m, def.macro);
     m.userData.tile = def.tile;
     return m;
   }
@@ -921,9 +980,9 @@ export class Materials {
   windowGlass(o = {}) {
     const m = new THREE.MeshStandardMaterial({
       color: 0xffffff,
-      roughness: o.rough ?? 0.09,
-      metalness: 0.0,
-      envMapIntensity: o.env ?? 3.0,
+      roughness: o.rough ?? 0.07,
+      metalness: 0.04,
+      envMapIntensity: o.env ?? 3.8,
       vertexColors: true,
     });
     m.defines = { WIN_DEPTH: (o.depth ?? 0.55).toFixed(3), WIN_BROKEN: o.broken ? 1 : 0 };
@@ -985,6 +1044,24 @@ vec3 winRoom(vec2 uv, vec3 rd, vec3 T, vec3 Bt, vec3 Nn, float id) {
   float blind = step(h1, 0.34);
   float bl = smoothstep(0.36 + 0.4 * h2, 0.30 + 0.4 * h2, uv.y);
   col = mix(col, vec3(0.10, 0.093, 0.082) * (0.5 + h2), blind * bl * 0.92);
+
+  // ---- the joinery, drawn at the glass plane in front of the room.
+  // Without a frame and mullions the pane is a featureless dark hole; these
+  // few bars are most of what says "window" at 40 m.
+  vec2 e = min(uv, 1.0 - uv);
+  float edge = min(e.x, e.y);
+  float mull = min(abs(uv.x - 0.5), abs(uv.y - (0.62 + 0.08 * h2)));
+  float frame = 1.0 - smoothstep(0.030, 0.052, edge);
+  float bars = 1.0 - smoothstep(0.012, 0.024, mull);
+  float joinery = clamp(frame + bars, 0.0, 1.0);
+  vec3 frameCol = mix(vec3(0.045, 0.042, 0.038), vec3(0.34, 0.33, 0.30), step(0.5, h2));
+  col = mix(col, frameCol, joinery);
+
+  // reveal shading: the head and the shaded jamb throw a soft gradient onto the
+  // glass, which is what makes a flush pane read as set back into the wall
+  float rv = mix(0.42, 1.0, smoothstep(1.0, 0.72, uv.y));   // head shadow, top of the pane
+  rv *= mix(0.72, 1.0, smoothstep(0.0, 0.18, uv.x));        // shaded jamb down one side
+  col *= rv;
   return col;
 }`)
         .replace('#include <map_fragment>', `
@@ -1025,6 +1102,37 @@ vec3 winRoom(vec2 uv, vec3 rd, vec3 T, vec3 Bt, vec3 Nn, float id) {
     m.userData.noShadowRecv = true;
     m.customProgramCacheKey = () => 'win' + (o.depth ?? 0.55) + (o.broken ? 'b' : '') + (o.rough ?? 0.09);
     m.userData.tile = 0;  // authored UVs (uvRect 0..1 per window)
+    return m;
+  }
+
+  // Baked contact occlusion: the dark, tight gradient that appears in the
+  // crease where an object meets the ground. Screen-space AO alone always
+  // misses this at grazing angles and under thin geometry, and without it every
+  // prop reads as a sticker floating a centimetre above the tarmac.
+  // Multiplicative, so it darkens whatever surface it lands on without tinting.
+  decalAO() {
+    const rnd = seeded('contactao');
+    const s = 128;
+    // MultiplyBlending ignores alpha entirely (dst * srcColour), so the
+    // falloff has to live in the colour: white at the rim = no change, grey in
+    // the core = darkening. White corners keep the quad invisible.
+    const ac = CV(s), g = ac.getContext('2d', { willReadFrequently: true });
+    g.fillStyle = '#fff'; g.fillRect(0, 0, s, s);
+    // tight core, long soft tail — the shape real contact occlusion has
+    const grd = g.createRadialGradient(s / 2, s / 2, 0, s / 2, s / 2, s / 2);
+    grd.addColorStop(0, '#9aa0a6');
+    grd.addColorStop(0.3, '#b8bcc0');
+    grd.addColorStop(0.62, '#e2e4e6');
+    grd.addColorStop(1, '#ffffff');
+    g.fillStyle = grd; g.fillRect(0, 0, s, s);
+    // break the perfect circle so it never reads as an airbrushed disc
+    g.save(); g.globalAlpha = 0.22; fbm(g, s, rnd, { octaves: 3, cells: 3, amp: 0.6, op: 'screen' }); g.restore();
+    const m = new THREE.MeshBasicMaterial({
+      map: texture(ac, true), transparent: true, depthWrite: false, fog: true,
+      blending: THREE.MultiplyBlending, premultipliedAlpha: true,
+      polygonOffset: true, polygonOffsetFactor: -8, polygonOffsetUnits: -8,
+    });
+    m.userData.tile = 0;
     return m;
   }
 

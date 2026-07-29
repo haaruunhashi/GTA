@@ -50,15 +50,15 @@ const PRESETS = {
     // bounce term is deliberately warm: it stands in for sunlight coming back
     // off the lit brick, and being *directional* it is the only thing that puts
     // normal-map relief on shadowed ground.
-    hemiSky: [0.42, 0.56, 0.88], hemiGround: [0.18, 0.16, 0.14], hemiInt: 1.00, envInt: 1.70,
-    bounce: [0.62, 0.50, 0.40], bounceInt: 0.75,
+    hemiSky: [0.52, 0.60, 0.78], hemiGround: [0.19, 0.17, 0.15], hemiInt: 1.00, envInt: 1.50,
+    bounce: [0.66, 0.52, 0.40], bounceInt: 0.85,
     fog: { density: 0.0046, falloff: 15, base: -1, start: 18,
            color: [0.072, 0.098, 0.150], lowColor: [0.118, 0.122, 0.148],
            sunColor: [0.34, 0.20, 0.10], minT: 0.12, aniso: 0.72 },
     post: {
-      exposure: 1.20, contrast: 1.16, saturation: 1.10, toe: 0.026, split: 0.62, white: 0.910,
-      lift: [-0.010, 0.000, 0.012], gamma: [1.0, 1.0, 1.02], gain: [1.03, 1.0, 0.975],
-      shadowTint: [0.72, 0.90, 1.28], highTint: [1.12, 1.00, 0.84],
+      exposure: 1.30, contrast: 1.14, saturation: 1.00, toe: 0.014, split: 0.46, white: 0.912,
+      lift: [-0.004, 0.000, 0.008], gamma: [1.0, 1.0, 1.01], gain: [1.03, 1.0, 0.975],
+      shadowTint: [0.86, 0.95, 1.12], highTint: [1.12, 1.00, 0.84],
       vignette: 0.42, ca: 1.4, grain: 0.030, sharpen: 0.55,
       bloom: 0.28, bloomThreshold: 1.55, bloomRadius: 0.45,
       godrays: 0.30, godrayDensity: 0.52, godrayThreshold: 2.6, godrayTint: [1.0, 0.80, 0.55],
@@ -143,14 +143,14 @@ export class Sky {
     const mapSize = ctx.config.shadowMapSize;
     this.sunNear = new THREE.DirectionalLight(0xffffff, 1);
     this.sunNear.castShadow = true;
-    this._setupShadow(this.sunNear, mapSize, 26, -0.0006, 0.030, 2.4);
+    this._setupShadow(this.sunNear, mapSize, 26, -0.0006, 0.030, 4.0);
     scene.add(this.sunNear, this.sunNear.target);
 
     this.sunFar = null;
     if (tier >= 2) {
       this.sunFar = new THREE.DirectionalLight(0xffffff, 1);
       this.sunFar.castShadow = true;
-      this._setupShadow(this.sunFar, Math.min(mapSize, 1536), 95, -0.0014, 0.085, 4.0);
+      this._setupShadow(this.sunFar, Math.min(mapSize, 1536), 95, -0.0014, 0.085, 5.0);
       scene.add(this.sunFar, this.sunFar.target);
     } else {
       this._setupShadow(this.sunNear, mapSize, 70, -0.0012, 0.060, 3.0);

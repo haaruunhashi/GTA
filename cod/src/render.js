@@ -90,10 +90,10 @@ export class Render {
       // already dark shadow. 4.5 maps 0.85 -> 0.50, which is what makes the
       // kerbs, sandbags and lamp bases actually sit on the ground.
       gtao.updateGtaoMaterial({
-        radius: 2.2,             // metres — the contact gradient, not a hairline
+        radius: 2.6,             // metres — the contact gradient, not a hairline
         distanceExponent: 0.8,
         thickness: 1.6,
-        scale: 4.5,
+        scale: 5.0,
         samples: this.tier >= 3 ? 16 : 8,
         distanceFallOff: 1.0,
         screenSpaceRadius: false,
