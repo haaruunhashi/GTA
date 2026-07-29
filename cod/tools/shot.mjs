@@ -48,9 +48,9 @@ page.on('pageerror', e => errors.push(String(e)));
 
 for (const pose of poses) {
   errors.length = 0;
-  await page.goto(`http://127.0.0.1:${port}/index.html?shot=${pose}&frames=60&dpr=1`, { waitUntil: 'load' });
+  await page.goto(`http://127.0.0.1:${port}/index.html?shot=${pose}&frames=40&dpr=1`, { waitUntil: 'load' });
   try {
-    await page.waitForFunction('window.__ready === true', null, { timeout: 240000 });
+    await page.waitForFunction('window.__ready === true', null, { timeout: 420000 });
   } catch (e) {
     console.error(`[shot] ${pose}: TIMED OUT waiting for render.`);
   }

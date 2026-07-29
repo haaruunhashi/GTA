@@ -248,7 +248,10 @@ const DEFS = {
   // Worn road asphalt — the map's single biggest surface, so the aggregate is
   // painted per-pixel (see `aggregate`) instead of with 10k canvas arcs.
   road: {
-    tile: 6, size: 512, r0: 0.74, r1: 0.99, nrm: 1.5, ao: 0.32, metal: 0, roughFbm: 0.28,
+    // NOTE: the normal strength here is deliberately low. Asphalt aggregate is
+    // 5–10 mm of relief seen from 1.6 m up; anything stronger and the near field
+    // reads as textured rubber matting rather than road.
+    tile: 6, size: 512, r0: 0.74, r1: 0.99, nrm: 0.34, ao: 0.16, metal: 0, roughFbm: 0.28,
     albedo(g, s, rnd) {
       g.fillStyle = '#25272b'; g.fillRect(0, 0, s, s);
       fbm(g, s, rnd, { octaves: 4, cells: 3, amp: 0.34 });
@@ -266,14 +269,15 @@ const DEFS = {
     },
     height(g, s, rnd) {
       g.fillStyle = '#7d7d7d'; g.fillRect(0, 0, s, s);
-      fbm(g, s, rnd, { octaves: 3, cells: 6, amp: 0.5 });
-      aggregate(g, s, rnd, { density: 0.26, light: 90, dark: 30, warm: 0 });
-      cracks(g, s, rnd, { n: 6, steps: 26, len: 10, w: 2.1, color: 'rgba(0,0,0,0.9)' });
+      fbm(g, s, rnd, { octaves: 3, cells: 6, amp: 0.28 });
+      aggregate(g, s, rnd, { density: 0.26, light: 42, dark: 16, warm: 0 });
+      // the only relief that should read at distance is the cracking
+      cracks(g, s, rnd, { n: 6, steps: 26, len: 10, w: 2.1, color: 'rgba(0,0,0,0.85)' });
     },
   },
 
   asphalt: {
-    tile: 7, size: 512, r0: 0.72, r1: 0.99, nrm: 1.6, ao: 0.35, metal: 0, roughFbm: 0.25,
+    tile: 7, size: 512, r0: 0.72, r1: 0.99, nrm: 0.4, ao: 0.18, metal: 0, roughFbm: 0.25,
     albedo(g, s, rnd) {
       g.fillStyle = '#26282c'; g.fillRect(0, 0, s, s);
       fbm(g, s, rnd, { octaves: 4, cells: 3, amp: 0.35 });
@@ -300,10 +304,10 @@ const DEFS = {
       fbm(g, s, rnd, { octaves: 3, cells: 6, amp: 0.5 });
       for (let i = 0; i < 5200; i++) {
         const x = rnd() * s, y = rnd() * s, r = 0.7 + rnd() * 2.1;
-        g.fillStyle = `rgba(255,255,255,${0.15 + rnd() * 0.5})`;
+        g.fillStyle = `rgba(255,255,255,${0.08 + rnd() * 0.22})`;
         g.beginPath(); g.arc(x, y, r, 0, 7); g.fill();
       }
-      cracks(g, s, rnd, { n: 7, steps: 30, len: 9, w: 2.2, color: 'rgba(0,0,0,0.9)' });
+      cracks(g, s, rnd, { n: 7, steps: 30, len: 9, w: 2.2, color: 'rgba(0,0,0,0.85)' });
     },
   },
 
@@ -411,37 +415,54 @@ const DEFS = {
     },
   },
 
+  // NOTE on the brick set: the low-frequency staining is deliberately weak.
+  // Big blotches are exactly what the eye latches onto as "that patch again"
+  // when a 4 m texture repeats across a 20 m facade. Variation between walls
+  // comes from per-building tint (world.js) and from grime decals, not from
+  // landmarks baked into the tile.
   brick_red: {
-    tile: 4, size: 512, r0: 0.7, r1: 0.96, nrm: 2.0, ao: 0.75, metal: 0,
+    tile: 4, size: 512, r0: 0.7, r1: 0.96, nrm: 1.5, ao: 0.62, metal: 0,
     albedo(g, s, rnd) {
-      brickCourse(g, s, rnd, { rows: 16, cols: 8, mortar: '#a29b8e', hue: 12, sat0: 30, sat1: 52, lig: 22 });
-      blotch(g, s, rnd, { n: 12, r0: 0.08, r1: 0.32, colors: ['#3a2a20', '#6b4a38', '#87796a'], alpha: 0.22 });
-      streaks(g, s, rnd, { n: 26, alpha: 0.14, color: '30,22,16' });
-      grain(g, s, rnd, 16);
+      brickCourse(g, s, rnd, { rows: 16, cols: 8, mortar: '#a49d90', hue: 9, sat0: 18, sat1: 38, lig: 20 });
+      blotch(g, s, rnd, { n: 26, r0: 0.03, r1: 0.12, colors: ['#3a2a20', '#6b4a38', '#87796a'], alpha: 0.14 });
+      streaks(g, s, rnd, { n: 30, alpha: 0.07, color: '30,22,16' });
+      grain(g, s, rnd, 18);
     },
     height(g, s, rnd) { brickHeight(g, s, { rows: 16, cols: 8 }); fbm(g, s, rnd, { octaves: 2, cells: 16, amp: 0.25 }); },
   },
 
   brick_tan: {
-    tile: 4, size: 512, r0: 0.72, r1: 0.96, nrm: 2.0, ao: 0.75, metal: 0,
+    tile: 4, size: 512, r0: 0.72, r1: 0.96, nrm: 1.5, ao: 0.62, metal: 0,
     albedo(g, s, rnd) {
-      brickCourse(g, s, rnd, { rows: 14, cols: 7, mortar: '#b0a897', hue: 34, sat0: 16, sat1: 30, lig: 38 });
-      blotch(g, s, rnd, { n: 12, r0: 0.08, r1: 0.3, colors: ['#5b503f', '#9d9179', '#6e6552'], alpha: 0.2 });
-      streaks(g, s, rnd, { n: 22, alpha: 0.13, color: '44,38,26' });
-      grain(g, s, rnd, 14);
+      brickCourse(g, s, rnd, { rows: 14, cols: 7, mortar: '#b0a897', hue: 34, sat0: 11, sat1: 24, lig: 36 });
+      blotch(g, s, rnd, { n: 24, r0: 0.03, r1: 0.12, colors: ['#5b503f', '#9d9179', '#6e6552'], alpha: 0.13 });
+      streaks(g, s, rnd, { n: 26, alpha: 0.07, color: '44,38,26' });
+      grain(g, s, rnd, 16);
     },
     height(g, s, rnd) { brickHeight(g, s, { rows: 14, cols: 7 }); fbm(g, s, rnd, { octaves: 2, cells: 14, amp: 0.25 }); },
   },
 
   brick_grey: {
-    tile: 4.5, size: 512, r0: 0.72, r1: 0.97, nrm: 1.9, ao: 0.7, metal: 0,
+    tile: 4.5, size: 512, r0: 0.72, r1: 0.97, nrm: 1.45, ao: 0.58, metal: 0,
     albedo(g, s, rnd) {
-      brickCourse(g, s, rnd, { rows: 12, cols: 6, mortar: '#8f8d88', hue: 30, sat0: 4, sat1: 12, lig: 30 });
-      blotch(g, s, rnd, { n: 14, r0: 0.08, r1: 0.34, colors: ['#3e3c39', '#7b7873', '#585550'], alpha: 0.22 });
-      streaks(g, s, rnd, { n: 26, alpha: 0.14, color: '26,25,22' });
-      grain(g, s, rnd, 14);
+      brickCourse(g, s, rnd, { rows: 12, cols: 6, mortar: '#8f8d88', hue: 30, sat0: 3, sat1: 10, lig: 29 });
+      blotch(g, s, rnd, { n: 24, r0: 0.03, r1: 0.13, colors: ['#3e3c39', '#7b7873', '#585550'], alpha: 0.14 });
+      streaks(g, s, rnd, { n: 30, alpha: 0.08, color: '26,25,22' });
+      grain(g, s, rnd, 16);
     },
     height(g, s, rnd) { brickHeight(g, s, { rows: 12, cols: 6 }); fbm(g, s, rnd, { octaves: 2, cells: 12, amp: 0.25 }); },
+  },
+
+  // Fourth course rhythm so neighbouring blocks never share a brick beat.
+  brick_buff: {
+    tile: 3.2, size: 512, r0: 0.74, r1: 0.97, nrm: 1.4, ao: 0.6, metal: 0,
+    albedo(g, s, rnd) {
+      brickCourse(g, s, rnd, { rows: 20, cols: 5, mortar: '#9b9484', hue: 26, sat0: 9, sat1: 22, lig: 30, gap: 0.05 });
+      blotch(g, s, rnd, { n: 22, r0: 0.03, r1: 0.11, colors: ['#4a4034', '#8d8471', '#5e5648'], alpha: 0.14 });
+      streaks(g, s, rnd, { n: 26, alpha: 0.08, color: '38,32,24' });
+      grain(g, s, rnd, 16);
+    },
+    height(g, s, rnd) { brickHeight(g, s, { rows: 20, cols: 5, gap: 0.05 }); fbm(g, s, rnd, { octaves: 2, cells: 20, amp: 0.25 }); },
   },
 
   corrugated: {
@@ -618,28 +639,34 @@ const DEFS = {
     },
   },
 
+  // Hessian sacking. The weave must stay sub-visible at a metre: it is the
+  // slump of the bag that reads, not the cloth. Kept low-contrast with a soft
+  // normal so a wall of these does not shimmer or tile.
   sandbag: {
-    tile: 0.95, size: 256, r0: 0.86, r1: 1.0, nrm: 2.4, ao: 0.8, metal: 0,
+    tile: 0.42, size: 256, r0: 0.9, r1: 1.0, nrm: 0.55, ao: 0.45, metal: 0,
     albedo(g, s, rnd) {
-      g.fillStyle = '#9b8a68'; g.fillRect(0, 0, s, s);
-      // hessian weave
-      const step = 5;
+      g.fillStyle = '#8d7d5e'; g.fillRect(0, 0, s, s);
+      const step = 3;
       for (let y = 0; y < s; y += step) {
-        g.fillStyle = `rgba(70,58,38,${0.16 + rnd() * 0.12})`; g.fillRect(0, y, s, 2);
+        g.fillStyle = `rgba(74,63,43,${0.08 + rnd() * 0.07})`; g.fillRect(0, y, s, 1.4);
       }
       for (let x = 0; x < s; x += step) {
-        g.fillStyle = `rgba(190,172,132,${0.14 + rnd() * 0.12})`; g.fillRect(x, 0, 2, s);
+        g.fillStyle = `rgba(178,161,124,${0.07 + rnd() * 0.07})`; g.fillRect(x, 0, 1.4, s);
       }
-      fbm(g, s, rnd, { octaves: 3, cells: 3, amp: 0.35 });
-      blotch(g, s, rnd, { n: 14, r0: 0.06, r1: 0.26, colors: ['#6d5c3c', '#b5a582', '#514631'], alpha: 0.35 });
-      grain(g, s, rnd, 18);
+      fbm(g, s, rnd, { octaves: 4, cells: 3, amp: 0.42 });
+      // damp patches, dust, mildew — this is what breaks the repeat, not the weave
+      blotch(g, s, rnd, { n: 22, r0: 0.08, r1: 0.4, colors: ['#5f5236', '#a89873', '#453a28', '#6d6a52'], alpha: 0.4 });
+      streaks(g, s, rnd, { n: 14, alpha: 0.14, color: '48,40,26', wmax: 14 });
+      grain(g, s, rnd, 20);
     },
     height(g, s, rnd) {
       g.fillStyle = '#808080'; g.fillRect(0, 0, s, s);
-      const step = 5;
-      for (let y = 0; y < s; y += step) { g.fillStyle = 'rgba(0,0,0,0.5)'; g.fillRect(0, y, s, 2); }
-      for (let x = 0; x < s; x += step) { g.fillStyle = 'rgba(255,255,255,0.45)'; g.fillRect(x, 0, 2, s); }
-      fbm(g, s, rnd, { octaves: 3, cells: 4, amp: 0.5 });
+      const step = 3;
+      for (let y = 0; y < s; y += step) { g.fillStyle = 'rgba(0,0,0,0.28)'; g.fillRect(0, y, s, 1.4); }
+      for (let x = 0; x < s; x += step) { g.fillStyle = 'rgba(255,255,255,0.24)'; g.fillRect(x, 0, 1.4, s); }
+      // slack creases in the cloth
+      fbm(g, s, rnd, { octaves: 4, cells: 2, amp: 0.62 });
+      cracks(g, s, rnd, { n: 5, steps: 18, len: 12, w: 3.0, color: 'rgba(0,0,0,0.35)' });
     },
   },
 
@@ -745,6 +772,11 @@ export class Materials {
     switch (name) {
       case 'glass': return this.glass();
       case 'glass_broken': return this.glass(true);
+      case 'window': return this.windowGlass({ depth: 0.62 });
+      case 'window_deep': return this.windowGlass({ depth: 1.15, env: 2.4 });
+      case 'window_broken': return this.windowGlass({ depth: 0.62, broken: true, rough: 0.3, env: 1.4 });
+      case 'decal_grime': return this.decalGrime('base');
+      case 'decal_drip': return this.decalGrime('drip');
       case 'roadline': return this.roadline();
       case 'chainlink': return this.chainlink();
       case 'signs': return this.signs();
@@ -815,27 +847,225 @@ export class Materials {
     return m;
   }
 
+  // Road markings. Authored UVs: u runs ALONG the line (world.js repeats it
+  // every ~2 m via uvRect), v runs across its width. Painted as worn
+  // thermoplastic: never pure white, scrubbed thin by tyres down the middle,
+  // chipped at the edges and broken away completely in places.
   roadline() {
     const rnd = seeded('roadline');
     const s = 256;
     const ac = CV(s), g = ac.getContext('2d', { willReadFrequently: true });
-    g.fillStyle = '#cfc9b8'; g.fillRect(0, 0, s, s);
-    fbm(g, s, rnd, { octaves: 3, cells: 4, amp: 0.35 });
+    // grubby off-white; rubber and grit have greyed it
+    g.fillStyle = '#8e8a7e'; g.fillRect(0, 0, s, s);
+    for (let i = 0; i < 220; i++) {
+      const y = rnd() * s, h = 1 + rnd() * 5;
+      g.fillStyle = `hsla(${38 + rnd() * 12} ${4 + rnd() * 10}% ${44 + rnd() * 34}% / ${0.25 + rnd() * 0.5})`;
+      g.fillRect(0, y, s, h);
+    }
+    fbm(g, s, rnd, { octaves: 4, cells: 4, amp: 0.4 });
+    // tyre scuffing: dark rubber laid across the middle of the line
+    g.save(); g.globalCompositeOperation = 'multiply';
+    for (let i = 0; i < 9; i++) {
+      const y = s * (0.18 + rnd() * 0.64), h = s * (0.1 + rnd() * 0.3), x = rnd() * s, w = s * (0.15 + rnd() * 0.6);
+      const grd = g.createLinearGradient(x, 0, x + w, 0);
+      grd.addColorStop(0, '#ffffff'); grd.addColorStop(0.5, `rgba(90,86,80,${0.5 + rnd() * 0.4})`); grd.addColorStop(1, '#ffffff');
+      g.fillStyle = grd; g.fillRect(x, y, w, h);
+    }
+    g.restore();
+    grain(g, s, rnd, 26);
+
     const al = CV(s), ag = al.getContext('2d', { willReadFrequently: true });
     ag.fillStyle = '#fff'; ag.fillRect(0, 0, s, s);
+    // feathered long edges — paint never ends in a razor line
     ag.save(); ag.globalCompositeOperation = 'destination-out';
-    for (let i = 0; i < 380; i++) {
-      ag.globalAlpha = 0.25 + rnd() * 0.75;
-      ag.beginPath(); ag.arc(rnd() * s, rnd() * s, 1 + rnd() * 9, 0, 7); ag.fill();
+    for (const [y0, y1] of [[0, s * 0.1], [s * 0.9, s]]) {
+      const grd = ag.createLinearGradient(0, y0, 0, y1);
+      grd.addColorStop(y0 === 0 ? 0 : 1, 'rgba(255,255,255,0.95)');
+      grd.addColorStop(y0 === 0 ? 1 : 0, 'rgba(255,255,255,0)');
+      ag.fillStyle = grd; ag.fillRect(0, y0, s, y1 - y0);
+    }
+    // chips, pitting and scrubbed-away patches
+    for (let i = 0; i < 520; i++) {
+      ag.globalAlpha = 0.3 + rnd() * 0.7;
+      ag.beginPath(); ag.ellipse(rnd() * s, rnd() * s, 1 + rnd() * 7, 1 + rnd() * 14, 0, 0, 7); ag.fill();
+    }
+    // a couple of hard breaks where the line has gone entirely
+    for (let i = 0; i < 2; i++) {
+      ag.globalAlpha = 0.8 + rnd() * 0.2;
+      const x = rnd() * s, w = s * (0.06 + rnd() * 0.12);
+      const grd = ag.createLinearGradient(x, 0, x + w, 0);
+      grd.addColorStop(0, 'rgba(255,255,255,0)'); grd.addColorStop(0.5, 'rgba(255,255,255,1)');
+      grd.addColorStop(1, 'rgba(255,255,255,0)');
+      ag.fillStyle = grd; ag.fillRect(x, 0, w, s);
     }
     ag.restore();
+    ag.save(); ag.globalAlpha = 0.5; fbm(ag, s, rnd, { octaves: 4, cells: 4, amp: 0.75, op: 'multiply' }); ag.restore();
+
     const m = new THREE.MeshStandardMaterial({
       map: texture(ac, true), alphaMap: texture(al, false),
-      transparent: true, alphaTest: 0.35, roughness: 0.85, metalness: 0,
+      transparent: true, alphaTest: 0.42, roughness: 0.92, metalness: 0,
       polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
       vertexColors: true, depthWrite: false,
     });
     m.userData.tile = 0; // keep authored UVs
+    return m;
+  }
+
+  /* ------------------------------------------------------------- windows */
+
+  // Reflective glazing with a parallax-mapped room behind it. One quad per
+  // window: the fragment shader walks the view ray into a virtual box and
+  // shades the wall/floor/ceiling it hits, so the interior has real depth and
+  // slides correctly as the camera moves. The PBR specular on top is what
+  // catches the sky.
+  windowGlass(o = {}) {
+    const m = new THREE.MeshStandardMaterial({
+      color: 0xffffff,
+      roughness: o.rough ?? 0.09,
+      metalness: 0.0,
+      envMapIntensity: o.env ?? 3.0,
+      vertexColors: true,
+    });
+    m.defines = { WIN_DEPTH: (o.depth ?? 0.55).toFixed(3), WIN_BROKEN: o.broken ? 1 : 0 };
+    m.onBeforeCompile = (sh) => {
+      sh.vertexShader = sh.vertexShader
+        .replace('#include <common>', '#include <common>\nvarying vec2 vWinUv;\nvarying vec3 vWinWPos;')
+        .replace('#include <begin_vertex>',
+          '#include <begin_vertex>\nvWinUv = uv;\nvWinWPos = (modelMatrix * vec4(position, 1.0)).xyz;');
+      sh.fragmentShader = sh.fragmentShader
+        .replace('#include <common>', `#include <common>
+varying vec2 vWinUv;
+varying vec3 vWinWPos;
+float winHash(vec2 p) {
+  return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+}
+vec3 winRoom(vec2 uv, vec3 rd, vec3 T, vec3 Bt, vec3 Nn, float id) {
+  // ray in room space: x = u, y = v, z = depth into the wall (metres-ish)
+  float a = dot(rd, T) / max(dot(T, T), 1e-6);
+  float b = dot(rd, Bt) / max(dot(Bt, Bt), 1e-6);
+  float c = -dot(rd, Nn);
+  vec3 ro = vec3(uv, 0.0);
+  vec3 dir = vec3(a, b, max(c, 1e-4));
+  vec3 ad = max(abs(dir), vec3(1e-4));
+  vec3 sd = vec3(dir.x < 0.0 ? -1.0 : 1.0, dir.y < 0.0 ? -1.0 : 1.0, 1.0);
+  vec3 inv = sd / ad;
+  vec3 t2 = (vec3(1.0, 1.0, WIN_DEPTH) - ro) * inv;
+  vec3 t1 = (vec3(0.0, 0.0, 0.0) - ro) * inv;
+  vec3 tm = max(t1, t2);
+  float t = min(min(tm.x, tm.y), tm.z);
+  vec3 hit = ro + dir * t;
+  float depth01 = clamp(hit.z / float(WIN_DEPTH), 0.0, 1.0);
+
+  // per-room palette
+  float h1 = winHash(vec2(id, 3.7));
+  float h2 = winHash(vec2(id * 1.7, 9.1));
+  float h3 = winHash(vec2(id * 2.3, 17.3));
+  vec3 wallCol = mix(vec3(0.052, 0.044, 0.036), vec3(0.070, 0.066, 0.062), h1);
+  wallCol *= 0.55 + 0.9 * h2;
+
+  vec3 col;
+  if (t == tm.z) {           // back wall
+    col = wallCol;
+    // a doorway / far window letting a sliver of light through
+    float dw = step(0.30 + 0.3 * h3, hit.x) * step(hit.x, 0.52 + 0.3 * h3) * step(hit.y, 0.55);
+    col = mix(col, vec3(0.18, 0.15, 0.12) * (0.4 + h1), dw * 0.8);
+  } else if (t == tm.x) {    // side wall
+    col = wallCol * 0.7;
+  } else if (hit.y < 0.5) {  // floor
+    col = wallCol * 0.42;
+  } else {                   // ceiling
+    col = wallCol * 1.5;
+  }
+  // light falls off hard away from the opening
+  col *= mix(1.0, 0.16, depth01);
+  // some rooms are lit
+  float lit = step(0.86, h3);
+  col += lit * vec3(0.5, 0.36, 0.20) * (1.0 - depth01 * 0.55) * (0.4 + 0.6 * h2);
+  // blinds / curtain hanging in front
+  float blind = step(h1, 0.34);
+  float bl = smoothstep(0.36 + 0.4 * h2, 0.30 + 0.4 * h2, uv.y);
+  col = mix(col, vec3(0.10, 0.093, 0.082) * (0.5 + h2), blind * bl * 0.92);
+  return col;
+}`)
+        .replace('#include <map_fragment>', `
+{
+  vec3 dpx = dFdx(vWinWPos), dpy = dFdy(vWinWPos);
+  vec2 dux = dFdx(vWinUv), duy = dFdy(vWinUv);
+  float det = dux.x * duy.y - duy.x * dux.y;
+  vec3 T = (dpx * duy.y - dpy * dux.y) / (abs(det) < 1e-9 ? 1e-9 : det);
+  vec3 Bt = (dpy * dux.x - dpx * duy.x) / (abs(det) < 1e-9 ? 1e-9 : det);
+  vec3 Nn = normalize(cross(T, Bt));
+  vec3 V = normalize(cameraPosition - vWinWPos);
+  if (dot(Nn, V) < 0.0) Nn = -Nn;
+  vec3 rd = -V;
+  // the room must be constant across the pane, so key it off the window's
+  // CENTRE (walk back along the uv basis), never off the fragment position
+  vec3 ctr = vWinWPos - (vWinUv.x - 0.5) * T - (vWinUv.y - 0.5) * Bt;
+  float id = floor(ctr.x * 2.0) + floor(ctr.y * 2.0) * 37.0 + floor(ctr.z * 2.0) * 91.0;
+  vec3 room = winRoom(clamp(fract(vWinUv), 0.001, 0.999), rd, T, Bt, Nn, id);
+  #if WIN_BROKEN == 1
+    // shattered: mostly a hole, with jagged shards left in the frame
+    float sh = winHash(floor(vWinUv * 9.0) + 0.5);
+    room *= mix(0.35, 1.0, step(0.55, sh));
+  #endif
+  diffuseColor.rgb *= room;
+}
+`);
+      // grazing angles must go mirror-flat or the glass never picks up the sky.
+      // Hooked after normal_fragment_begin — `normal` does not exist before it.
+      sh.fragmentShader = sh.fragmentShader.replace('#include <normal_fragment_begin>', `
+#include <normal_fragment_begin>
+{
+  vec3 Vv = normalize(vViewPosition);
+  float f = 1.0 - abs(dot(normalize(normal), Vv));
+  roughnessFactor = mix(roughnessFactor, 0.015, pow(f, 3.0));
+}
+`);
+    };
+    m.userData.noShadowRecv = true;
+    m.customProgramCacheKey = () => 'win' + (o.depth ?? 0.55) + (o.broken ? 'b' : '') + (o.rough ?? 0.09);
+    m.userData.tile = 0;  // authored UVs (uvRect 0..1 per window)
+    return m;
+  }
+
+  // Grime that gathers where a wall meets the pavement, plus water staining
+  // running down from sills. Alpha-faded upward so there is no hard line.
+  decalGrime(kind = 'base') {
+    const rnd = seeded('grime' + kind);
+    const s = 256;
+    const ac = CV(s), g = ac.getContext('2d', { willReadFrequently: true });
+    g.fillStyle = '#211d17'; g.fillRect(0, 0, s, s);
+    fbm(g, s, rnd, { octaves: 4, cells: 3, amp: 0.55 });
+    blotch(g, s, rnd, { n: 14, r0: 0.05, r1: 0.3, colors: ['#141210', '#3b352b', '#2a2a26'], alpha: 0.4 });
+
+    const al = CV(s), ag = al.getContext('2d', { willReadFrequently: true });
+    ag.fillStyle = '#000'; ag.fillRect(0, 0, s, s);
+    // canvas y=s is the bottom of the quad (textures flip Y). 'base' grime is
+    // dense at the pavement and fades up; 'drip' runs down from a sill.
+    const solidY = kind === 'drip' ? 0 : s;
+    const grd = ag.createLinearGradient(0, solidY, 0, s - solidY);
+    grd.addColorStop(0, kind === 'drip' ? 'rgba(255,255,255,0.75)' : 'rgba(255,255,255,0.92)');
+    grd.addColorStop(0.22, 'rgba(255,255,255,0.45)');
+    grd.addColorStop(0.6, 'rgba(255,255,255,0.14)');
+    grd.addColorStop(1, 'rgba(255,255,255,0)');
+    ag.fillStyle = grd; ag.fillRect(0, 0, s, s);
+    // splash tongues licking up the wall / drip fingers running down it
+    for (let i = 0; i < 46; i++) {
+      const x = rnd() * s, w = 2 + rnd() * (kind === 'drip' ? 9 : 16), h = s * (0.1 + rnd() * 0.5);
+      const y0 = kind === 'drip' ? 0 : s - h;
+      const lg = ag.createLinearGradient(0, solidY, 0, kind === 'drip' ? h : s - h);
+      lg.addColorStop(0, `rgba(255,255,255,${0.25 + rnd() * 0.5})`);
+      lg.addColorStop(1, 'rgba(255,255,255,0)');
+      ag.fillStyle = lg; ag.fillRect(x, y0, w, h);
+    }
+    ag.save(); ag.globalAlpha = 0.6; fbm(ag, s, rnd, { octaves: 4, cells: 3, amp: 0.8, op: 'multiply' }); ag.restore();
+
+    const m = new THREE.MeshStandardMaterial({
+      map: texture(ac, true), alphaMap: texture(al, false), transparent: true,
+      roughness: 0.98, metalness: 0, depthWrite: false, side: THREE.DoubleSide,
+      polygonOffset: true, polygonOffsetFactor: -6, polygonOffsetUnits: -6, vertexColors: true,
+    });
+    m.userData.tile = 0;
     return m;
   }
 

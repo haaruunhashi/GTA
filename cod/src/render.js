@@ -22,6 +22,12 @@ import { GodRayPass } from './render-godrays.js';
 
 const TIER = { low: 0, medium: 1, high: 2, ultra: 3 };
 
+// Diagnostic switches, query-string only (?view=ao | raw). Not part of config.js
+// because they exist purely so the lighting can be inspected in isolation:
+//   ?view=ao   -> GTAO buffer only (is ambient occlusion actually contributing?)
+//   ?view=raw  -> skip the grade/AA/sharpen chain (what is the render really doing?)
+const VIEW = new URLSearchParams(location.search).get('view') || '';
+
 export class Render {
   constructor(ctx) {
     this.ctx = ctx;
@@ -70,39 +76,41 @@ export class Render {
 
     composer.addPass(new RenderPass(ctx.scene, ctx.camera));
 
-    if (this.tier >= 2) {
+    if (this.tier >= 2 && VIEW !== 'raw') {
       const gtao = new GTAOPass(ctx.scene, ctx.camera, w, h);
-      gtao.output = GTAOPass.OUTPUT.Default;
+      gtao.output = VIEW === 'ao' ? GTAOPass.OUTPUT.Denoise : GTAOPass.OUTPUT.Default;
       gtao.blendIntensity = 1.0;
       gtao.updateGtaoMaterial({
-        radius: 0.55,            // metres — contact shadows, not a global wash
-        distanceExponent: 1.4,
-        thickness: 0.35,         // thin => no dark halo behind thin geometry
-        scale: 1.0,              // AO shades contact, it does not replace bounce
+        radius: 1.4,             // metres — wide enough to read where props meet the ground
+        distanceExponent: 1.0,
+        thickness: 1.0,          // thicker => real occlusion instead of a hairline
+        scale: 2.0,              // AO must be visible in frame, not just enabled
         samples: this.tier >= 3 ? 16 : 8,
-        distanceFallOff: 0.9,
+        distanceFallOff: 1.0,
         screenSpaceRadius: false,
       });
-      gtao.updatePdMaterial({ lumaPhi: 8, depthPhi: 2.5, normalPhi: 4, radius: 3, radiusExponent: 1, rings: 2, samples: this.tier >= 3 ? 12 : 6 });
+      gtao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 5, radius: 3, radiusExponent: 1, rings: 2, samples: this.tier >= 3 ? 12 : 6 });
       composer.addPass(gtao);
       this.gtao = gtao;
     }
 
-    if (this.tier >= 2) {
+    if (this.tier >= 2 && VIEW !== 'ao') {
       this.godrays = new GodRayPass(w, h, 0.25);
       composer.addPass(this.godrays);
     }
 
-    this.bloom = new UnrealBloomPass(new THREE.Vector2(w, h), 0.28, 0.45, 1.55);
-    composer.addPass(this.bloom);
+    if (!VIEW) {
+      this.bloom = new UnrealBloomPass(new THREE.Vector2(w, h), 0.28, 0.45, 1.55);
+      composer.addPass(this.bloom);
+    }
 
     this.composite = new ShaderPass(CompositeShader);
     this.composite.uniforms.uResolution.value.set(w, h);
-    composer.addPass(this.composite);
+    if (VIEW !== 'ao') composer.addPass(this.composite);
 
-    if (this.tier >= 1) composer.addPass(new SMAAPass());
+    if (this.tier >= 1 && !VIEW) composer.addPass(new SMAAPass());
 
-    if (this.tier >= 2) {
+    if (this.tier >= 2 && !VIEW) {
       this.sharpen = new ShaderPass(SharpenShader);
       this.sharpen.uniforms.uResolution.value.set(w, h);
       composer.addPass(this.sharpen);

@@ -16,6 +16,8 @@ varying vec3 vDir;
 uniform vec3 uSunDir, uSunColor, uGround, uCloudLit, uCloudDark;
 uniform float uTurbidity, uRayleigh, uMieCoef, uMieG, uSkyLum, uSkyGamma, uSunDisc;
 uniform float uCloudCover, uCloudSharp, uCloudScale, uCloudAmb, uTime;
+uniform vec3 uZenith;
+uniform float uSkyBlue;
 
 const vec3 K_RAYLEIGH = vec3(5.8e-6, 13.5e-6, 33.1e-6) * 1.0e6;
 const float PI = 3.141592653589793;
@@ -58,6 +60,19 @@ void main() {
   vec3 scatter = (betaR * rayleighPhase(cosT) + betaM * miePhase(cosT, uMieG)) /
                  max(betaR + betaM, vec3(1e-6));
   vec3 sky = scatter * (1.0 - extinct) * uSunColor * uSkyLum * (0.25 + 0.75 * sunUp);
+
+  // The single-scattering term above is achromatic by construction: dividing by
+  // (betaR + betaM) normalises the Rayleigh colour straight back out, and with
+  // these coefficients (1 - extinct) saturates to white, so the whole dome ends
+  // up the hue of uSunColor. That is what makes a golden-hour frame monochrome
+  // amber. Put the Rayleigh blue back explicitly: cool overhead and away from
+  // the sun, warm haze burning through toward the sun and along the horizon.
+  {
+    float zen  = smoothstep(-0.03, 0.62, up);          // horizon -> zenith
+    float away = 1.0 - pow(max(cosT, 0.0), 2.2);       // toward sun -> away
+    float w = zen * away * uSkyBlue;
+    sky = mix(sky, uZenith * uSkyLum * (0.16 + 0.42 * sunUp), w);
+  }
 
   // Sun disc: a real angular disc (~0.8 deg radius) with a soft limb and a
   // tight two-lobe glow. Small and hot, so it clips white through the
@@ -118,6 +133,8 @@ export function SkyMaterial() {
       uCloudLit: { value: new THREE.Color(1, 0.86, 0.7) },
       uCloudDark: { value: new THREE.Color(0.13, 0.14, 0.18) },
       uCloudAmb: { value: 0.6 },
+      uZenith: { value: new THREE.Color(0.14, 0.26, 0.52) },
+      uSkyBlue: { value: 0.55 },
       uTime: { value: 0 },
     },
   });

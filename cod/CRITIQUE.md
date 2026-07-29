@@ -102,3 +102,41 @@ offender in frame.**
 12. **The image is monochrome amber.** Everything from sky to brick to asphalt sits
     on the same hue. Shadows need to go cool to separate from the warm key.
 13. **No contact AO** where props and walls meet the ground.
+
+---
+
+## Round 3 — `shots/critic3/street.png`
+
+Captured mid-write: the weapons agent was cut off by a usage limit while
+replacing its material set, so the rifle renders as untextured white. That is a
+known transient, not a design decision — but everything else in the frame is a
+real step forward.
+
+**Fixed since round 2:**
+- Long directional shadows now cross the street (defect 11 — the biggest one).
+- The image is no longer monochrome: cool blue shadow, warm key, blue sky above
+  the haze (defect 12).
+- The backdrop reads — distant buildings have material, mass and rooflines that
+  break the skyline (defects 8, 9).
+- Sandbags have a believable slumped silhouette (defect 5).
+- Road markings are weathered and the asphalt no longer looks like rubber (10).
+- Compass and ammo HUD are in and legible.
+
+**Still failing:**
+1. **The weapon is untextured white** — mid-write regression, first thing to
+   finish when the weapons agent resumes.
+2. **Still no arms or hands**, and the viewmodel is still too large and sits too
+   far into frame (defects 1, 2 unresolved).
+3. **Shadow edges are hard and slightly banded** — needs a wider PCF kernel or a
+   softer cascade blend; contact shadows should sharpen, distant ones soften.
+4. **The road surface reads flat blue-grey in shadow** — the shadowed asphalt has
+   lost its albedo and normal detail again, the same failure mode as round 2's
+   brick wall, now moved to the ground plane.
+5. **Windows are still flat dark rectangles** (defect 6 unresolved) — visible on
+   the right-hand brick building.
+6. **No AO contact darkening** where the sandbags, kerbs and lamp posts meet the
+   ground (defect 13 unresolved). The sandbag row appears to float.
+
+**Harness note:** the scene is now heavy enough that 60 warm-up frames exceeded
+the capture timeout on the software rasteriser. Warm-up dropped to 40 frames and
+the timeout raised to 7 minutes.

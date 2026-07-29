@@ -19,7 +19,8 @@ const PRESETS = {
     skyLum: 3.4, turbidity: 6.5, rayleigh: 3.4, mie: 0.011, mieG: 0.88, skyGamma: 1.45, sunDisc: 26,
     ground: [0.030, 0.028, 0.030],
     cloudCover: 0.44, cloudSharp: 0.30, cloudScale: 1.0,
-    cloudLit: [1.00, 0.58, 0.34], cloudDark: [0.10, 0.10, 0.14], cloudAmb: 0.55,
+    cloudLit: [1.00, 0.58, 0.34], cloudDark: [0.11, 0.13, 0.21], cloudAmb: 0.52,
+    zenith: [0.085, 0.140, 0.310], skyBlue: 0.60,
     hemiSky: [0.30, 0.38, 0.56], hemiGround: [0.14, 0.11, 0.09], hemiInt: 1.25, envInt: 2.45,
     bounce: [0.55, 0.34, 0.22], bounceInt: 1.05,
     fog: { density: 0.0090, falloff: 13, base: -1, start: 14,
@@ -37,24 +38,25 @@ const PRESETS = {
   },
   // the default: low warm sun, long shadows, deep contrast
   golden: {
-    elev: 11, azim: -132,
-    sunColor: [1.0, 0.72, 0.44], sunIntensity: 5.2,
-    skyLum: 5.2, turbidity: 4.4, rayleigh: 2.7, mie: 0.0075, mieG: 0.86, skyGamma: 1.32, sunDisc: 40,
+    elev: 11, azim: -124,
+    sunColor: [1.0, 0.74, 0.47], sunIntensity: 11.0,
+    skyLum: 5.2, turbidity: 3.4, rayleigh: 3.6, mie: 0.0055, mieG: 0.86, skyGamma: 1.20, sunDisc: 46,
     ground: [0.040, 0.038, 0.036],
     cloudCover: 0.30, cloudSharp: 0.34, cloudScale: 1.0,
-    cloudLit: [1.00, 0.86, 0.70], cloudDark: [0.13, 0.14, 0.18], cloudAmb: 0.60,
-    hemiSky: [0.38, 0.50, 0.72], hemiGround: [0.17, 0.14, 0.11], hemiInt: 1.15, envInt: 2.30,
-    bounce: [0.60, 0.44, 0.30], bounceInt: 0.95,
-    fog: { density: 0.0052, falloff: 15, base: -1, start: 18,
-           color: [0.070, 0.086, 0.118], lowColor: [0.170, 0.135, 0.105],
-           sunColor: [0.50, 0.30, 0.15], minT: 0.12, aniso: 0.72 },
+    cloudLit: [1.00, 0.86, 0.70], cloudDark: [0.16, 0.20, 0.30], cloudAmb: 0.56,
+    zenith: [0.130, 0.240, 0.520], skyBlue: 0.58,
+    hemiSky: [0.30, 0.46, 0.92], hemiGround: [0.16, 0.14, 0.12], hemiInt: 0.80, envInt: 1.35,
+    bounce: [0.46, 0.40, 0.40], bounceInt: 0.45,
+    fog: { density: 0.0046, falloff: 15, base: -1, start: 18,
+           color: [0.072, 0.098, 0.150], lowColor: [0.118, 0.122, 0.148],
+           sunColor: [0.34, 0.20, 0.10], minT: 0.12, aniso: 0.72 },
     post: {
-      exposure: 1.70, contrast: 1.12, saturation: 1.06, toe: 0.024, split: 0.46, white: 0.945,
-      lift: [-0.008, 0.000, 0.008], gamma: [1.0, 1.0, 1.015], gain: [1.03, 1.0, 0.975],
-      shadowTint: [0.82, 0.95, 1.14], highTint: [1.09, 1.00, 0.87],
+      exposure: 1.20, contrast: 1.16, saturation: 1.10, toe: 0.026, split: 0.62, white: 0.910,
+      lift: [-0.010, 0.000, 0.012], gamma: [1.0, 1.0, 1.02], gain: [1.03, 1.0, 0.975],
+      shadowTint: [0.72, 0.90, 1.28], highTint: [1.12, 1.00, 0.84],
       vignette: 0.42, ca: 1.4, grain: 0.030, sharpen: 0.55,
       bloom: 0.28, bloomThreshold: 1.55, bloomRadius: 0.45,
-      godrays: 0.34, godrayDensity: 0.52, godrayThreshold: 2.4, godrayTint: [1.0, 0.80, 0.55],
+      godrays: 0.30, godrayDensity: 0.52, godrayThreshold: 2.6, godrayTint: [1.0, 0.80, 0.55],
       streak: 0.50,
     },
   },
@@ -65,7 +67,8 @@ const PRESETS = {
     skyLum: 7.0, turbidity: 3.0, rayleigh: 2.0, mie: 0.005, mieG: 0.80, skyGamma: 1.22, sunDisc: 55,
     ground: [0.060, 0.058, 0.055],
     cloudCover: 0.20, cloudSharp: 0.38, cloudScale: 1.15,
-    cloudLit: [1.00, 0.99, 0.97], cloudDark: [0.20, 0.22, 0.28], cloudAmb: 0.70,
+    cloudLit: [1.00, 0.99, 0.97], cloudDark: [0.22, 0.26, 0.36], cloudAmb: 0.70,
+    zenith: [0.22, 0.40, 0.82], skyBlue: 0.72,
     hemiSky: [0.46, 0.60, 0.86], hemiGround: [0.21, 0.19, 0.16], hemiInt: 0.90, envInt: 1.95,
     bounce: [0.62, 0.58, 0.50], bounceInt: 0.70,
     fog: { density: 0.0026, falloff: 30, base: -1, start: 26,
@@ -142,7 +145,7 @@ export class Sky {
     if (tier >= 2) {
       this.sunFar = new THREE.DirectionalLight(0xffffff, 1);
       this.sunFar.castShadow = true;
-      this._setupShadow(this.sunFar, Math.min(mapSize, 1024), 120, -0.0022, 0.09);
+      this._setupShadow(this.sunFar, Math.min(mapSize, 1536), 95, -0.0014, 0.055);
       scene.add(this.sunFar, this.sunFar.target);
     } else {
       this._setupShadow(this.sunNear, mapSize, 70, -0.0012, 0.045);
@@ -181,7 +184,10 @@ export class Sky {
 
     this.dust = tier >= 2 ? new DustMotes(ctx, 420) : null;
 
-    this.setTimeOfDay(0.075);   // cinematic golden hour by default
+    // Golden hour proper: ~13 deg elevation gives shadows ~4.2x object height,
+    // and the azimuth lands ~40 deg off the street axis so building shadows rake
+    // across the road instead of running away down it.
+    this.setTimeOfDay(0.059);
   }
 
   _setupShadow(light, size, radius, bias, normalBias) {
@@ -239,6 +245,8 @@ export class Sky {
     u.uCloudLit.value.set(p.cloudLit[0], p.cloudLit[1], p.cloudLit[2]);
     u.uCloudDark.value.set(p.cloudDark[0], p.cloudDark[1], p.cloudDark[2]);
     u.uCloudAmb.value = p.cloudAmb;
+    u.uZenith.value.setRGB(p.zenith[0], p.zenith[1], p.zenith[2]);
+    u.uSkyBlue.value = p.skyBlue;
 
     // sun lights — intensity is split across the cascades so the total energy
     // hitting a surface is unchanged

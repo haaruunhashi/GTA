@@ -91,18 +91,38 @@ export class World {
       B.quad('decal_dirt', (rng() - 0.5) * 17, 0.013, Z0 + rng() * (Z1 - Z0), 2 + rng() * 6, 2 + rng() * 7,
         { rotX: -Math.PI / 2, rotZ: rng() * 3, dirt: false, shadow: false });
     }
-    // centre dashes + edge lines
+    // tyre tracks polished into the tarmac down each lane
+    for (const sx of [-1, 1]) {
+      for (let z = -56; z < 56; z += 28) {
+        B.quad('decal_dirt', sx * (2.7 + rng() * 0.4), 0.012, z + 14, 1.1, 28,
+          { rotX: -Math.PI / 2, dirt: false, shadow: false, tint: 0x9aa0a8 });
+      }
+    }
+
+    // Centre dashes + edge lines. `line()` lays the marking with its texture
+    // running ALONG the run (u) and across the width (v), so the wear, the
+    // scuffing and the broken sections all read at the right scale.
+    const line = (x, z, len, wid, o = {}) => {
+      B.quad('roadline', x, o.y ?? 0.014, z, len, wid, {
+        rotX: -Math.PI / 2, rotZ: Math.PI / 2, dirt: false, shadow: false,
+        uvRect: [rng() * 8, 0, len / 2.2, 1],
+        tint: o.tint ?? [0xffffff, 0xeeebe1, 0xd8d5cb, 0xc6c3ba][(rng() * 4) | 0],
+      });
+    };
     for (let z = Z0 + 2; z < Z1; z += 6.5) {
-      B.quad('roadline', 0, 0.014, z, 0.18, 3.2, { rotX: -Math.PI / 2, dirt: false, shadow: false });
+      if (rng() < 0.1) continue;                       // a dash worn clean away
+      line(0, z + (rng() - 0.5) * 0.2, 3.2 * (0.82 + rng() * 0.3), 0.17 + rng() * 0.03);
     }
     for (const sx of [-1, 1]) {
-      for (let z = Z0; z < Z1; z += 20) {
-        B.quad('roadline', sx * (ROAD_HW - 0.8), 0.014, z + 10, 0.14, 19.4, { rotX: -Math.PI / 2, dirt: false, shadow: false });
+      // the edge line is continuous, but broken into runs of differing wear
+      for (let z = Z0; z < Z1; z += 6) {
+        if (rng() < 0.08) continue;
+        line(sx * (ROAD_HW - 0.8) + (rng() - 0.5) * 0.06, z + 3, 6.05, 0.13 + rng() * 0.03);
       }
     }
     // crossing at the centre of the map
     for (let i = 0; i < 7; i++) {
-      B.quad('roadline', -6.2 + i * 2.05, 0.015, 2, 0.9, 4.2, { rotX: -Math.PI / 2, dirt: false, shadow: false });
+      line(-6.2 + i * 2.05, 2, 4.2, 0.86 + rng() * 0.1, { y: 0.015 });
     }
 
     // sidewalks: kerb face + paved top, in segments so the broadphase stays sane
@@ -133,7 +153,7 @@ export class World {
     // east wall (faces the street). local +X -> world -Z
     B.push(hw, 0, 0, Math.PI / 2);
     wall(B, {
-      len: hd * 2, h: s1, t, mat, inner, openings: [
+      len: hd * 2, h: s1, t, mat, inner, grime: true, tint: 0xd6cdb6, openings: [
         { x: 4.0, w: 1.7, y0: 0.02, y1: 2.55, kind: 'door', opts: { leaf: 0.9, frame: 'paint_blue' } },
         { x: -3.0, w: 2.4, y0: 0.95, y1: 2.75 },
         { x: -8.5, w: 2.4, y0: 0.95, y1: 2.75, opts: { broken: true } },
@@ -145,7 +165,7 @@ export class World {
     // north wall (faces the courtyard)
     B.push(0, 0, -hd, Math.PI);
     wall(B, {
-      len: hw * 2, h: s1, t, mat, inner, openings: [
+      len: hw * 2, h: s1, t, mat, inner, grime: true, tint: 0xd6cdb6, openings: [
         { x: 0, w: 1.8, y0: 0.02, y1: 2.6, kind: 'door', opts: { leaf: -1.5, frame: 'paint_green' } },
         { x: -6.4, w: 2.2, y0: 1.0, y1: 2.7 },
         { x: 6.4, w: 2.2, y0: 1.0, y1: 2.7, opts: { broken: true } },
@@ -156,7 +176,7 @@ export class World {
     // west wall (alley)
     B.push(-hw, 0, 0, -Math.PI / 2);
     wall(B, {
-      len: hd * 2, h: s1, t, mat, inner, openings: [
+      len: hd * 2, h: s1, t, mat, inner, grime: true, tint: 0xcdc4ad, openings: [
         { x: -6, w: 1.9, y0: 1.2, y1: 2.7, opts: { boarded: true } },
         { x: 5, w: 1.9, y0: 1.2, y1: 2.7, opts: { broken: true } },
         { x: 11.2, w: 1.6, y0: 0.02, y1: 2.4, kind: 'door', opts: { leaf: 0.4, frame: 'paint_red' } },
@@ -167,7 +187,7 @@ export class World {
     // south wall
     B.push(0, 0, hd, 0);
     wall(B, {
-      len: hw * 2, h: s1, t, mat, inner, openings: [
+      len: hw * 2, h: s1, t, mat, inner, grime: true, tint: 0xd6cdb6, openings: [
         { x: -4.5, w: 2.6, y0: 0.02, y1: 2.7, kind: 'hole' },
         { x: 4.0, w: 2.2, y0: 1.0, y1: 2.7, opts: { boarded: true } },
       ],
@@ -205,7 +225,7 @@ export class World {
     // ---- first floor shell ------------------------------------------------
     B.push(hw, 0, 0, Math.PI / 2);
     wall(B, {
-      len: hd * 2, h: s2, t, mat, inner, y0: s1, openings: [
+      len: hd * 2, h: s2, t, mat, inner, y0: s1, tint: 0xdfd6bf, openings: [
         { x: -8.0, w: 2.2, y0: 0.9, y1: 2.6 },
         { x: -2.6, w: 2.2, y0: 0.9, y1: 2.6, opts: { broken: true } },
         { x: 3.2, w: 2.6, y0: 0.05, y1: 2.6, kind: 'door', opts: { frame: 'paint_blue' } },
@@ -215,7 +235,7 @@ export class World {
     B.pop();
     B.push(0, 0, -hd, Math.PI);
     wall(B, {
-      len: hw * 2, h: s2, t, mat, inner, y0: s1, openings: [
+      len: hw * 2, h: s2, t, mat, inner, y0: s1, tint: 0xdfd6bf, openings: [
         { x: -5.5, w: 2.2, y0: 0.9, y1: 2.6, opts: { broken: true } },
         { x: 0.5, w: 2.2, y0: 0.9, y1: 2.6 },
         { x: 6.5, w: 2.2, y0: 0.9, y1: 2.6 },
@@ -224,7 +244,7 @@ export class World {
     B.pop();
     B.push(-hw, 0, 0, -Math.PI / 2);
     wall(B, {
-      len: hd * 2, h: s2, t, mat, inner, y0: s1, openings: [
+      len: hd * 2, h: s2, t, mat, inner, y0: s1, tint: 0xdfd6bf, openings: [
         { x: -4.0, w: 2.0, y0: 0.1, y1: 2.5, kind: 'door', opts: { frame: 'rust' } },
         { x: 6.0, w: 2.0, y0: 1.0, y1: 2.6, opts: { broken: true } },
       ],
@@ -232,7 +252,7 @@ export class World {
     B.pop();
     B.push(0, 0, hd, 0);
     wall(B, {
-      len: hw * 2, h: s2, t, mat, inner, y0: s1, openings: [
+      len: hw * 2, h: s2, t, mat, inner, y0: s1, tint: 0xdfd6bf, openings: [
         { x: -4.0, w: 2.2, y0: 1.0, y1: 2.6, opts: { boarded: true } },
         { x: 4.5, w: 2.2, y0: 1.0, y1: 2.6 },
       ],
@@ -258,7 +278,21 @@ export class World {
 
     // ---- roof --------------------------------------------------------------
     slab(B, hw - 0.05, hd - 0.05, HQ_ROOF, { th: 0.32, mat: 'concrete', under: 'wood' });
-    parapet(B, hw, hd, HQ_ROOF, { h: 1.0, t: 0.36, mat });
+    parapet(B, hw, hd, HQ_ROOF, { h: 1.0, t: 0.36, mat, tint: 0xd6cdb6 });
+    // stepped parapet: corner piers and a raised bay over the street elevation,
+    // so the roofline is not one flat extrusion against the sky
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+      B.box(mat, sx * (hw - 0.4), HQ_ROOF + 1.35, sz * (hd - 0.4), 1.0, 1.7, 1.0, { tint: 0xd6cdb6 });
+      B.box('concrete', sx * (hw - 0.4), HQ_ROOF + 2.26, sz * (hd - 0.4), 1.25, 0.16, 1.25, { dirt: false });
+    }
+    B.box(mat, hw - 0.18, HQ_ROOF + 1.15, -3.0, 0.36, 1.3, 7.5, { tint: 0xd6cdb6 });
+    B.box('concrete', hw - 0.14, HQ_ROOF + 1.86, -3.0, 0.62, 0.16, 7.9, { dirt: false });
+    // chimney stack on the alley side
+    B.box('brick_red', -hw + 2.2, HQ_ROOF + 1.5, hd - 3.4, 1.15, 3.0, 0.95, { tint: 0xc9a695 });
+    B.box('concrete', -hw + 2.2, HQ_ROOF + 3.08, hd - 3.4, 1.4, 0.18, 1.2, { dirt: false });
+    for (let k = 0; k < 2; k++) {
+      B.cyl('rust', -hw + 2.2, HQ_ROOF + 3.42, hd - 3.4 + (k - 0.5) * 0.4, 0.13, 0.15, 0.6, { rc: 8 });
+    }
     B.push(0, HQ_ROOF, 0, 0.0);
     roofClutter(B, hw * 1.5, hd * 1.5, rng);
     B.pop();
@@ -314,7 +348,7 @@ export class World {
     // west wall = shopfronts onto the street
     B.push(-hw, 0, 0, -Math.PI / 2);
     wall(B, {
-      len: hd * 2, h, t, mat, inner: 'plaster', openings: [
+      len: hd * 2, h, t, mat, inner: 'plaster', grime: true, tint: 0xc79c86, openings: [
         { x: -8.5, w: 3.2, y0: 0.35, y1: 3.0, kind: 'shutter', opts: { tint: 0x9fa6a0 }, openAmt: 0.8 },
         { x: -2.0, w: 1.8, y0: 0.02, y1: 2.5, kind: 'door', opts: { leaf: -1.1, frame: 'paint_yellow' } },
         { x: 3.5, w: 3.4, y0: 0.6, y1: 2.9, opts: { broken: true } },
@@ -327,7 +361,7 @@ export class World {
     // north wall (towards the collapsed end of the street)
     B.push(0, 0, -hd, Math.PI);
     wall(B, {
-      len: hw * 2, h, t, mat, inner: 'plaster', openings: [
+      len: hw * 2, h, t, mat, inner: 'plaster', grime: true, tint: 0xbe947f, openings: [
         { x: -4.0, w: 2.4, y0: 1.1, y1: 2.9, opts: { boarded: true } },
         { x: 3.5, w: 2.6, y0: 0.02, y1: 2.7, kind: 'hole' },
       ],
@@ -337,7 +371,7 @@ export class World {
     // south wall — opens onto the parking lot
     B.push(0, 0, hd, 0);
     wall(B, {
-      len: hw * 2, h, t, mat, inner: 'plaster', openings: [
+      len: hw * 2, h, t, mat, inner: 'plaster', grime: true, tint: 0xc79c86, openings: [
         { x: -3.5, w: 1.8, y0: 0.02, y1: 2.5, kind: 'door', opts: { leaf: 1.2, frame: 'rust' } },
         { x: 3.8, w: 2.6, y0: 1.0, y1: 2.9, opts: { broken: true } },
       ],
@@ -347,7 +381,7 @@ export class World {
     // east wall (alley)
     B.push(hw, 0, 0, Math.PI / 2);
     wall(B, {
-      len: hd * 2, h, t, mat, inner: 'plaster', openings: [
+      len: hd * 2, h, t, mat, inner: 'plaster', grime: true, tint: 0xd0a68f, openings: [
         { x: -6.0, w: 1.9, y0: 1.3, y1: 3.0, opts: { boarded: true } },
         { x: 2.0, w: 1.6, y0: 0.02, y1: 2.4, kind: 'door', opts: { frame: 'paint_blue' } },
         { x: 8.0, w: 1.9, y0: 1.3, y1: 3.0, opts: { broken: true } },
@@ -372,7 +406,20 @@ export class World {
     }
     // roof
     slab(B, hw - 0.03, hd - 0.03, h, { th: 0.3, mat: 'concrete', under: 'wood' });
-    parapet(B, hw, hd, h, { h: 0.9, t: 0.32, mat });
+    parapet(B, hw, hd, h, { h: 0.9, t: 0.32, mat, tint: 0xc79c86 });
+    // shopfront signage parapet, raised over the street elevation with a
+    // stepped centre bay and a pair of end piers
+    B.box(mat, -hw + 0.16, h + 1.05, 0, 0.34, 1.4, hd * 1.5, { tint: 0xc79c86 });
+    B.box('concrete', -hw + 0.2, h + 1.82, 0, 0.6, 0.16, hd * 1.5 + 0.3, { dirt: false });
+    B.box(mat, -hw + 0.16, h + 1.85, -4.0, 0.4, 1.2, 5.0, { tint: 0xbe947f });
+    B.box('concrete', -hw + 0.2, h + 2.52, -4.0, 0.66, 0.18, 5.4, { dirt: false });
+    for (const sz of [-1, 1]) {
+      B.box(mat, -hw + 0.2, h + 1.5, sz * (hd - 0.6), 0.5, 2.3, 1.0, { tint: 0xc79c86 });
+      B.box('concrete', -hw + 0.24, h + 2.72, sz * (hd - 0.6), 0.78, 0.18, 1.24, { dirt: false });
+    }
+    // roof-level plant: stair head and a water tank breaking the silhouette
+    B.box('plaster', 2.0, h + 1.3, 6.0, 2.6, 2.6, 2.2, { tint: 0xbab3a4 });
+    B.box('corrugated', 2.0, h + 2.68, 6.0, 3.0, 0.14, 2.6, { rotX: -0.1, dirt: false });
     B.push(0, h, 0, 0);
     B.push(-2.0, 0, -6.0, 0.3); acUnit(B, { w: 1.4, h: 1.05, d: 1.1 }); B.pop();
     B.push(3.0, 0, 2.0, -0.6); acUnit(B, {}); B.pop();
@@ -411,13 +458,20 @@ export class World {
     const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
     B.quad('road', cx, 0.01, cz, x1 - x0, z1 - z0, { rotX: -Math.PI / 2, dirt: false });
     // bay markings, two ranks back to back
+    const bay = (x, z, len, wid, along) => {
+      B.quad('roadline', x, 0.016, z, len, wid, {
+        rotX: -Math.PI / 2, rotZ: along ? Math.PI / 2 : 0, dirt: false, shadow: false,
+        uvRect: [rng() * 8, 0, len / 2.2, 1],
+        tint: [0xf4f1e7, 0xdedbd1, 0xc8c5bc][(rng() * 3) | 0],
+      });
+    };
     for (let i = 0; i < 8; i++) {
       const x = x0 + 3 + i * 2.9;
-      B.quad('roadline', x, 0.016, z0 + 7.5, 0.12, 5.0, { rotX: -Math.PI / 2, dirt: false, shadow: false });
-      B.quad('roadline', x, 0.016, z1 - 7.5, 0.12, 5.0, { rotX: -Math.PI / 2, dirt: false, shadow: false });
+      if (rng() > 0.12) bay(x, z0 + 7.5, 5.0, 0.12, true);
+      if (rng() > 0.12) bay(x, z1 - 7.5, 5.0, 0.12, true);
     }
-    B.quad('roadline', cx, 0.016, z0 + 10.1, x1 - x0 - 5, 0.12, { rotX: -Math.PI / 2, dirt: false, shadow: false });
-    B.quad('roadline', cx, 0.016, z1 - 10.1, x1 - x0 - 5, 0.12, { rotX: -Math.PI / 2, dirt: false, shadow: false });
+    bay(cx, z0 + 10.1, x1 - x0 - 5, 0.12, false);
+    bay(cx, z1 - 10.1, x1 - x0 - 5, 0.12, false);
 
     // chainlink fence along the east and south edges, with posts
     const fence = (ax, az, bx2, bz2) => {
@@ -643,37 +697,95 @@ export class World {
   }
 
   perimeter(B, rng) {
+    // Every block gets its own brick, its own hue/wear tint and its own
+    // roofline style. Two neighbours must never share all three, or the street
+    // reads as one extruded material.
     const blocks = [
       // west side
-      { x: -24, z: -50, w: 22, d: 14, h: 14, faces: 'se', mat: 'brick_grey' },
-      { x: -21, z: 26, w: 16, d: 18, h: 8.5, faces: 'nse', mat: 'brick_red' },
-      { x: -22, z: 48, w: 18, d: 16, h: 12, faces: 'ne', mat: 'brick_tan' },
-      { x: -48, z: -30, w: 16, d: 30, h: 17, faces: 'e', mat: 'brick_grey' },
-      { x: -48, z: 4, w: 16, d: 34, h: 20, faces: 'e', mat: 'brick_tan' },
-      { x: -48, z: 40, w: 16, d: 30, h: 15, faces: 'e', mat: 'brick_red' },
+      { x: -24, z: -50, w: 22, d: 14, h: 14, faces: 'se', mat: 'brick_grey', tint: 0xb4b0a8, roof: 1 },
+      { x: -21, z: 26, w: 16, d: 18, h: 8.5, faces: 'nse', mat: 'brick_red', tint: 0xd8b8a2, roof: 2 },
+      { x: -22, z: 48, w: 18, d: 16, h: 12, faces: 'ne', mat: 'brick_buff', tint: 0xd4cdb8, roof: 0 },
+      { x: -48, z: -30, w: 16, d: 30, h: 17, faces: 'e', mat: 'brick_grey', tint: 0x9fa39e, roof: 2 },
+      { x: -48, z: 4, w: 16, d: 34, h: 20, faces: 'e', mat: 'brick_tan', tint: 0xbdb49c, roof: 1 },
+      { x: -48, z: 40, w: 16, d: 30, h: 15, faces: 'e', mat: 'brick_red', tint: 0xa8887a, roof: 0 },
       // east side
-      { x: 24, z: -50, w: 26, d: 14, h: 16, faces: 'sw', mat: 'brick_tan' },
-      { x: 46, z: -24, w: 18, d: 30, h: 18, faces: 'w', mat: 'brick_grey' },
-      { x: 46, z: 12, w: 18, d: 30, h: 22, faces: 'w', mat: 'brick_red' },
-      { x: 21, z: 48, w: 20, d: 16, h: 11, faces: 'nw', mat: 'brick_grey' },
-      { x: 44, z: 46, w: 20, d: 20, h: 14, faces: 'nw', mat: 'brick_tan' },
+      { x: 24, z: -50, w: 26, d: 14, h: 16, faces: 'sw', mat: 'brick_tan', tint: 0xcfc6ad, roof: 2 },
+      { x: 46, z: -24, w: 18, d: 30, h: 18, faces: 'w', mat: 'brick_buff', tint: 0xa9a498, roof: 0 },
+      { x: 46, z: 12, w: 18, d: 30, h: 22, faces: 'w', mat: 'brick_red', tint: 0xc9a08c, roof: 1 },
+      { x: 21, z: 48, w: 20, d: 16, h: 11, faces: 'nw', mat: 'brick_grey', tint: 0xc2beb4, roof: 2 },
+      { x: 44, z: 46, w: 20, d: 20, h: 14, faces: 'nw', mat: 'brick_buff', tint: 0xb6ae98, roof: 1 },
       // far backdrops, mostly silhouette through the fog
-      { x: -14, z: -76, w: 46, d: 18, h: 26, faces: 's', mat: 'brick_grey' },
-      { x: 34, z: -78, w: 40, d: 18, h: 21, faces: 's', mat: 'brick_tan' },
-      { x: -8, z: 76, w: 44, d: 18, h: 24, faces: 'n', mat: 'brick_tan' },
-      { x: 38, z: 78, w: 34, d: 18, h: 19, faces: 'n', mat: 'brick_grey' },
-      { x: -74, z: 0, w: 20, d: 80, h: 30, faces: 'e', mat: 'brick_grey' },
-      { x: 74, z: 0, w: 20, d: 80, h: 28, faces: 'w', mat: 'brick_tan' },
+      { x: -14, z: -76, w: 46, d: 18, h: 26, faces: 's', mat: 'brick_buff', tint: 0xc0b7a2, roof: 1, far: true },
+      { x: 34, z: -78, w: 40, d: 18, h: 21, faces: 's', mat: 'brick_red', tint: 0xb2907e, roof: 2, far: true },
+      { x: -8, z: 76, w: 44, d: 18, h: 24, faces: 'n', mat: 'brick_tan', tint: 0xc8bfa8, roof: 2, far: true },
+      { x: 38, z: 78, w: 34, d: 18, h: 19, faces: 'n', mat: 'brick_grey', tint: 0xacaaa2, roof: 0, far: true },
+      { x: -74, z: 0, w: 20, d: 80, h: 30, faces: 'e', mat: 'brick_grey', tint: 0xb0aca4, roof: 1, far: true },
+      { x: 74, z: 0, w: 20, d: 80, h: 28, faces: 'w', mat: 'brick_buff', tint: 0xbdb4a0, roof: 0, far: true },
     ];
     for (const b of blocks) {
       B.push(b.x, 0, b.z, 0);
-      fillerBlock(B, { w: b.w, d: b.d, h: b.h, mat: b.mat, faces: b.faces, rnd: rng });
+      fillerBlock(B, {
+        w: b.w, d: b.d, h: b.h, mat: b.mat, faces: b.faces, rnd: rng,
+        tint: b.tint, roof: b.roof, far: b.far,
+        trim: b.far ? 0xb8b1a2 : 0xc4bdaf, roofScale: b.far ? 1.5 : 1,
+      });
       B.pop();
     }
     // ground-level shopfront detail on the two blocks that face the street
     B.push(-21, 0, 26 - 9 - 0.05, Math.PI);
     B.box('paint_red', 0, 3.4, 0.28, 15, 1.0, 0.2, { dirt: false });
     B.pop();
+
+    this.skyline(B, rng);
+  }
+
+  /* ------------------------------------------------------------- backdrop */
+
+  // A third depth plane behind the perimeter: real city, far enough back that
+  // the fog does the work, close enough that the end of the street resolves
+  // into something instead of stopping dead. Cheap masses with cornices, roof
+  // clutter silhouettes and a scatter of lit windows.
+  // Deliberately kept inside the footprint the perimeter blocks already reach
+  // (~110 m). Pushing it out to a few hundred metres blows up the bounds of
+  // every merged mesh in the map and measurably costs frame time for a band of
+  // pixels the fog half-erases anyway.
+  skyline(B, rng) {
+    const ring = [];
+    // the two views that matter are straight up and down the street
+    for (const zz of [-1, 1]) {
+      for (let i = 0; i < 4; i++) {
+        ring.push({ x: (rng() - 0.5) * 120, z: zz * (98 + rng() * 26), h: 24 + rng() * 34 });
+      }
+    }
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2 + 0.5 + rng() * 0.2;
+      const r = 96 + rng() * 24;
+      ring.push({ x: Math.cos(a) * r, z: Math.sin(a) * r, h: 20 + rng() * 30 });
+    }
+    const mats = ['brick_grey', 'brick_buff', 'brick_tan'];
+    for (const b of ring) {
+      const w = 22 + rng() * 26, d = 20 + rng() * 22;
+      const mat = mats[(rng() * mats.length) | 0];
+      const tint = [0xa8a49c, 0xb6b0a4, 0x9ea099, 0xc0b8a8][(rng() * 4) | 0];
+      B.push(b.x, 0, b.z, rng() * 1.2);
+      B.box(mat, 0, b.h / 2, 0, w, b.h, d, { tint, shadow: false });
+      // banding + crown so the mass is not a blank slab against the sky
+      for (let s = 1; s < 4; s++) {
+        B.box('concrete', 0, s * (b.h / 4), 0, w + 0.4, 0.24, d + 0.4, { dirt: false, tint: 0xb4ada0, shadow: false });
+      }
+      B.box('concrete', 0, b.h + 0.3, 0, w + 1.3, 0.7, d + 1.3, { dirt: false, tint: 0xbdb6a8, shadow: false });
+      if (rng() < 0.5) {
+        const cw = w * (0.3 + rng() * 0.3), ch = 3 + rng() * 8;
+        B.box(mat, (rng() - 0.5) * w * 0.3, b.h + ch / 2, 0, cw, ch, d * 0.5, { tint, shadow: false });
+        B.box('concrete', (rng() - 0.5) * w * 0.3, b.h + ch + 0.3, 0, cw + 0.9, 0.5, d * 0.5 + 0.9,
+          { dirt: false, tint: 0xbdb6a8, shadow: false });
+      }
+      // one mast: reads as silhouette even when the mass is fogged flat
+      const mx = (rng() - 0.5) * w * 0.7, mz = (rng() - 0.5) * d * 0.7, mh = 4 + rng() * 8;
+      B.cyl('steel', mx, b.h + mh / 2, mz, 0.14, 0.2, mh, { rc: 5, shadow: false });
+      if (rng() < 0.5) B.box('rust', mx, b.h + mh + 0.6, mz, 1.7, 1.3, 1.7, { shadow: false, dirt: false });
+      B.pop();
+    }
   }
 
   /* --------------------------------------------------------------- spawns */
@@ -703,4 +815,8 @@ export const POSES = {
   interior: { pos: [-30, 1.68, -6], look: [-14, 1.6, -9] },
   courtyard: { pos: [-30, 1.7, -35], look: [-15, 3.5, -18] },
   parking: { pos: [33, 1.7, 30], look: [13, 3, 2] },
+  // material-review poses: near-field detail on the two surfaces that carry the
+  // map — the masonry/glazing of the HQ street elevation, and a sandbag emplacement.
+  facade: { pos: [-5.5, 1.7, -6.0], look: [-13, 2.2, -8.5] },
+  barricade: { pos: [1.4, 1.35, 43.6], look: [0.5, 0.5, 40.0] },
 };

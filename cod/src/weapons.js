@@ -12,7 +12,8 @@ import { ScopeView } from './weapons-scope.js';
 const _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _v3 = new THREE.Vector3();
 const _o = new THREE.Vector3(), _d = new THREE.Vector3(), _p2 = new THREE.Vector3();
 const _fwd = new THREE.Vector3(), _rgt = new THREE.Vector3(), _up = new THREE.Vector3();
-const _q = new THREE.Quaternion();
+const _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion();
+const _e2 = new THREE.Euler();
 const DEG = Math.PI / 180;
 
 const smooth = t => t * t * (3 - 2 * t);
@@ -33,8 +34,9 @@ export const WEAPONS = {
     adsTime: 0.22, adsFov: 54, drawTime: 0.52, holsterTime: 0.28,
     rl: { out: 0.50, in: 1.15, ammo: 1.32, dur: 2.05, extra: 0.72, chargeDur: 0.34 },
     cycle: 0.062, ejectAt: 0.30, boltKind: 'auto',
-    hip: [0.118, -0.132, -0.255], hipRot: [0.020, -0.060, 0.028],
-    adsDist: 0.255, tracerEvery: 3,
+    vmScale: 0.72,
+    hip: [0.145, -0.128, -0.350], hipRot: [0.030, 0.026, 0.030],
+    adsDist: 0.235, tracerEvery: 3,
   },
   smg: {
     name: 'VECTOR-9', model: 'smg', auto: true, sightNode: 'optic',
@@ -46,8 +48,9 @@ export const WEAPONS = {
     adsTime: 0.18, adsFov: 60, drawTime: 0.44, holsterTime: 0.24,
     rl: { out: 0.44, in: 1.00, ammo: 1.16, dur: 1.85, extra: 0.62, chargeDur: 0.30 },
     cycle: 0.048, ejectAt: 0.30, boltKind: 'auto',
-    hip: [0.112, -0.128, -0.215], hipRot: [0.022, -0.070, 0.030],
-    adsDist: 0.240, tracerEvery: 3,
+    vmScale: 0.74,
+    hip: [0.140, -0.122, -0.315], hipRot: [0.030, 0.028, 0.032],
+    adsDist: 0.225, tracerEvery: 3,
   },
   shotgun: {
     name: 'KS-12 BREACHER', model: 'shotgun', auto: false, sightNode: 'irons',
@@ -59,8 +62,9 @@ export const WEAPONS = {
     adsTime: 0.26, adsFov: 62, drawTime: 0.58, holsterTime: 0.32,
     rl: { shell: true, start: 0.40, per: 0.44, end: 0.52 },
     cycle: 0.62, ejectAt: 0.42, boltKind: 'pump', pumpAfterShot: true,
-    hip: [0.120, -0.140, -0.235], hipRot: [0.024, -0.062, 0.030],
-    adsDist: 0.230, tracerEvery: 1, tracerWidth: 0.014,
+    vmScale: 0.72,
+    hip: [0.148, -0.132, -0.330], hipRot: [0.030, 0.026, 0.032],
+    adsDist: 0.215, tracerEvery: 1, tracerWidth: 0.014,
   },
   sniper: {
     name: 'LR-338 BALLISTA', model: 'sniper', auto: false, sightNode: 'optic',
@@ -72,8 +76,9 @@ export const WEAPONS = {
     adsTime: 0.34, adsFov: 60, drawTime: 0.72, holsterTime: 0.38,
     rl: { out: 0.62, in: 1.42, ammo: 1.60, dur: 2.70, extra: 0.60, chargeDur: 0.40 },
     cycle: 0.90, ejectAt: 0.38, boltKind: 'bolt', boltAfterShot: true,
-    hip: [0.125, -0.140, -0.250], hipRot: [0.020, -0.058, 0.026],
-    adsDist: 0.240, scope: true, scopeFov: 6.8, tracerEvery: 1, tracerWidth: 0.030,
+    vmScale: 0.70,
+    hip: [0.150, -0.134, -0.360], hipRot: [0.030, 0.024, 0.028],
+    adsDist: 0.215, scope: true, scopeFov: 6.8, tracerEvery: 1, tracerWidth: 0.030,
   },
 };
 
@@ -193,24 +198,38 @@ export class Weapons {
     const def = WEAPONS[id];
     const m = BUILDERS[def.model](this.mats);
     m.root.visible = false;
-    m.root.traverse(o => { o.frustumCulled = false; if (o.isMesh) o.renderOrder = 12; });
+    m.root.traverse(o => { o.frustumCulled = false; if (o.isMesh && o.renderOrder < 11) o.renderOrder = 12; });
+
+    // Viewmodel scale is the stand-in for a separate viewmodel FOV: the weapon is
+    // modelled at true size (a 74 cm carbine), which at arm's length under an 80 deg
+    // world FOV eats a third of the frame. Real COD renders the viewmodel through a
+    // much narrower FOV so it reads at roughly a sixth of frame width; scaling the
+    // model — but not its distance — reproduces that framing with one camera.
+    const S = def.vmScale || 1;
+    m.scale = S;
+    m.root.scale.setScalar(S);
     this.gun.add(m.root);
 
     // where the sight sits in gun space -> the ADS offset that puts it on screen centre
     const sight = (def.sightNode === 'irons' ? m.irons : m.optic) || m.optic || m.irons;
     m.sight = sight;
     const sp = sight ? sight.position : new THREE.Vector3(0, 0.04, -0.1);
-    m.adsPos = new THREE.Vector3(-sp.x, -sp.y, -def.adsDist - sp.z);
+    // scaled sight offset, negated: the optic lands exactly on the camera axis at the
+    // correct eye relief, so the dot is on the crosshair with no fudge factor.
+    m.adsPos = new THREE.Vector3(-sp.x * S, -sp.y * S, -def.adsDist - sp.z * S);
 
-    // collimated dot for the non-magnified optics
+    // collimated dot for the non-magnified optics. Drawn without depth test and only
+    // once ADS is under way, so it always reads as a lit dot floating on the glass.
     if (m.optic && !def.scope) {
       const style = def.model === 'smg' ? 'holo' : 'dot';
-      const ret = makeReticle(style, 0xffffff, style === 'holo' ? 0.062 : 0.046);
-      ret.material.depthTest = true;
-      ret.material.color.setRGB(style === 'holo' ? 5.5 : 6.5, 0.55, 0.30);
+      const ret = makeReticle(style, 0xffffff, (style === 'holo' ? 0.055 : 0.038) / S);
+      ret.material.depthTest = false;
+      ret.material.depthWrite = false;
+      ret.material.color.setRGB(style === 'holo' ? 6.0 : 7.5, 0.62, 0.34);
       ret.position.copy(m.optic.position);
-      ret.position.z -= 0.006;
-      ret.visible = true;
+      ret.position.z += 0.020;                 // just in front of the ocular glass
+      ret.renderOrder = 41;
+      ret.visible = false;
       m.root.add(ret);
       m.reticle = ret;
     }
@@ -529,6 +548,45 @@ export class Weapons {
     }
   }
 
+  /**
+   * Arms ride the weapon root, so recoil / sway / sprint need no work here. What does
+   * need work is the support hand: during a magazine change it leaves the handguard,
+   * strips the mag, feeds a fresh one and slaps the bolt release.
+   */
+  _updArms(dt) {
+    const m = this.model, d = this.def;
+    if (!m || !m.armL) return;
+    const a = m.armL;
+    if (!a.rest) return;
+    const r = this.reloadA;
+    let w = 0, ch = 0;
+    if (r && !r.shell) {
+      // down to the magwell and back, plus a dip to the charging handle when empty
+      w = hump(r.t, 0.04, d.rl.in + 0.16);
+      if (r.empty) ch = hump(r.t, r.chargeAt - 0.10, r.chargeAt + d.rl.chargeDur + 0.10);
+    }
+    const k = Math.max(w, ch * 0.85);
+    if (k < 0.001 && !a._dirty) return;
+    a._dirty = k >= 0.001;
+
+    const p = a.rest.pos;
+    // magwell is under the receiver; the charging handle is back at the rear of it
+    const tx = ch > w ? 0.055 : -0.010;
+    const ty = ch > w ? -0.030 : -0.185;
+    const tz = ch > w ? 0.020 : -0.120;
+    a.root.position.set(
+      p.x + (tx - p.x) * k,
+      p.y + (ty - p.y) * k,
+      p.z + (tz - p.z) * k,
+    );
+    _q.copy(a.rest.quat);
+    if (k > 0.001) {
+      _q2.setFromEuler(_e2.set(0.5 * k, -0.9 * k, 0.7 * k));
+      _q.multiply(_q2);
+    }
+    a.root.quaternion.copy(_q);
+  }
+
   _eject() {
     const m = this.model;
     if (!m || !m.eject || !this.ctx.fx) return;
@@ -605,6 +663,23 @@ export class Weapons {
     const sprintRate = wantSprint && !this.adsWant ? 6 : -8;
     this.sprintT = clamp01(this.sprintT + sprintRate * dt);
 
+    // Tell the HUD: the hip crosshair must not draw over the optic, and the sight
+    // picture takes over as the aiming reference the moment ADS starts.
+    const adsState = this.adsT > 0.30;
+    if (adsState !== this._adsSignal) {
+      this._adsSignal = adsState;
+      ctx.bus.emit('ads', { ads: adsState, t: this.adsT, id: this.id, scope: !!d.scope });
+    }
+
+    // lit reticle: fades in with the sight picture, off at the hip
+    const mdl = this.model;
+    if (mdl && mdl.reticle) {
+      const k = clamp01((this.adsT - 0.28) / 0.45);
+      mdl.reticle.visible = k > 0.02 && !this.swap;
+      mdl.reticle.material.opacity = 0.35 + 0.65 * k;
+      mdl.reticle.scale.setScalar(mdl.reticle.userData.size * (1.30 - 0.30 * k));
+    }
+
     /* ---- fire control ---- */
     if (!capture) {
       const trig = wantFire;
@@ -630,6 +705,7 @@ export class Weapons {
     this._updCamRecoil(dt);
     this._updSprings(dt);
     this._updParts(dt);
+    this._updArms(dt);
 
     /* ---- barrel smoke after sustained fire ---- */
     if (this.heat > 0.5 && this.sinceShot > 0.25 && this.model && this.model.muzzle && (ctx.frame % 7) === 0) {

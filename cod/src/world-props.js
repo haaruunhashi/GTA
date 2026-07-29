@@ -7,33 +7,70 @@ import * as THREE from 'three';
 
 /* --------------------------------------------------------------- openings */
 
-// A window: recessed glass behind the wall reveal, frame, mullions, sill, lintel.
+// A window. Built as a real hole in a thick wall: a splayed masonry reveal on
+// all four sides, a frame set well back inside it, glazing that reflects the
+// sky with a parallax-mapped room behind it, a protruding sill that throws a
+// shadow, and staining running down from that sill.
+//
+// Local +Z of this unit points at the INTERIOR (wall() pushes it with rotY=PI),
+// so negative z is further out toward the street.
 export function windowUnit(B, w, h, o = {}) {
   const t = o.wall ?? 0.42;
   const frameMat = o.frame || 'paint_white';
   const broken = !!o.broken, boarded = !!o.boarded;
-  const fz = -t * 0.5 + 0.1;            // glass plane, recessed from the outer face
-  const fw = 0.07;
-  // frame perimeter
-  B.box(frameMat, 0, h / 2 - fw / 2, fz, w, fw, 0.1, { dirt: false });
-  B.box(frameMat, 0, -h / 2 + fw / 2, fz, w, fw, 0.1, { dirt: false });
-  B.box(frameMat, -w / 2 + fw / 2, 0, fz, fw, h, 0.1, { dirt: false });
-  B.box(frameMat, w / 2 - fw / 2, 0, fz, fw, h, 0.1, { dirt: false });
+  const rec = o.recess ?? 0.2;           // how far the frame sits back from the face
+  const fz = -t * 0.5 + rec;
+  const fw = 0.075;
+  const out = -t * 0.5;                  // the exterior wall plane
+
+  // ---- masonry reveal: the jambs, head and cill of the opening itself.
+  // Slightly proud of the brick and a shade lighter, so the recess reads as
+  // depth rather than as a dark sticker.
+  const rd = rec + 0.04;                 // depth of the reveal lining
+  const rj = 0.055;                      // how far it intrudes into the opening
+  B.box('concrete', -w / 2 + rj / 2, 0, out + rd / 2, rj, h, rd, { dirt: false, tint: 0xb6b0a4 });
+  B.box('concrete', w / 2 - rj / 2, 0, out + rd / 2, rj, h, rd, { dirt: false, tint: 0xa9a397 });
+  B.box('concrete', 0, h / 2 - rj / 2, out + rd / 2, w, rj, rd, { dirt: false, tint: 0x8f8a80 });
+  B.box('concrete', 0, -h / 2 + rj / 2, out + rd / 2, w, rj, rd, { dirt: false, tint: 0xc0bab0 });
+
+  // frame perimeter, set back inside the reveal
+  B.box(frameMat, 0, h / 2 - fw / 2 - rj, fz, w - rj * 2, fw, 0.1, { dirt: false });
+  B.box(frameMat, 0, -h / 2 + fw / 2 + rj, fz, w - rj * 2, fw, 0.1, { dirt: false });
+  B.box(frameMat, -w / 2 + fw / 2 + rj, 0, fz, fw, h - rj * 2, 0.1, { dirt: false });
+  B.box(frameMat, w / 2 - fw / 2 - rj, 0, fz, fw, h - rj * 2, 0.1, { dirt: false });
   // mullion + transom
-  B.box(frameMat, 0, 0, fz, 0.05, h - fw, 0.09, { dirt: false });
-  if (h > 1.3) B.box(frameMat, 0, h * 0.18, fz, w - fw, 0.05, 0.09, { dirt: false });
+  B.box(frameMat, 0, 0, fz, 0.05, h - fw - rj * 2, 0.09, { dirt: false });
+  if (h > 1.3) B.box(frameMat, 0, h * 0.18, fz, w - fw - rj * 2, 0.05, 0.09, { dirt: false });
+
   if (boarded) {
+    // dark void behind the boards, so gaps read as a black interior
+    B.quad('black', 0, 0, fz + 0.06, w - 0.1, h - 0.1, { rotY: Math.PI, dirt: false, shadow: false });
     for (let i = 0; i < 4; i++) {
       const a = (i - 1.5) * 0.06;
-      B.box('wood', 0, -h / 2 + 0.16 + i * (h - 0.3) / 3.2, fz + 0.05, w * 1.02, (h - 0.2) / 4.4, 0.05,
+      B.box('wood', 0, -h / 2 + 0.16 + i * (h - 0.3) / 3.2, fz + 0.02, w * 0.98, (h - 0.2) / 4.4, 0.05,
         { rotZ: a * 0.6, dirt: false });
     }
   } else {
-    B.quad(broken ? 'glass_broken' : 'glass', 0, 0, fz - 0.02, w - 0.12, h - 0.12, { dirt: false, shadow: false });
+    // faces OUT (rotY flips the plane back toward the street)
+    B.quad(broken ? 'window_broken' : 'window', 0, 0, fz - 0.03, w - 0.14 - rj * 2, h - 0.14 - rj * 2,
+      { rotY: Math.PI, uvRect: [0, 0, 1, 1], dirt: false, shadow: false });
+    if (broken) {
+      // a few shards still clinging to the frame
+      for (let i = 0; i < 3; i++) {
+        const s = 0.16 + i * 0.06;
+        B.box('steel', (i - 1) * w * 0.28, h / 2 - rj - s * 0.5, fz - 0.03, s * 1.4, s, 0.015,
+          { rotZ: (i - 1) * 0.5, dirt: false, tint: 0x7a8288 });
+      }
+    }
   }
-  // sill (protrudes) and lintel
-  B.box('concrete', 0, -h / 2 - 0.06, 0.05, w + 0.26, 0.12, t + 0.2, { dirt: false });
-  B.box('concrete', 0, h / 2 + 0.09, 0.02, w + 0.34, 0.18, t + 0.1, { dirt: false });
+  // cill: protrudes, drips, and casts a hard line across the brick below it
+  B.box('concrete', 0, -h / 2 - 0.07, out - 0.05, w + 0.3, 0.1, t + 0.24, { dirt: false, tint: 0xa8a296 });
+  B.box('concrete', 0, -h / 2 - 0.14, out - 0.01, w + 0.2, 0.05, t + 0.12, { dirt: false, tint: 0x7d786e });
+  // lintel / head
+  B.box('concrete', 0, h / 2 + 0.1, out + 0.02, w + 0.34, 0.16, t + 0.1, { dirt: false, tint: 0xb2ac9f });
+  // rain staining washing off the cill onto the wall below
+  B.quad('decal_drip', 0, -h / 2 - 0.9, out - 0.012, w + 0.34, 1.5,
+    { rotY: Math.PI, uvRect: [0, 0, 1, 1], dirt: false, shadow: false });
 }
 
 export function doorFrame(B, w, h, o = {}) {
@@ -172,24 +209,71 @@ export function tyreStack(B, n, rnd) {
   B.collider(-0.46, 0.46, 0, n * 0.19 + 0.05, -0.46, 0.46);
 }
 
+// Sandbag emplacement. Bags are laid as a real one would be: stretchers along
+// the run with the odd header turned across it, each course offset by half a
+// bag, everything sagging under the course above, the top course ragged and
+// incomplete. Cloth colour varies bag to bag (different batches, different
+// amounts of sun and mud) and the UV origin is jittered per bag so the hessian
+// never lines up from one to the next.
+const BAG_TINT = [0xffffff, 0xe6ddc8, 0xcdc7ae, 0xd7cdb0, 0xc2c0a4, 0xefe3c6, 0xb9b099, 0xdad2bd];
+
 export function sandbagWall(B, len, rows, rnd, o = {}) {
-  const bw = 0.52, bh = 0.2, depth = o.depth ?? 1;
-  const cols = Math.max(1, Math.round(len / bw));
+  const BL = 0.5;                         // bag length
+  const pitch = BL * 0.92;                // along-run spacing (bags overlap)
+  const py = 0.175;                       // course height
+  const depth = o.depth ?? 1;
+  const dz = 0.29;
+  const cols = Math.max(1, Math.round(len / pitch));
+
   for (let r = 0; r < rows; r++) {
-    const off = (r % 2) * bw * 0.5;
+    const top = r === rows - 1;
+    const off = (r % 2) * pitch * 0.5;
     const cn = cols - (r % 2 ? 1 : 0);
-    const shrink = o.taper ? r * 0.12 : 0;
+    const shrink = o.taper ? r * 0.16 : 0;
+    // each course sags a little more than the one below it
+    const sag = r * 0.012;
+    // the wall thins as it rises, as a real one does
+    const rowDepth = top && depth > 1 ? depth - 1 : depth;
     for (let c = 0; c < cn; c++) {
-      for (let d = 0; d < depth; d++) {
-        const x = -len / 2 + off + (c + 0.5) * bw + (rnd() - 0.5) * 0.03;
-        const z = (d - (depth - 1) / 2) * 0.34 + (rnd() - 0.5) * 0.04;
+      for (let d = 0; d < rowDepth; d++) {
+        const x = -len / 2 + off + (c + 0.5) * pitch + (rnd() - 0.5) * 0.05;
+        const z = (d - (depth - 1) / 2) * dz + (rnd() - 0.5) * 0.05;
         if (o.taper && Math.abs(x) > len / 2 - shrink) continue;
-        B.sphere('sandbag', x, bh * 0.55 + r * (bh * 0.92), z, 1,
-          { scale: [bw * 0.52, bh * 0.56, 0.19], rotY: (rnd() - 0.5) * 0.35, rotZ: (rnd() - 0.5) * 0.12, seg: [8, 5] });
+        // ragged, half-finished top course
+        if (top && rnd() < 0.28) continue;
+        const y = py * 0.55 + r * py - sag + (rnd() - 0.5) * 0.022;
+        // one bag in six is turned across the wall as a header
+        const header = rnd() < 0.17;
+        const bw = BL * (0.9 + rnd() * 0.2);
+        const bd = 0.27 * (0.88 + rnd() * 0.26);
+        const bh = 0.2 * (0.85 + rnd() * 0.3) * (top ? 0.94 : 1);
+        const ry = (header ? Math.PI / 2 : 0) + (rnd() - 0.5) * 0.34;
+        const opt = {
+          v: (rnd() * 6) | 0,
+          rotY: ry,
+          rotZ: (rnd() - 0.5) * 0.2,
+          rotX: (rnd() - 0.5) * 0.13,
+          tint: BAG_TINT[(rnd() * BAG_TINT.length) | 0],
+          uvOff: [rnd() * 4, rnd() * 4],
+        };
+        B.bag('sandbag', x, y, z, header ? bd * 1.5 : bw, bh, header ? bw : bd, opt);
+        // sewn end: the folded, stitched closure catches light as a hard ridge
+        if (d === rowDepth - 1 && rnd() < 0.7) {
+          const sx = rnd() < 0.5 ? -1 : 1;
+          const c1 = Math.cos(ry), s1 = Math.sin(ry);
+          const ex = sx * (header ? bd * 0.66 : bw * 0.42);
+          B.box('sandbag', x + ex * c1, y + bh * 0.16, z - ex * s1,
+            header ? 0.07 : 0.09, 0.055, header ? bw * 0.5 : bd * 0.52,
+            { rotY: ry, rotZ: (rnd() - 0.5) * 0.3, dirt: false, tint: opt.tint, uvOff: opt.uvOff });
+        }
       }
     }
   }
-  B.collider(-len / 2, len / 2, 0, rows * bh * 0.92, -0.2 * depth, 0.2 * depth);
+  // spilled sand and dirt kicked up around the base — kills the "prop floating
+  // on a clean floor" read where the bags meet the ground
+  B.quad('decal_dirt', 0, 0.014, 0, len + 0.9, dz * depth + 1.1,
+    { rotX: -Math.PI / 2, dirt: false, shadow: false, tint: 0xbfae8c });
+  B.collider(-len / 2, len / 2, 0, rows * py + 0.05, -dz * depth * 0.5 - 0.14, dz * depth * 0.5 + 0.14);
 }
 
 export function roadSign(B, quad = 0, o = {}) {

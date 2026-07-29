@@ -41,7 +41,10 @@ function bagGeometry(variant) {
     seed = (Math.imul(seed ^ (seed >>> 15), 2246822519) + 0x9e3779b9) | 0;
     return ((seed >>> 8) & 0xffffff) / 0x1000000;
   };
-  const g = new THREE.BoxGeometry(1, 1, 1, 7, 4, 5);
+  // Segment count is a budget decision: the map holds ~600 of these and they
+  // cast shadows, so 40 quads each is the ceiling. Smooth normals and the
+  // deformation below do the rounding that the topology cannot.
+  const g = new THREE.BoxGeometry(1, 1, 1, 4, 2, 2);
   const p = g.attributes.position;
   // a handful of lump centres so each variant slumps differently
   const lumps = [];
@@ -75,7 +78,24 @@ function bagGeometry(variant) {
     }
     p.setXYZ(i, x, y, z);
   }
+  // BoxGeometry does not share vertices across its six faces, so the default
+  // normals would leave hard creases along the original box seams. Average by
+  // position instead: the sack has to shade as one soft, continuous surface.
   g.computeVertexNormals();
+  const nA = g.attributes.normal;
+  const acc = new Map();
+  for (let i = 0; i < p.count; i++) {
+    const k = `${Math.round(p.getX(i) * 2e3)},${Math.round(p.getY(i) * 2e3)},${Math.round(p.getZ(i) * 2e3)}`;
+    let a = acc.get(k);
+    if (!a) { a = [0, 0, 0]; acc.set(k, a); }
+    a[0] += nA.getX(i); a[1] += nA.getY(i); a[2] += nA.getZ(i);
+  }
+  for (let i = 0; i < p.count; i++) {
+    const k = `${Math.round(p.getX(i) * 2e3)},${Math.round(p.getY(i) * 2e3)},${Math.round(p.getZ(i) * 2e3)}`;
+    const a = acc.get(k);
+    const l = Math.hypot(a[0], a[1], a[2]) || 1;
+    nA.setXYZ(i, a[0] / l, a[1] / l, a[2] / l);
+  }
   return nonIndexed(g);
 }
 
@@ -94,6 +114,11 @@ export class Batcher {
     this.stack = [new THREE.Matrix4()];
     this.cache = new Map();
     this.tag = null;              // non-null => geometry lands in its own mesh
+    // Scope switch: everything drawn while this is set is excluded from the
+    // shadow pass. The cascades re-rasterise the whole map several times a
+    // frame, so trim (facade detail, roof clutter, backdrop) that costs more
+    // there than it is worth is switched off wholesale rather than per call.
+    this.noShadow = false;
     this.verts = 0;
   }
 
@@ -237,7 +262,7 @@ export class Batcher {
   }
 
   _emit(mat, base, m, o) {
-    const shadow = !(o && o.shadow === false);
+    const shadow = !(o && o.shadow === false) && !this.noShadow;
     const g = this._group(mat, shadow);
     const P = base.pos, N = base.nrm, U = base.uv;
     const n = P.length / 3;
@@ -300,9 +325,9 @@ export class Batcher {
         fx = Math.abs(fx); fy = Math.abs(fy); fz = Math.abs(fz);
         for (let k = 0; k < 3; k++) {
           const p = (f + k) * 3, q = (f + k) * 2;
-          if (fy >= fx && fy >= fz) { g.uv[q] = g.pos[p] * inv + uo; g.uv[q + 1] = g.pos[p + 2] * inv; }
-          else if (fx >= fz) { g.uv[q] = g.pos[p + 2] * inv + uo; g.uv[q + 1] = g.pos[p + 1] * inv; }
-          else { g.uv[q] = g.pos[p] * inv + uo; g.uv[q + 1] = g.pos[p + 1] * inv; }
+          if (fy >= fx && fy >= fz) { g.uv[q] = g.pos[p] * inv + uo; g.uv[q + 1] = g.pos[p + 2] * inv + vo; }
+          else if (fx >= fz) { g.uv[q] = g.pos[p + 2] * inv + uo; g.uv[q + 1] = g.pos[p + 1] * inv + vo; }
+          else { g.uv[q] = g.pos[p] * inv + uo; g.uv[q + 1] = g.pos[p + 1] * inv + vo; }
         }
       }
     }
@@ -326,7 +351,10 @@ export class Batcher {
       const mesh = new THREE.Mesh(geo, g.mat);
       const transparent = g.mat.transparent === true;
       mesh.castShadow = g.shadow && !transparent;
-      mesh.receiveShadow = !transparent;
+      // Shadow-map sampling is the most expensive part of a PBR fragment; a
+      // material can opt out when the result would not be visible anyway
+      // (glazing reads as reflection and a black interior either way).
+      mesh.receiveShadow = !transparent && !g.mat.userData.noShadowRecv;
       mesh.matrixAutoUpdate = false;
       mesh.updateMatrixWorld();
       if (g.collide) { mesh.userData.collide = true; this.collisionMeshes.push(mesh); }

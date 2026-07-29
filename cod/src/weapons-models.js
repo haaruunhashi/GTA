@@ -3,82 +3,12 @@
 //   -Z = muzzle direction, +Y = up, +X = right (shooter's view)
 // Static parts are merged per-material so a whole weapon is 3-6 draw calls; only the
 // parts that actually animate (bolt, charging handle, magazine, pump) stay separate.
+// Gloved arms are attached last, parented to the weapon root so they inherit every
+// bit of viewmodel animation.
 import * as THREE from 'three';
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { reticleTexture } from './weapons-materials.js';
-
-const _q = new THREE.Quaternion();
-const _e = new THREE.Euler();
-const _p = new THREE.Vector3();
-const _s = new THREE.Vector3(1, 1, 1);
-const _m = new THREE.Matrix4();
-
-// ---- primitive cache --------------------------------------------------------
-const GC = new Map();
-function box(w, h, d) {
-  const k = `b${w},${h},${d}`;
-  if (!GC.has(k)) GC.set(k, new THREE.BoxGeometry(w, h, d));
-  return GC.get(k);
-}
-// cylinder whose axis lies along Z (so it points at the muzzle)
-function tube(r1, r2, len, seg = 16, open = false) {
-  const k = `t${r1},${r2},${len},${seg},${open}`;
-  if (!GC.has(k)) { const g = new THREE.CylinderGeometry(r1, r2, len, seg, 1, open); g.rotateX(Math.PI / 2); GC.set(k, g); }
-  return GC.get(k);
-}
-function sph(r, a = 10, b = 8) {
-  const k = `s${r},${a},${b}`;
-  if (!GC.has(k)) GC.set(k, new THREE.SphereGeometry(r, a, b));
-  return GC.get(k);
-}
-function ring(r, t, seg = 16, arc = Math.PI * 2) {
-  const k = `r${r},${t},${seg},${arc}`;
-  if (!GC.has(k)) GC.set(k, new THREE.TorusGeometry(r, t, 6, seg, arc));
-  return GC.get(k);
-}
-
-// ---- builder ----------------------------------------------------------------
-class Rig {
-  constructor() { this.buckets = new Map(); this.root = new THREE.Group(); }
-  // static geometry: baked into a per-material merged mesh
-  s(geo, mat, p, e) {
-    _p.set(p[0], p[1], p[2]);
-    _e.set(e ? e[0] : 0, e ? e[1] : 0, e ? e[2] : 0);
-    _q.setFromEuler(_e);
-    _m.compose(_p, _q, _s);
-    const g = geo.clone().applyMatrix4(_m);
-    let bk = this.buckets.get(mat);
-    if (!bk) this.buckets.set(mat, bk = []);
-    bk.push(g);
-    return this;
-  }
-  // dynamic mesh, parented to `parent` (defaults to root) and returned so we can animate it
-  d(geo, mat, p, e, parent) {
-    const m = new THREE.Mesh(geo, mat);
-    m.position.set(p[0], p[1], p[2]);
-    if (e) m.rotation.set(e[0], e[1], e[2]);
-    (parent || this.root).add(m);
-    return m;
-  }
-  anchor(p, e, parent) {
-    const o = new THREE.Object3D();
-    o.position.set(p[0], p[1], p[2]);
-    if (e) o.rotation.set(e[0], e[1], e[2]);
-    (parent || this.root).add(o);
-    return o;
-  }
-  finish() {
-    for (const [mat, list] of this.buckets) {
-      const g = list.length === 1 ? list[0] : mergeGeometries(list, false);
-      const m = new THREE.Mesh(g, mat);
-      m.frustumCulled = false;
-      this.root.add(m);
-    }
-    this.buckets.clear();
-    this.root.traverse(o => { o.castShadow = false; o.receiveShadow = false; o.renderOrder = 12; });
-    return this.root;
-  }
-}
+import { Rig, box, tube, sph, ring, mesh, resetJitter } from './weapons-geo.js';
+import { makeArm, aimFore, place } from './weapons-arms.js';
 
 // ---- shared sub-assemblies --------------------------------------------------
 
@@ -155,10 +85,35 @@ function ironSights(r, mats, zFront, zRear, y) {
   return r.anchor([0, y + 0.018, zRear]);
 }
 
+/**
+ * Seat both gloved arms on a finished weapon root.
+ * `spec.grip` is the firing hand, `spec.support` the front hand; each carries the
+ * placement (`pos` + intrinsic rotation `seq`), the finger curl and the weapon-space
+ * elbow the forearm aims at. Both arms are children of the weapon root, so they ride
+ * every recoil / sway / reload offset the animation layer applies to the gun.
+ */
+function attachArms(root, mats, spec) {
+  const out = {};
+  for (const key of ['grip', 'support']) {
+    const s = spec[key];
+    if (!s) continue;
+    const side = key === 'grip' ? 1 : -1;
+    const a = makeArm(mats, side, { curl: s.curl, thumb: s.thumb, index: s.index });
+    place(a.root, s.pos, s.seq);
+    aimFore(a.root, a.fore, s.elbow);
+    a.root.traverse(o => { o.castShadow = false; o.receiveShadow = false; if (o.isMesh) o.renderOrder = 11; });
+    root.add(a.root);
+    a.rest = { pos: a.root.position.clone(), quat: a.root.quaternion.clone() };
+    out[key === 'grip' ? 'armR' : 'armL'] = a;
+  }
+  return out;
+}
+
 // ---- weapons ----------------------------------------------------------------
 
 // M4/416-style carbine.
 function buildAR(mats) {
+  resetJitter();
   const r = new Rig();
   const pl = mats.get('polymer'), st = mats.get('steel'), sd = mats.get('steelDark'),
     al = mats.get('alu'), rb = mats.get('rubber');
@@ -213,15 +168,25 @@ function buildAR(mats) {
 
   // ---- animated parts ----
   const charging = r.d(box(0.052, 0.011, 0.030), sd, [0, 0.030, 0.012]);
-  charging.add(new THREE.Mesh(box(0.014, 0.010, 0.048), sd).translateZ(-0.030));
+  charging.add(mesh(box(0.014, 0.010, 0.048), sd).translateZ(-0.030));
   const bolt = r.d(box(0.005, 0.024, 0.052), sd, [0.027, 0.008, -0.062]);   // ejection port cover / bolt face
   const mag = r.d(box(0.026, 0.115, 0.070), pl, [0, -0.128, -0.128], [0.10, 0, 0]);
-  mag.add(new THREE.Mesh(box(0.030, 0.010, 0.076), pl).translateY(-0.062));
-  mag.add(new THREE.Mesh(box(0.024, 0.040, 0.066), mats.get('polymerTan')).translateY(0.03).translateZ(-0.004));
+  mag.add(mesh(box(0.030, 0.010, 0.076), pl).translateY(-0.062));
+  mag.add(mesh(box(0.024, 0.040, 0.066), mats.get('polymerTan')).translateY(0.03).translateZ(-0.004));
 
   const root = r.finish();
+  const arms = attachArms(root, mats, {
+    grip: {
+      pos: [0.004, -0.086, 0.030], seq: [['x', 0.30], ['z', Math.PI / 2]],
+      curl: 0.95, index: 0.30, thumb: 0.60, elbow: [0.15, -0.32, 0.30],
+    },
+    support: {
+      pos: [-0.044, -0.006, -0.412], seq: [['z', -0.55], ['y', -Math.PI / 2], ['z', 0.34]],
+      curl: 1.02, thumb: 0.15, elbow: [-0.24, -0.30, -0.10],
+    },
+  });
   return {
-    root, optic, irons: null, mag, bolt, charging,
+    root, optic, irons: null, mag, bolt, charging, ...arms,
     muzzle: r.anchor([0, 0, -0.790]),
     eject: r.anchor([0.034, 0.010, -0.062]),
     boltThrow: 0.030,
@@ -230,6 +195,7 @@ function buildAR(mats) {
 
 // Compact PDW: MP7 / Vector flavour — mag through the grip, folding stock, holo sight.
 function buildSMG(mats) {
+  resetJitter();
   const r = new Rig();
   const pl = mats.get('polymer'), st = mats.get('steel'), sd = mats.get('steelDark'),
     al = mats.get('alu'), rb = mats.get('rubber');
@@ -263,11 +229,21 @@ function buildSMG(mats) {
   const charging = r.d(box(0.044, 0.010, 0.026), sd, [0, 0.030, 0.006]);
   const bolt = r.d(box(0.005, 0.024, 0.046), sd, [0.025, 0.010, -0.045]);
   const mag = r.d(box(0.026, 0.130, 0.048), pl, [0, -0.128, -0.052], [0.16, 0, 0]);
-  mag.add(new THREE.Mesh(box(0.030, 0.010, 0.054), pl).translateY(-0.070));
+  mag.add(mesh(box(0.030, 0.010, 0.054), pl).translateY(-0.070));
 
   const root = r.finish();
+  const arms = attachArms(root, mats, {
+    grip: {
+      pos: [0.004, -0.070, -0.030], seq: [['x', 0.16], ['z', Math.PI / 2]],
+      curl: 0.95, index: 0.30, thumb: 0.60, elbow: [0.15, -0.30, 0.24],
+    },
+    support: {
+      pos: [-0.010, -0.104, -0.296], seq: [['z', -0.10], ['y', -Math.PI / 2], ['z', 1.35]],
+      curl: 1.00, thumb: 0.55, elbow: [-0.20, -0.32, -0.16],
+    },
+  });
   return {
-    root, optic, mag, bolt, charging,
+    root, optic, mag, bolt, charging, ...arms,
     muzzle: r.anchor([0, -0.004, -0.444]),
     eject: r.anchor([0.032, 0.012, -0.045]),
     boltThrow: 0.026,
@@ -276,6 +252,7 @@ function buildSMG(mats) {
 
 // Pump 12-gauge with wood furniture and a ghost-ring sight.
 function buildShotgun(mats) {
+  resetJitter();
   const r = new Rig();
   const wd = mats.get('wood'), st = mats.get('steel'), sd = mats.get('steelDark'), al = mats.get('alu'), rb = mats.get('rubber');
 
@@ -301,7 +278,7 @@ function buildShotgun(mats) {
   r.s(ring(0.009, 0.0035, 12), sd, [0, 0.048, -0.060]);
   r.s(box(0.024, 0.008, 0.012), sd, [0, 0.040, -0.060]);
   r.s(box(0.004, 0.014, 0.005), sd, [0, 0.030, -0.560]);
-  const bead = new THREE.Mesh(sph(0.0035, 8, 6), mats.get('tritium'));
+  const bead = mesh(sph(0.0035, 8, 6), mats.get('tritium'));
   bead.position.set(0, 0.038, -0.560);
   r.root.add(bead);
   r.s(ring(0.010, 0.0022, 10), sd, [0.020, -0.024, 0.100], [0, Math.PI / 2, 0]);
@@ -310,12 +287,26 @@ function buildShotgun(mats) {
 
   // pump (animated) and shell lifter
   const pump = r.d(box(0.052, 0.048, 0.160), wd, [0, -0.026, -0.300]);
-  for (let i = 0; i < 6; i++) pump.add(new THREE.Mesh(box(0.054, 0.006, 0.008), wd).translateY(0.026).translateZ(-0.06 + i * 0.024));
+  for (let i = 0; i < 6; i++) pump.add(mesh(box(0.054, 0.006, 0.008), wd).translateY(0.026).translateZ(-0.06 + i * 0.024));
   const bolt = r.d(box(0.005, 0.026, 0.060), st, [0.026, 0.002, -0.060]);
 
   const root = r.finish();
+  const arms = attachArms(root, mats, {
+    grip: {
+      pos: [0.004, -0.074, 0.012], seq: [['x', 0.28], ['z', Math.PI / 2]],
+      curl: 0.95, index: 0.30, thumb: 0.60, elbow: [0.15, -0.32, 0.28],
+    },
+    support: null,
+  });
+  const armL = makeArm(mats, -1, { curl: 1.05, thumb: 0.25 });
+  place(armL.root, [-0.046, -0.030, -0.300], [['z', -0.60], ['y', -Math.PI / 2], ['z', 0.20]]);
+  aimFore(armL.root, armL.fore, [-0.24, -0.34, -0.06]);
+  armL.root.traverse(o => { if (o.isMesh) o.renderOrder = 11; });
+  pump.add(armL.root);
+  armL.rest = { pos: armL.root.position.clone(), quat: armL.root.quaternion.clone() };
   return {
     root, optic: null, irons, mag: null, bolt, charging: null, pump,
+    armR: arms.armR, armL,
     muzzle: r.anchor([0, 0.006, -0.618]),
     eject: r.anchor([0.034, 0.004, -0.060]),
     pumpThrow: 0.075, boltThrow: 0.0,
@@ -324,6 +315,7 @@ function buildShotgun(mats) {
 
 // Bolt-action .338 with a variable scope, bipod and fluted barrel.
 function buildSniper(mats) {
+  resetJitter();
   const r = new Rig();
   const pl = mats.get('polymer'), st = mats.get('steel'), sd = mats.get('steelDark'),
     al = mats.get('alu'), rb = mats.get('rubber'), opt = mats.get('optic');
@@ -393,20 +385,30 @@ function buildSniper(mats) {
   const boltGrp = new THREE.Group();
   boltGrp.position.set(0, 0.012, -0.050);
   r.root.add(boltGrp);
-  boltGrp.add(new THREE.Mesh(tube(0.0115, 0.0115, 0.130, 12), st).translateZ(-0.02));
-  const handle = new THREE.Mesh(box(0.008, 0.008, 0.052), st);
+  boltGrp.add(mesh(tube(0.0115, 0.0115, 0.130, 12), st).translateZ(-0.02));
+  const handle = mesh(box(0.008, 0.008, 0.052), st);
   handle.position.set(0.030, -0.004, 0.030);
   handle.rotation.z = -0.35;
   boltGrp.add(handle);
-  const knob = new THREE.Mesh(sph(0.011, 10, 8), st);
+  const knob = mesh(sph(0.011, 10, 8), st);
   knob.position.set(0.052, -0.014, 0.030);
   boltGrp.add(knob);
 
   const mag = r.d(box(0.030, 0.060, 0.082), pl, [0, -0.116, -0.150]);
 
   const root = r.finish();
+  const arms = attachArms(root, mats, {
+    grip: {
+      pos: [0.004, -0.084, -0.016], seq: [['x', 0.26], ['z', Math.PI / 2]],
+      curl: 0.95, index: 0.30, thumb: 0.60, elbow: [0.15, -0.32, 0.26],
+    },
+    support: {
+      pos: [-0.046, -0.010, -0.400], seq: [['z', -0.55], ['y', -Math.PI / 2], ['z', 0.30]],
+      curl: 1.02, thumb: 0.15, elbow: [-0.24, -0.30, -0.10],
+    },
+  });
   return {
-    root, optic, mag, bolt: boltGrp, boltHandle: handle, charging: null,
+    root, optic, mag, bolt: boltGrp, boltHandle: handle, charging: null, ...arms,
     muzzle: r.anchor([0, 0, -0.885]),
     eject: r.anchor([0.036, 0.014, -0.050]),
     boltThrow: 0.070, boltLift: 1.15,
@@ -424,6 +426,7 @@ export function makeReticle(style = 'dot', color = 0xff2a18, size = 0.055) {
   });
   const m = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), mat);
   m.scale.setScalar(size);
+  m.userData.size = size;
   m.renderOrder = 40;
   m.frustumCulled = false;
   m.visible = false;
