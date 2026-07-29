@@ -254,17 +254,13 @@ const S = 512;
 export class GunMats {
   constructor(ctx) { this.ctx = ctx; this.cache = new Map(); }
 
+  // Weapon materials are owned here, full stop. There used to be a hook that adopted
+  // `gun_<name>` from the shared materials module if it existed; that silently started
+  // resolving to the shared module's untextured default and rendered the whole rifle
+  // flat white. Anything the viewmodel needs, it builds itself.
   get(name) {
-    if (!this.cache.has(name)) this.cache.set(name, this._shared(name) || this._build(name));
+    if (!this.cache.has(name)) this.cache.set(name, this._build(name));
     return this.cache.get(name);
-  }
-
-  // Give the materials agent a hook: if it publishes `gun_<name>` we use it.
-  _shared(name) {
-    const m = this.ctx.materials?.get?.('gun_' + name);
-    if (!m) return null;
-    const isFallback = m.isMeshStandardMaterial && m.color?.getHex() === 0x999999 && m.roughness === 0.8;
-    return isFallback ? null : m;
   }
 
   _build(name) {

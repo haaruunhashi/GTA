@@ -190,7 +190,7 @@ export class Sky {
     this.setTimeOfDay(0.059);
   }
 
-  _setupShadow(light, size, radius, bias, normalBias) {
+  _setupShadow(light, size, radius, bias, normalBias, pcf) {
     const s = light.shadow;
     s.mapSize.set(size, size);
     s.camera.near = 0.5;
@@ -199,7 +199,11 @@ export class Sky {
     s.camera.top = radius; s.camera.bottom = -radius;
     s.bias = bias;
     s.normalBias = normalBias;
-    s.radius = 2.2;              // PCF kernel widening (soft contact-ish falloff)
+    // Penumbra width, in shadow texels, for the rotated-disk PCF installed by
+    // render-shadows.js. The near cascade has ~2.5 cm texels, so 2.5 texels is a
+    // ~6 cm penumbra — crisp contact. The far cascade has ~12 cm texels, so 4
+    // texels there is a ~50 cm penumbra: distance softens, as it should.
+    s.radius = pcf === undefined ? 2.5 : pcf;
     s.blurSamples = 12;
     s.camera.updateProjectionMatrix();
     light.userData.fitRadius = radius;

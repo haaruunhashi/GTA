@@ -18,6 +18,7 @@ import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
 import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { CompositeShader, SharpenShader } from './render-shaders.js';
+import { installSoftShadows } from './render-shadows.js';
 import { GodRayPass } from './render-godrays.js';
 
 const TIER = { low: 0, medium: 1, high: 2, ultra: 3 };
@@ -39,8 +40,11 @@ export class Render {
     });
     renderer.setPixelRatio(Math.min(devicePixelRatio, ctx.config.pixelRatioCap));
     renderer.setSize(innerWidth, innerHeight);
+    // PCFShadowMap + our patched chunk: the 16-tap rotated disk honours
+    // light.shadow.radius, so sky.js can pick the penumbra width per cascade.
+    installSoftShadows();
     renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.shadowMap.type = THREE.PCFShadowMap;
     renderer.shadowMap.autoUpdate = true;
     // The scene renders scene-referred into a half-float buffer; tonemapping and
     // the display transform live in our composite pass, not in the material.

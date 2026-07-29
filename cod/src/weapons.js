@@ -668,7 +668,7 @@ export class Weapons {
     const adsState = this.adsT > 0.30;
     if (adsState !== this._adsSignal) {
       this._adsSignal = adsState;
-      ctx.bus.emit('ads', { ads: adsState, t: this.adsT, id: this.id, scope: !!d.scope });
+      ctx.bus.emit('ads', { on: adsState, ads: adsState, t: this.adsT, id: this.id, scope: !!d.scope });
     }
 
     // lit reticle: fades in with the sight picture, off at the hip
