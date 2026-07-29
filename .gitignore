@@ -6,3 +6,8 @@ cod/build/
 cod/shots/
 map-config.local.js
 node_modules/
+
+# agent scratch/profiling files
+.world-prof.mjs
+cod/tools/.tmp-*
+cod/tools/_*
