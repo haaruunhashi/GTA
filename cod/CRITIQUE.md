@@ -140,3 +140,37 @@ real step forward.
 **Harness note:** the scene is now heavy enough that 60 warm-up frames exceeded
 the capture timeout on the software rasteriser. Warm-up dropped to 40 frames and
 the timeout raised to 7 minutes.
+
+---
+
+## Round 4 — `shots/critic4/street.png`
+
+**Fixed since round 3:**
+- Windows now have frames, glass and variation, with some lit interiors on the
+  right-hand block (defect 6 — finally closed).
+- Brick varies per building and the wall/pavement junction has grime (defect 7).
+- Sandbags read as real stacked bags (defect 5 fully closed).
+- Buildings carry surface detail at mid-distance; the skyline has silhouette.
+
+**Still failing — weapon is still the worst thing in frame:**
+1. **The viewmodel materials are now broken in a new way.** The suppressor/barrel
+   shows a pastel blob pattern like foil wrapping, and the receiver is light grey
+   with a chequerboard normal-map artifact. This is worse than the plain white of
+   round 3. Another mid-write casualty; it must be finished and verified in a
+   screenshot before anything else in that module is touched.
+2. **Still no arms or hands, still oversized, still too far into frame** (defects
+   1 and 2 have now survived three rounds — this is the oldest open defect).
+3. **Street shadows read as flat blue painted polygons**, not shadows. Hard
+   straight edges, uniformly desaturated fill, no gradient, no penumbra growth
+   with distance. Worse: shadowed asphalt still loses its albedo and normal
+   detail, so the shadow looks like a decal laid over the road.
+4. **Still no contact AO** at kerb bases, lamp post bases and prop feet
+   (defect 13 — also three rounds open).
+5. The cloud layer reads as blurry haze rather than cloud form; the horizon band
+   is washing to near-white.
+6. The tall central building at the end of the street is a dark, near-detail-free
+   slab — the one part of the backdrop that did not get the round-3 treatment.
+
+**Harness note:** the page load itself now exceeds playwright's default 30s
+budget (texture generation), which crashed the capture run. Load timeout raised
+to 5 minutes with a soft failure that still captures a frame.

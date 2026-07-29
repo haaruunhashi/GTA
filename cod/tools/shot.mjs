@@ -48,7 +48,14 @@ page.on('pageerror', e => errors.push(String(e)));
 
 for (const pose of poses) {
   errors.length = 0;
-  await page.goto(`http://127.0.0.1:${port}/index.html?shot=${pose}&frames=40&dpr=1`, { waitUntil: 'load' });
+  // Texture generation alone can outrun playwright's default 30s load budget
+  // on the software rasteriser, so both the load and the warm-up get long ones.
+  try {
+    await page.goto(`http://127.0.0.1:${port}/index.html?shot=${pose}&frames=40&dpr=1`,
+      { waitUntil: 'load', timeout: 300000 });
+  } catch (e) {
+    console.error(`[shot] ${pose}: load did not settle (${e.name}) — capturing anyway.`);
+  }
   try {
     await page.waitForFunction('window.__ready === true', null, { timeout: 420000 });
   } catch (e) {
