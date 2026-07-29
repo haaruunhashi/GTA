@@ -39,14 +39,19 @@ const PRESETS = {
   // the default: low warm sun, long shadows, deep contrast
   golden: {
     elev: 11, azim: -124,
-    sunColor: [1.0, 0.74, 0.47], sunIntensity: 11.0,
+    sunColor: [1.0, 0.74, 0.47], sunIntensity: 12.6,
     skyLum: 5.2, turbidity: 3.4, rayleigh: 3.6, mie: 0.0055, mieG: 0.86, skyGamma: 1.20, sunDisc: 46,
     ground: [0.040, 0.038, 0.036],
     cloudCover: 0.30, cloudSharp: 0.34, cloudScale: 1.0,
     cloudLit: [1.00, 0.86, 0.70], cloudDark: [0.16, 0.20, 0.30], cloudAmb: 0.56,
     zenith: [0.130, 0.240, 0.520], skyBlue: 0.58,
-    hemiSky: [0.30, 0.46, 0.92], hemiGround: [0.16, 0.14, 0.12], hemiInt: 0.80, envInt: 1.35,
-    bounce: [0.46, 0.40, 0.40], bounceInt: 0.45,
+    // Shadow fill. hemiSky is cool but not a pure blue — a saturated sky tint
+    // over dark asphalt just paints it flat blue and eats the albedo. The
+    // bounce term is deliberately warm: it stands in for sunlight coming back
+    // off the lit brick, and being *directional* it is the only thing that puts
+    // normal-map relief on shadowed ground.
+    hemiSky: [0.42, 0.56, 0.88], hemiGround: [0.18, 0.16, 0.14], hemiInt: 1.00, envInt: 1.70,
+    bounce: [0.62, 0.50, 0.40], bounceInt: 0.75,
     fog: { density: 0.0046, falloff: 15, base: -1, start: 18,
            color: [0.072, 0.098, 0.150], lowColor: [0.118, 0.122, 0.148],
            sunColor: [0.34, 0.20, 0.10], minT: 0.12, aniso: 0.72 },
@@ -138,17 +143,17 @@ export class Sky {
     const mapSize = ctx.config.shadowMapSize;
     this.sunNear = new THREE.DirectionalLight(0xffffff, 1);
     this.sunNear.castShadow = true;
-    this._setupShadow(this.sunNear, mapSize, 26, -0.0006, 0.018);
+    this._setupShadow(this.sunNear, mapSize, 26, -0.0006, 0.030, 2.4);
     scene.add(this.sunNear, this.sunNear.target);
 
     this.sunFar = null;
     if (tier >= 2) {
       this.sunFar = new THREE.DirectionalLight(0xffffff, 1);
       this.sunFar.castShadow = true;
-      this._setupShadow(this.sunFar, Math.min(mapSize, 1536), 95, -0.0014, 0.055);
+      this._setupShadow(this.sunFar, Math.min(mapSize, 1536), 95, -0.0014, 0.085, 4.0);
       scene.add(this.sunFar, this.sunFar.target);
     } else {
-      this._setupShadow(this.sunNear, mapSize, 70, -0.0012, 0.045);
+      this._setupShadow(this.sunNear, mapSize, 70, -0.0012, 0.060, 3.0);
     }
 
     this.hemi = new THREE.HemisphereLight(0xffffff, 0xffffff, 0.25);

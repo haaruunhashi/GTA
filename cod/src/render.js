@@ -84,11 +84,16 @@ export class Render {
       const gtao = new GTAOPass(ctx.scene, ctx.camera, w, h);
       gtao.output = VIEW === 'ao' ? GTAOPass.OUTPUT.Denoise : GTAOPass.OUTPUT.Default;
       gtao.blendIntensity = 1.0;
+      // GTAOShader applies the visibility as `ao = pow(ao, scale)`, so `scale`
+      // is a *gamma*, not a multiplier: at the shipped 1.0 the raw buffer sits
+      // at 0.93-0.98 in contact areas and is invisible once it multiplies an
+      // already dark shadow. 4.5 maps 0.85 -> 0.50, which is what makes the
+      // kerbs, sandbags and lamp bases actually sit on the ground.
       gtao.updateGtaoMaterial({
-        radius: 1.4,             // metres — wide enough to read where props meet the ground
-        distanceExponent: 1.0,
-        thickness: 1.0,          // thicker => real occlusion instead of a hairline
-        scale: 2.0,              // AO must be visible in frame, not just enabled
+        radius: 2.2,             // metres — the contact gradient, not a hairline
+        distanceExponent: 0.8,
+        thickness: 1.6,
+        scale: 4.5,
         samples: this.tier >= 3 ? 16 : 8,
         distanceFallOff: 1.0,
         screenSpaceRadius: false,
