@@ -30,6 +30,55 @@ function nonIndexed(g) {
 
 const R3 = v => Math.round(v * 1000) / 1000;
 
+/* ------------------------------------------------------------ sandbag mesh */
+// A filled sack is not an ellipsoid: it is a slumped rectangular pillow with
+// pinched ends, a flat bottom where it has settled onto whatever is below and a
+// puckered seam ridge along one end. Built by deforming a low-res box so it
+// still merges into the batch like every other primitive.
+function bagGeometry(variant) {
+  let seed = 1013904223 + variant * 2654435761;
+  const rnd = () => {
+    seed = (Math.imul(seed ^ (seed >>> 15), 2246822519) + 0x9e3779b9) | 0;
+    return ((seed >>> 8) & 0xffffff) / 0x1000000;
+  };
+  const g = new THREE.BoxGeometry(1, 1, 1, 7, 4, 5);
+  const p = g.attributes.position;
+  // a handful of lump centres so each variant slumps differently
+  const lumps = [];
+  for (let i = 0; i < 5; i++) lumps.push([(rnd() - 0.5) * 1.1, (rnd() - 0.5) * 0.8, (rnd() - 0.5) * 0.9, 0.5 + rnd() * 0.5]);
+  const skew = (rnd() - 0.5) * 0.34;
+  for (let i = 0; i < p.count; i++) {
+    let x = p.getX(i), y = p.getY(i), z = p.getZ(i);
+    // partial spherify -> rounded corners without losing the rectangular read
+    const l = Math.hypot(x, y, z) || 1e-5;
+    const k = 0.56;
+    x = x * (1 - k) + (x / l) * 0.5 * k;
+    y = y * (1 - k) + (y / l) * 0.5 * k;
+    z = z * (1 - k) + (z / l) * 0.5 * k;
+    // widest through the middle, flatter on top: the sand has settled
+    const bulge = 1 + 0.22 * Math.cos(y * Math.PI);
+    x *= bulge; z *= bulge;
+    if (y > 0) y *= 0.82;
+    // pinched, sewn ends
+    const tp = 1 - 0.42 * Math.pow(Math.min(1, Math.abs(x) * 2), 3.0);
+    z *= tp; y *= 0.72 + 0.28 * tp;
+    // flat-ish bottom
+    if (y < -0.22) y = -0.22 + (y + 0.22) * 0.55;
+    // slump sideways along its length
+    x += skew * (0.25 - y * y) * 1.6;
+    // organic lumps
+    for (const L of lumps) {
+      const d = Math.hypot(x - L[0], (y - L[1]) * 1.6, z - L[2]);
+      const w = Math.max(0, 1 - d / 0.62);
+      const a = w * w * 0.075 * L[3];
+      x += x * a; y += y * a * 0.7; z += z * a;
+    }
+    p.setXYZ(i, x, y, z);
+  }
+  g.computeVertexNormals();
+  return nonIndexed(g);
+}
+
 /* ------------------------------------------------------------------ class */
 
 export class Batcher {
@@ -118,6 +167,15 @@ export class Batcher {
     }
   }
 
+  /** Slumped sandbag of size w x h x d. `o.v` picks one of 6 deformations. */
+  bag(mat, x, y, z, w, h, d, o) {
+    const v = ((o && o.v) | 0) % 6;
+    const g = this._base(`bag:${v}`, () => bagGeometry(v));
+    const m = this._xform(x, y, z, o);
+    m.scale(_v.set(w, h, d));
+    this._emit(mat, g, m, o);
+  }
+
   cone(mat, x, y, z, r, h, o) {
     const rc = (o && o.rc) || 12;
     const g = this._base(`cone:${R3(r)}:${rc}`, () => nonIndexed(new THREE.ConeGeometry(r, 1, rc)));
@@ -190,7 +248,9 @@ export class Batcher {
     const tile = g.tile;
     const rect = o && o.uvRect;
     const keepUV = tile === 0 || !!rect;
-    const uo = (o && o.uvOff) || 0;
+    const _uo = (o && o.uvOff) || 0;
+    const uo = Array.isArray(_uo) ? _uo[0] : _uo;
+    const vo = Array.isArray(_uo) ? _uo[1] : 0;
 
     // colour: sRGB tint -> linear, plus ground grime and a touch of tonal noise
     let cr = 1, cg = 1, cb = 1;
