@@ -60,15 +60,26 @@ const PRESETS = {
     // normal-map relief on shadowed ground. Both are up hard from round 4:
     // shadowed asphalt was landing at luma 20, where no albedo or normal detail
     // can survive the grade, which is exactly why the shadow read as a decal.
-    hemiSky: [0.60, 0.68, 0.84], hemiGround: [0.21, 0.19, 0.17], hemiInt: 1.35, envInt: 2.05,
-    bounce: [0.68, 0.55, 0.44], bounceInt: 1.10,
+    // Measured on shots/lightdbg6: shadowed asphalt came out R33 G37 B67 —
+    // blue at twice red, on a material whose albedo is neutral grey. That is
+    // where "flat blue painted polygons" comes from: not the shadow *shape*, the
+    // shadow *hue*. The cool fill was being supplied twice, by a saturated
+    // hemiSky and by a PMREM of a sky whose zenith is [0.13,0.25,0.58] (blue at
+    // 4.5x red) at envIntensity 2.05, and then pushed a third time by the
+    // grade's shadowTint. Skylight really is blue, but shade on a street is not
+    // 2:1 blue, because half of what reaches it is warm bounce off the sunlit
+    // facade opposite. So: desaturate the hemisphere, cut the over-amplified
+    // IBL, and put the missing energy into the *warm, directional* bounce, which
+    // is also the only term that gives shadowed ground any normal-map relief.
+    hemiSky: [0.62, 0.67, 0.78], hemiGround: [0.22, 0.20, 0.18], hemiInt: 1.50, envInt: 1.55,
+    bounce: [0.88, 0.64, 0.43], bounceInt: 1.70,
     fog: { density: 0.0046, falloff: 15, base: -1, start: 18,
            color: [0.072, 0.098, 0.150], lowColor: [0.118, 0.122, 0.148],
            sunColor: [0.34, 0.20, 0.10], minT: 0.12, aniso: 0.72 },
     post: {
       exposure: 1.30, contrast: 1.10, saturation: 1.02, toe: 0.010, split: 0.40, white: 0.925,
       lift: [-0.002, 0.000, 0.006], gamma: [1.0, 1.0, 1.01], gain: [1.03, 1.0, 0.975],
-      shadowTint: [0.90, 0.97, 1.09], highTint: [1.12, 1.00, 0.84],
+      shadowTint: [0.94, 0.99, 1.05], highTint: [1.12, 1.00, 0.84],
       vignette: 0.42, ca: 1.4, grain: 0.030, sharpen: 0.55,
       bloom: 0.28, bloomThreshold: 1.55, bloomRadius: 0.45,
       godrays: 0.30, godrayDensity: 0.52, godrayThreshold: 2.6, godrayTint: [1.0, 0.80, 0.55],

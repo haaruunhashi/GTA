@@ -88,16 +88,6 @@ export class Render {
       gtao.output = AOVIEW ? GTAOPass.OUTPUT.Denoise : GTAOPass.OUTPUT.Off;
       gtao.needsSwap = AOVIEW;
       gtao.blendIntensity = 1.0;
-      // Why round 3 and round 4 both shipped with "no visible contact AO"
-      // despite this pass being enabled: the radius was 2.6 m. GTAO estimates
-      // the horizon angle over that radius, so at a 15 cm kerb the occluder
-      // subtends almost nothing of a 2.6 m hemisphere — the buffer comes back at
-      // 0.96-0.99 and even `pow(ao, 5)` only removes a few percent, spread so
-      // smoothly that it is invisible. Contact AO is a *small radius* effect:
-      // under a metre, so a kerb face, a lamp base or a sandbag foot fills a
-      // real fraction of the hemisphere and the buffer drops to 0.5-0.7.
-      // `scale` is a gamma on that (ao = pow(ao, scale)), so it only needs to be
-      // mild now, and blendIntensity slightly over 1 extrapolates the multiply.
       // Round 3 and round 4 both shipped "no visible contact AO" with this pass
       // enabled. Two separate causes, both now addressed:
       //   * the blend (see render-ao.js), and
@@ -108,13 +98,26 @@ export class Render {
       //     which is invisible at a glance. 1.6 m is the scale that actually
       //     reads: it puts a ~0.5 m gradient of shade on the ground around a
       //     prop, which is what the eye uses to seat an object on a surface.
+      //
+      // `thickness` was the third and decisive cause. three's GTAO rejects a
+      // sample outright unless `abs(viewDelta.z) < thickness` — a depth-space
+      // test, not a world-distance one. This camera looks *along* the road, so
+      // the sandbag that should shade the tarmac a metre in front of it differs
+      // from that tarmac by about a metre of view depth; at thickness 0.7-0.9
+      // every such sample was discarded and the occlusion footprint collapsed to
+      // ~20 screen pixels around the silhouette. Measured on the stretched AO
+      // view: ground AO went 0.30 -> 1.000 (exactly, sd 0) within 25 px of the
+      // sandbag feet. thickness has to be comfortably larger than the radius for
+      // grazing views. distanceFallOff also had to come down: at 1.0 it weights
+      // step j by 2/(j+2), so the outer half of the radius contributed almost
+      // nothing even when the samples were accepted.
       gtao.updateGtaoMaterial({
         radius: 1.6,
-        distanceExponent: 1.1,
-        thickness: 0.7,
-        scale: 1.4,
+        distanceExponent: 1.5,
+        thickness: 4.0,
+        scale: 1.25,
+        distanceFallOff: 0.25,
         samples: this.tier >= 3 ? 16 : 8,
-        distanceFallOff: 1.0,
         screenSpaceRadius: false,
       });
       // Denoise has to be gentle or it smears the contact gradient back out:
