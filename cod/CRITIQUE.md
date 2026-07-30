@@ -202,3 +202,37 @@ frame was busy.
 
 **Harness note:** the screenshot step itself was timing out at playwright's 30 s
 default under three concurrent agents. All page timeouts now 10 minutes.
+
+---
+
+## Round 6 — `shots/critic6/street.png`
+
+**Fixed since round 5:**
+- The oversized rust prop that dominated the round-5 foreground is GONE, and the
+  misplaced cylinder with it.
+- The backdrop is fully detailed now — the tall central building that was a dark
+  featureless slab has windows, mass and a roofline, and the whole skyline reads.
+- Sandbags, kerbs, road markings, wires and street furniture all hold up.
+- Sky and grade are the strongest they have been: readable sun, cloud form,
+  warm key against cool shade, blue overhead.
+
+**Verified this round (not by eye — by test):**
+- `tools/movetest.mjs`: **23/23 checks pass.** Never falls through the world over
+  30 s of random input, no teleport-sized frame steps (max 0.146 m), steps a
+  0.3 m ledge without jumping, cannot pass a wall at 30 m/s, sprint 6.5 m/s,
+  slide boosts to 7.8 then decays to walk within 0.75 s, mantles 1.2 m but
+  refuses 2.6 m, jump apex 0.88 m with land event, crouch in 0.2 s, cannot stand
+  under a low ceiling, backpedal/strafe/ADS penalties correct, death and respawn
+  restore at a spawn point, regen waits then heals, no inside-corner jitter,
+  view bob bounded, double-tap tactical sprint 8.4 m/s, sprint blocks firing with
+  a sprint-out delay, slide-cancel keeps momentum, zero console errors.
+- `tools/audiotest.mjs`: 91/91 assertions pass.
+
+**Still failing — the weapon, now six rounds open:**
+1. The viewmodel is still oversized and still nearly end-on, so it reads as a
+   foreshortened slab rather than a rifle.
+2. The hands are a dark unreadable blob; the forearm does not connect.
+3. Materials are flat pale grey — no gunmetal, no polymer distinction, no wear.
+
+Everything else in the frame is now at or near the standard. The weapon is the
+single thing keeping this from passing a blind side-by-side.

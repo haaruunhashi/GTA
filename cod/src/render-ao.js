@@ -50,7 +50,7 @@ export const AOApplyShader = {
     uLitHi: { value: 2.20 },      // ...and ends
     uContact: { value: 3.4 },     // gain on the high-passed (local) occlusion
     uContactLit: { value: 0.72 }, // contact term survives this much in sunlight
-    uContactR: { value: 5.0 },    // high-pass ring radius, pixels
+    uContactR: { value: 5.0 },    // high-pass ring radius, pixels (innermost)
     // colour multiplier at full occlusion: darkens, and takes the blue down
     // hardest because it is the sky contribution that is being blocked
     uOccColor: { value: [0.34, 0.28, 0.24] },
@@ -71,14 +71,33 @@ export const AOApplyShader = {
       float ao = texture2D( tAO, vUv ).r;
       float occ = clamp( 1.0 - ao, 0.0, 1.0 );
 
-      // local high pass: the brightest (least occluded) neighbour on a ring
-      float open = ao;
-      for ( int i = 0; i < 8; i ++ ) {
-        float th = float( i ) * 0.7853981634;
-        vec2 d = vec2( cos( th ), sin( th ) ) * uContactR * uTexel;
-        open = max( open, texture2D( tAO, vUv + d ).r );
+      // Local high pass: how much more occluded this pixel is than the most open
+      // pixel nearby. Flat ground contributes nothing however occluded it is;
+      // only the falloff at a prop foot or a wall base survives.
+      //
+      // ROUND 6 — this is now multi-scale, and that is the whole fix. With a
+      // single 5 px ring the darkening can only ever be ~5 px wide, because a
+      // pixel further than the ring radius from the occluder sees no open
+      // neighbour and gets nothing. That is exactly what round 4 and round 5
+      // shipped: a hairline crease at the kerb, measured but invisible. In the
+      // near field a sandbag foot subtends 60+ px, so the term has to reach that
+      // far. Three rings at 5 / 13 / 30 px, each weighted lower, give a gradient
+      // that is strongest against the geometry and fades over ~half a metre —
+      // which is what actually seats an object on a surface.
+      // (unrolled by hand: this pass compiles as GLSL ES 1.00, where neither
+      // array constructors nor non-constant array indexing are available)
+      float contact = 0.0;
+      for ( int s = 0; s < 3; s ++ ) {
+        float scale = s == 0 ? 1.0 : ( s == 1 ? 2.6 : 6.0 );
+        float w     = s == 0 ? 1.0 : ( s == 1 ? 0.66 : 0.40 );
+        float open = ao;
+        for ( int i = 0; i < 8; i ++ ) {
+          float th = float( i ) * 0.7853981634 + float( s ) * 0.3926990817;
+          vec2 d = vec2( cos( th ), sin( th ) ) * uContactR * scale * uTexel;
+          open = max( open, texture2D( tAO, vUv + d ).r );
+        }
+        contact = max( contact, clamp( ( open - ao ) * uContact, 0.0, 1.0 ) * w );
       }
-      float contact = clamp( ( open - ao ) * uContact, 0.0, 1.0 );
 
       float L = dot( src.rgb, vec3( 0.2126, 0.7152, 0.0722 ) );
       float lit = smoothstep( uLitLo, uLitHi, L );
