@@ -212,12 +212,44 @@ export function fillerBlock(B, o) {
 
   const decorate = (len, half, rotY) => {
     B.push(0, 0, 0, rotY);
+    // The window grid is laid out first: the pilasters, patches and drainpipes
+    // all have to land in the piers BETWEEN columns, never across a pane.
+    const cols = Math.max(1, Math.floor((len - 1.6) / 3.5));
+    const colStep = (len - 2.2) / Math.max(1, cols - 1 || 1);
+    const colX = (c) => (c - (cols - 1) / 2) * colStep;
+    // midpoint of the pier between column c and c+1 (or the ends)
+    const pierX = (i, n) => {
+      if (cols < 2) return (i / n - 0.5) * (len - 1.4);
+      const c = Math.round((i / n) * (cols - 1) - 0.5);
+      if (i === 0) return colX(0) - colStep * 0.5 - 0.35;
+      if (i === n) return colX(cols - 1) + colStep * 0.5 + 0.35;
+      return colX(Math.min(cols - 2, Math.max(0, c))) + colStep * 0.5;
+    };
+
     // storey bands + cornice
     for (let s = 1; s < storeys; s++) {
       B.box('concrete', 0, s * sh - 0.1, half + 0.06, len - 0.4, 0.2, 0.14, { dirt: false, tint: trim });
     }
     B.box('concrete', 0, h - 0.28, half + 0.12, len + 0.3, 0.34, 0.3, { dirt: false, tint: trim });
     B.box('concrete', 0, h - 0.62, half + 0.07, len + 0.1, 0.14, 0.2, { dirt: false, tint: trim });
+    // Vertical bays. A wide facade needs its mass broken up across the
+    // horizontal or no amount of surface detail saves it: full-height pilasters
+    // between the window columns, each capped, plus a slightly proud centre
+    // bay. This is what turns a 46 m slab into a building.
+    if (o.bays) {
+      const n = o.bays;
+      for (let i = 0; i <= n; i++) {
+        const px = pierX(i, n);
+        const end = i === 0 || i === n;
+        const pw = end ? 1.4 : 0.95;
+        B.box(mat, px, h * 0.5, half + 0.14, pw, h, 0.28, { tint });
+        // capital and a base block — the shadow under the cap is what reads
+        B.box('concrete', px, h + 0.02, half + 0.22, pw + 0.36, 0.34, 0.46, { dirt: false, tint: trim });
+        B.box('concrete', px, h - 0.5, half + 0.2, pw + 0.24, 0.18, 0.4, { dirt: false, tint: trim });
+        B.box('concrete', px, 2.5, half + 0.22, pw + 0.28, 0.24, 0.44, { dirt: false, tint: trim });
+      }
+    }
+
     // Ground-floor plinth. It must read DARKER than the brick above it — a
     // pale band at the base of a sunlit wall reads as fresh render, which is
     // the opposite of the intent.
@@ -235,12 +267,9 @@ export function fillerBlock(B, o) {
     // these are the interruptions.
     // They live in the vertical gaps BETWEEN window columns so nothing ever
     // renders across a pane.
-    const gapCols = Math.max(1, Math.floor((len - 1.6) / 3.0));
-    const gapStep = (len - 2.2) / Math.max(1, gapCols - 1 || 1);
-    // midpoint of the pier between window column c and c+1
-    const gapAt = () => (gapCols < 2
+    const gapAt = () => (cols < 2
       ? (rnd() < 0.5 ? -1 : 1) * len * 0.34
-      : (((rnd() * (gapCols - 1)) | 0) + 0.5 - (gapCols - 1) / 2) * gapStep);
+      : colX((rnd() * (cols - 1)) | 0) + colStep * 0.5);
     if (!far) {
       for (let i = 0; i < 3; i++) {
         const gx = gapAt();
@@ -267,11 +296,10 @@ export function fillerBlock(B, o) {
     // is done two ways: a proud architrave (head, cill, jambs) that throws a
     // real shadow across the glass, and the parallax room inside the shader,
     // which gives the pane genuine depth that slides with the camera.
-    const cols = Math.max(1, Math.floor((len - 1.6) / 3.5));
     const ww = 1.34, wh = 2.0;
     for (let s = 0; s < storeys; s++) {
       for (let c = 0; c < cols; c++) {
-        const x = (c - (cols - 1) / 2) * ((len - 2.2) / Math.max(1, cols - 1 || 1));
+        const x = colX(c);
         const y = s * sh + sh * 0.5;
         if (y + wh / 2 > h - 0.9) continue;
         const k = rnd();

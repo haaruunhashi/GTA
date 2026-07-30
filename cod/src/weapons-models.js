@@ -186,11 +186,11 @@ function buildAR(mats) {
   const arms = attachArms(root, mats, {
     grip: {
       pos: [0.019, -0.086, 0.029], seq: [['x', 0.30], ['z', Math.PI / 2]],
-      curl: 1.12, index: 0.78, thumb: 0.55, elbow: [0.16, -0.32, 0.30],
+      curl: 1.12, index: 0.78, thumb: 0.55, elbow: [0.15, -0.40, 0.30],
     },
     support: {
       pos: [-0.043, -0.008, -0.408], seq: [['z', -0.55], ['y', -Math.PI / 2], ['z', 0.34]],
-      curl: 1.08, thumb: 0.15, elbow: [-0.24, -0.30, -0.10],
+      curl: 1.08, thumb: 0.15, elbow: [-0.19, -0.42, 0.06],
       mag: {
         pos: [0.000, -0.212, -0.118], seq: [['z', -0.15], ['y', -Math.PI / 2], ['z', 2.00]],
         elbow: [-0.20, -0.44, 0.16],
@@ -251,11 +251,11 @@ function buildSMG(mats) {
   const arms = attachArms(root, mats, {
     grip: {
       pos: [0.019, -0.070, -0.030], seq: [['x', 0.16], ['z', Math.PI / 2]],
-      curl: 1.12, index: 0.78, thumb: 0.55, elbow: [0.16, -0.30, 0.24],
+      curl: 1.12, index: 0.78, thumb: 0.55, elbow: [0.15, -0.38, 0.26],
     },
     support: {
       pos: [-0.012, -0.102, -0.294], seq: [['z', -0.10], ['y', -Math.PI / 2], ['z', 1.35]],
-      curl: 1.05, thumb: 0.55, elbow: [-0.20, -0.32, -0.16],
+      curl: 1.05, thumb: 0.55, elbow: [-0.17, -0.40, -0.02],
       mag: {
         pos: [0.000, -0.206, -0.052], seq: [['z', -0.15], ['y', -Math.PI / 2], ['z', 2.00]],
         elbow: [-0.20, -0.42, 0.16],
@@ -318,7 +318,7 @@ function buildShotgun(mats) {
   const arms = attachArms(root, mats, {
     grip: {
       pos: [0.019, -0.074, 0.012], seq: [['x', 0.28], ['z', Math.PI / 2]],
-      curl: 1.12, index: 0.78, thumb: 0.55, elbow: [0.16, -0.32, 0.28],
+      curl: 1.12, index: 0.78, thumb: 0.55, elbow: [0.15, -0.40, 0.28],
     },
     support: null,
   });
@@ -424,11 +424,11 @@ function buildSniper(mats) {
   const arms = attachArms(root, mats, {
     grip: {
       pos: [0.019, -0.084, -0.016], seq: [['x', 0.26], ['z', Math.PI / 2]],
-      curl: 1.12, index: 0.78, thumb: 0.55, elbow: [0.16, -0.32, 0.26],
+      curl: 1.12, index: 0.78, thumb: 0.55, elbow: [0.15, -0.40, 0.28],
     },
     support: {
       pos: [-0.045, -0.012, -0.396], seq: [['z', -0.55], ['y', -Math.PI / 2], ['z', 0.30]],
-      curl: 1.08, thumb: 0.15, elbow: [-0.24, -0.30, -0.10],
+      curl: 1.08, thumb: 0.15, elbow: [-0.19, -0.42, 0.06],
       mag: {
         pos: [0.000, -0.208, -0.150], seq: [['z', -0.15], ['y', -Math.PI / 2], ['z', 2.00]],
         elbow: [-0.20, -0.44, 0.14],

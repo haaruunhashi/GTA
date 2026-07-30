@@ -299,6 +299,7 @@ export class Batcher {
       let az = nm[2] * nx + nm[5] * ny + nm[8] * nz;
       const l = Math.hypot(ax, ay, az) || 1;
       g.nrm.push(ax / l, ay / l, az / l);
+      const upness = Math.abs(ay / l);      // 1 = floor/ceiling, 0 = vertical wall
       if (keepUV) {
         const u = U[i * 2], v = U[i * 2 + 1];
         if (rect) g.uv.push(rect[0] + u * rect[2], rect[1] + v * rect[3]);
@@ -309,7 +310,18 @@ export class Batcher {
       let d = 1;
       if (dirt) {
         const yy = Math.max(0, wy);
-        d = 1 - 0.26 * Math.exp(-yy / 1.1);
+        // Two terms, both baked into vertex colour so they cannot be lost the
+        // way a screen-space or blended effect can:
+        //  - a broad splash-back wash up the first couple of metres of anything
+        //    standing on the ground, and
+        //  - a hard, tight darkening in the last ~250 mm, which is the contact
+        //    occlusion where the object actually meets the floor. The tight
+        //    term is what stops props reading as stickers laid on the tarmac.
+        // The tight term is gated to near-vertical faces: contact occlusion
+        // lives on the SIDES of an object where it meets the floor. Applying it
+        // to up-facing faces would just dim every floor and pavement uniformly.
+        d = 1 - 0.22 * Math.exp(-yy / 1.2) - 0.40 * Math.exp(-yy / 0.22) * (1 - upness * upness);
+        if (d < 0.2) d = 0.2;
       }
       g.col.push(cr * d, cg * d, cb * d);
     }

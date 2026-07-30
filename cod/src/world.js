@@ -132,10 +132,17 @@ export class World {
         B.box('curb', sx * (ROAD_HW + WALK / 2), 0.08, cz, WALK, 0.16, 10, {});
         B.box('concrete', sx * (ROAD_HW + 0.07), 0.085, cz, 0.16, 0.19, 10, { dirt: false, tint: 0xd0cabb });
         B.collider(sx * (ROAD_HW) - 0.1, sx * (ROAD_HW + WALK) + 0.1 * sx, 0, 0.16, cz - 5, cz + 5);
-        // The kerb is only 160 mm tall, so its own shadow is a hairline and the
-        // pavement ends up looking pasted onto the road. Bake the gutter crease.
+        // The kerb is only 160 mm tall, so its own cast shadow is a hairline and
+        // the pavement ends up looking pasted onto the road. Bake the gutter
+        // crease as overlapping blobs — spaced tighter than they are wide so
+        // they read as one continuous dark line rather than a dotted one.
+        // Two passes: a wide soft one for the silt that collects in the gutter,
+        // and a tight dark one hard against the kerb face for the crease itself.
         for (let i = 0; i < 5; i++) {
-          B.quad('decal_ao', sx * (ROAD_HW - 0.28), 0.014, cz - 4 + i * 2, 1.5, 2.2,
+          const zz = cz - 4 + i * 2;
+          B.quad('decal_ao', sx * (ROAD_HW - 0.62), 0.012, zz, 2.6, 2.9,
+            { rotX: -Math.PI / 2, dirt: false, shadow: false, tint: 0xa8a8a8 });
+          B.quad('decal_ao', sx * (ROAD_HW - 0.16), 0.015, zz, 0.95, 2.9,
             { rotX: -Math.PI / 2, dirt: false, shadow: false });
         }
       }
@@ -720,19 +727,23 @@ export class World {
       { x: 46, z: 12, w: 18, d: 30, h: 22, faces: 'w', mat: 'brick_red', tint: 0xc9a08c, roof: 1 },
       { x: 21, z: 48, w: 20, d: 16, h: 11, faces: 'nw', mat: 'brick_grey', tint: 0xc2beb4, roof: 2 },
       { x: 44, z: 46, w: 20, d: 20, h: 14, faces: 'nw', mat: 'brick_buff', tint: 0xb6ae98, roof: 1 },
-      // far backdrops, mostly silhouette through the fog
-      { x: -14, z: -76, w: 46, d: 18, h: 26, faces: 's', mat: 'brick_buff', tint: 0xc0b7a2, roof: 1, far: true },
-      { x: 34, z: -78, w: 40, d: 18, h: 21, faces: 's', mat: 'brick_red', tint: 0xb2907e, roof: 2, far: true },
-      { x: -8, z: 76, w: 44, d: 18, h: 24, faces: 'n', mat: 'brick_tan', tint: 0xc8bfa8, roof: 2, far: true },
-      { x: 38, z: 78, w: 34, d: 18, h: 19, faces: 'n', mat: 'brick_grey', tint: 0xacaaa2, roof: 0, far: true },
-      { x: -74, z: 0, w: 20, d: 80, h: 30, faces: 'e', mat: 'brick_grey', tint: 0xb0aca4, roof: 1, far: true },
-      { x: 74, z: 0, w: 20, d: 80, h: 28, faces: 'w', mat: 'brick_buff', tint: 0xbdb4a0, roof: 0, far: true },
+      // Backdrops. The two that close the street are looked straight at down a
+      // 150 m sightline for the whole match, so they are NOT flagged `far` —
+      // they get the full facade treatment. A 46 x 26 m wall also needs
+      // vertical articulation (`bays`) or it reads as one dark slab whatever
+      // detail is painted on it.
+      { x: -14, z: -76, w: 46, d: 18, h: 26, faces: 's', mat: 'brick_buff', tint: 0xd8cfb8, roof: 1, bays: 5 },
+      { x: 34, z: -78, w: 40, d: 18, h: 21, faces: 's', mat: 'brick_red', tint: 0xc6a08c, roof: 2, bays: 4 },
+      { x: -8, z: 76, w: 44, d: 18, h: 24, faces: 'n', mat: 'brick_tan', tint: 0xd2c9b0, roof: 2, bays: 4 },
+      { x: 38, z: 78, w: 34, d: 18, h: 19, faces: 'n', mat: 'brick_grey', tint: 0xb8b6ae, roof: 0, bays: 3 },
+      { x: -74, z: 0, w: 20, d: 80, h: 30, faces: 'e', mat: 'brick_grey', tint: 0xb8b4ac, roof: 1, far: true, bays: 6 },
+      { x: 74, z: 0, w: 20, d: 80, h: 28, faces: 'w', mat: 'brick_buff', tint: 0xc5bca8, roof: 0, far: true, bays: 6 },
     ];
     for (const b of blocks) {
       B.push(b.x, 0, b.z, 0);
       fillerBlock(B, {
         w: b.w, d: b.d, h: b.h, mat: b.mat, faces: b.faces, rnd: rng,
-        tint: b.tint, roof: b.roof, far: b.far,
+        tint: b.tint, roof: b.roof, far: b.far, bays: b.bays,
         trim: b.far ? 0xb8b1a2 : 0xc4bdaf, roofScale: b.far ? 1.5 : 1,
       });
       B.pop();
@@ -773,8 +784,30 @@ export class World {
       const w = 22 + rng() * 26, d = 20 + rng() * 22;
       const mat = mats[(rng() * mats.length) | 0];
       const tint = [0xa8a49c, 0xb6b0a4, 0x9ea099, 0xc0b8a8][(rng() * 4) | 0];
-      B.push(b.x, 0, b.z, rng() * 1.2);
+      // No random yaw: the one face that matters is the one aimed back at the
+      // map, and it has to be identified exactly so the glazing lands on it.
+      B.push(b.x, 0, b.z, 0);
       B.box(mat, 0, b.h / 2, 0, w, b.h, d, { tint, shadow: false });
+
+      // Sparse glazing on the inward elevation. One quad per window and no
+      // trim — at 100 m the architrave is sub-pixel, but the parallax interior
+      // and the sky caught on the glass are exactly what makes a distant block
+      // read as a building with rooms in it rather than a painted flat.
+      const sideX = Math.abs(b.x) > Math.abs(b.z);
+      const faceRot = sideX ? (b.x > 0 ? -Math.PI / 2 : Math.PI / 2) : (b.z > 0 ? Math.PI : 0);
+      const faceHalf = sideX ? w / 2 : d / 2;
+      const faceLen = sideX ? d : w;
+      B.push(0, 0, 0, faceRot);
+      const wc = Math.max(2, Math.floor(faceLen / 4.6));
+      const wStep = (faceLen - 3.0) / Math.max(1, wc - 1);
+      for (let yy = 4.2; yy < b.h - 3.0; yy += 4.6) {
+        for (let c = 0; c < wc; c++) {
+          if (rng() < 0.22) continue;               // dark, empty or shuttered
+          B.quad('window', (c - (wc - 1) / 2) * wStep, yy, faceHalf + 0.03, 1.5, 2.1,
+            { uvRect: [0, 0, 1, 1], dirt: false, shadow: false });
+        }
+      }
+      B.pop();
       // banding + crown so the mass is not a blank slab against the sky
       for (let s = 1; s < 4; s++) {
         B.box('concrete', 0, s * (b.h / 4), 0, w + 0.4, 0.24, d + 0.4, { dirt: false, tint: 0xb4ada0, shadow: false });

@@ -61,6 +61,18 @@ void main() {
                  max(betaR + betaM, vec3(1e-6));
   vec3 sky = scatter * (1.0 - extinct) * uSunColor * uSkyLum * (0.25 + 0.75 * sunUp);
 
+  // Horizon shaping. Once the optical depth gets long the term above saturates
+  // to uSunColor * uSkyLum at *every* azimuth, so the whole horizon becomes one
+  // uniform hot band and washes to near-white. A real low sun only burns the
+  // stretch of horizon it is standing in; 90 degrees away the band is cooler
+  // and a stop or two down. Attenuate with angular distance from the sun so the
+  // far end of the street has a horizon dark enough to silhouette against.
+  {
+    float hz = 1.0 - smoothstep(0.0, 0.36, max(up, 0.0));   // 1 at horizon, 0 by ~21 deg
+    float toSun = pow(max(cosT, 0.0), 1.5);
+    sky *= mix(1.0, mix(0.26, 1.05, toSun), hz);
+  }
+
   // The single-scattering term above is achromatic by construction: dividing by
   // (betaR + betaM) normalises the Rayleigh colour straight back out, and with
   // these coefficients (1 - extinct) saturates to white, so the whole dome ends
@@ -68,7 +80,7 @@ void main() {
   // amber. Put the Rayleigh blue back explicitly: cool overhead and away from
   // the sun, warm haze burning through toward the sun and along the horizon.
   {
-    float zen  = smoothstep(-0.03, 0.62, up);          // horizon -> zenith
+    float zen  = smoothstep(-0.05, 0.50, up);          // horizon -> zenith
     float away = 1.0 - pow(max(cosT, 0.0), 2.2);       // toward sun -> away
     float w = zen * away * uSkyBlue;
     sky = mix(sky, uZenith * uSkyLum * (0.16 + 0.42 * sunUp), w);
@@ -88,18 +100,48 @@ void main() {
   // ground half
   sky = mix(uGround * (0.3 + sunUp), sky, smoothstep(-0.06, 0.06, up));
 
-  // cloud layer, projected onto a plane above the viewer
+  // Cloud layer, projected onto a plane above the viewer.
+  //
+  // Round 4 read this as "blurry haze rather than cloud form", and it was: a
+  // single wide smoothstep over plain fbm gives a soft blob field, and the
+  // shading was an *independent* noise, so the light and dark patches had no
+  // relationship to the shape they were sitting on. Two changes fix the read:
+  //   - erosion: subtract high-frequency detail weighted by (1 - base), which
+  //     eats into the edges and leaves cauliflower boundaries rather than a
+  //     Gaussian falloff;
+  //   - directional self-shading: sample the same density field offset toward
+  //     the sun. Where the sun-side sample is thinner the puff is facing the
+  //     light and goes hot; where it is thicker we are in the puff's own
+  //     shadow and it goes to the cool dark colour. That is what makes a cloud
+  //     read as a solid object instead of a stain.
   if (up > 0.002) {
     vec2 uv = dir.xz / (up + 0.12) * (0.55 / max(uCloudScale, 0.05));
     uv += vec2(uTime * 0.0035, uTime * 0.0016);
-    float n = fbm(uv * 1.6) * 0.62 + fbm(uv * 4.7 + 9.0) * 0.38;
-    float cov = smoothstep(1.0 - uCloudCover - uCloudSharp, 1.0 - uCloudCover + uCloudSharp, n);
-    cov *= smoothstep(0.0, 0.16, up);                 // fade into the horizon haze
-    float shade = smoothstep(0.25, 0.95, fbm(uv * 3.1 + 31.0));
+    float base = fbm(uv * 1.25);
+    float det  = fbm(uv * 5.3 + 9.0);
+    // zero-mean detail scaled by (1 - base): the thin edges of a puff get
+    // chewed into lobes while dense cores stay solid, and the coverage
+    // statistics are left where uCloudCover expects them.
+    float n = base - (1.0 - base) * (det - 0.5) * 0.75;
+    // fbm here is a 5-octave sum in [0, 0.97] clustered around 0.48, so map
+    // coverage onto the useful part of that range rather than 1 - cover.
+    float edge = mix(0.74, 0.28, clamp(uCloudCover, 0.0, 1.0));
+    float sh = max(uCloudSharp, 0.02);
+    float cov = smoothstep(edge - sh, edge + sh, n);
+    cov *= smoothstep(0.005, 0.14, up);               // fade into the horizon haze
+
+    // density gradient toward the sun -> which face of the puff is lit
+    vec2 sdir = normalize(uSunDir.xz + vec2(1e-5, 0.0));
+    float nSun = fbm((uv + sdir * 0.16) * 1.25);
+    float lit = clamp(0.5 + (base - nSun) * 3.2, 0.0, 1.0);
+    lit = lit * lit * (3.0 - 2.0 * lit);
+    // thick cores stay dark underneath even on the lit side
+    float thin = 1.0 - smoothstep(edge + sh, edge + sh + 0.30, n);
+
     float rim = pow(max(cosT, 0.0), 4.0);
-    vec3 cloud = mix(uCloudDark, uCloudLit, shade * uCloudAmb + rim * 0.5);
-    cloud += uSunColor * rim * 0.35 * cov;
-    sky = mix(sky, cloud * uSkyLum * 0.42, cov * 0.92);
+    vec3 cloud = mix(uCloudDark, uCloudLit, uCloudAmb * mix(0.18, 1.0, lit * (0.45 + 0.55 * thin)));
+    cloud += uSunColor * (rim * 0.42 + lit * thin * 0.10) * cov;
+    sky = mix(sky, cloud * uSkyLum * 0.52, cov * 0.94);
   }
 
   sky = pow(max(sky, vec3(0.0)), vec3(uSkyGamma));

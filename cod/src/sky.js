@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import { SkyMaterial } from './sky-material.js';
 import { installAtmosphericFog } from './sky-fog.js';
 import { DustMotes } from './sky-dust.js';
+import { installSoftShadows } from './render-shadows.js';
 
 // ---------------------------------------------------------------------------
 // Look presets, anchored on sun elevation.  setTimeOfDay() drives elevation and
@@ -16,20 +17,20 @@ const PRESETS = {
   dusk: {
     elev: 1.5, azim: -108,
     sunColor: [1.0, 0.46, 0.20], sunIntensity: 2.6,
-    skyLum: 3.4, turbidity: 6.5, rayleigh: 3.4, mie: 0.011, mieG: 0.88, skyGamma: 1.45, sunDisc: 26,
+    skyLum: 2.60, turbidity: 6.5, rayleigh: 3.4, mie: 0.011, mieG: 0.88, skyGamma: 1.45, sunDisc: 44,
     ground: [0.030, 0.028, 0.030],
-    cloudCover: 0.44, cloudSharp: 0.30, cloudScale: 1.0,
-    cloudLit: [1.00, 0.58, 0.34], cloudDark: [0.11, 0.13, 0.21], cloudAmb: 0.52,
-    zenith: [0.085, 0.140, 0.310], skyBlue: 0.60,
-    hemiSky: [0.30, 0.38, 0.56], hemiGround: [0.14, 0.11, 0.09], hemiInt: 1.25, envInt: 2.45,
-    bounce: [0.55, 0.34, 0.22], bounceInt: 1.05,
+    cloudCover: 0.46, cloudSharp: 0.12, cloudScale: 1.35,
+    cloudLit: [1.00, 0.58, 0.34], cloudDark: [0.10, 0.12, 0.20], cloudAmb: 0.56,
+    zenith: [0.085, 0.150, 0.340], skyBlue: 0.74,
+    hemiSky: [0.34, 0.42, 0.60], hemiGround: [0.15, 0.12, 0.10], hemiInt: 1.55, envInt: 2.90,
+    bounce: [0.55, 0.34, 0.22], bounceInt: 1.25,
     fog: { density: 0.0090, falloff: 13, base: -1, start: 14,
            color: [0.060, 0.072, 0.100], lowColor: [0.165, 0.120, 0.090],
            sunColor: [0.46, 0.23, 0.11], minT: 0.10, aniso: 0.74 },
     post: {
-      exposure: 2.05, contrast: 1.10, saturation: 1.02, toe: 0.022, split: 0.50, white: 0.950,
-      lift: [-0.006, 0.000, 0.010], gamma: [1.0, 1.0, 1.02], gain: [1.02, 0.995, 0.985],
-      shadowTint: [0.80, 0.94, 1.16], highTint: [1.10, 0.99, 0.86],
+      exposure: 2.05, contrast: 1.08, saturation: 1.03, toe: 0.016, split: 0.44, white: 0.950,
+      lift: [-0.004, 0.000, 0.008], gamma: [1.0, 1.0, 1.02], gain: [1.02, 0.995, 0.985],
+      shadowTint: [0.86, 0.96, 1.12], highTint: [1.10, 0.99, 0.86],
       vignette: 0.46, ca: 1.5, grain: 0.038, sharpen: 0.52,
       bloom: 0.30, bloomThreshold: 1.35, bloomRadius: 0.48,
       godrays: 0.42, godrayDensity: 0.55, godrayThreshold: 2.0, godrayTint: [1.0, 0.66, 0.40],
@@ -40,25 +41,34 @@ const PRESETS = {
   golden: {
     elev: 11, azim: -124,
     sunColor: [1.0, 0.74, 0.47], sunIntensity: 12.6,
-    skyLum: 5.2, turbidity: 3.4, rayleigh: 3.6, mie: 0.0055, mieG: 0.86, skyGamma: 1.20, sunDisc: 46,
+    // skyLum was 5.2, which drove the whole sky dome past the ACES shoulder:
+    // every azimuth of the horizon saturated to uSunColor and the upper frame
+    // clipped to a flat 225-luma amber wash. Lower luminance is what lets the
+    // Rayleigh blue and the cloud form survive the tonemapper.
+    skyLum: 3.30, turbidity: 3.4, rayleigh: 3.6, mie: 0.0055, mieG: 0.86, skyGamma: 1.20, sunDisc: 78,
     ground: [0.040, 0.038, 0.036],
-    cloudCover: 0.30, cloudSharp: 0.34, cloudScale: 1.0,
-    cloudLit: [1.00, 0.86, 0.70], cloudDark: [0.16, 0.20, 0.30], cloudAmb: 0.56,
-    zenith: [0.130, 0.240, 0.520], skyBlue: 0.58,
+    // cloudSharp is the smoothstep half-width on coverage: 0.34 was so wide
+    // that every cloud was a 60 %-of-frame gradient, i.e. haze. 0.13 gives an
+    // edge, and the erosion + sun-side shading in sky-material.js gives form.
+    cloudCover: 0.40, cloudSharp: 0.13, cloudScale: 1.45,
+    cloudLit: [1.00, 0.88, 0.74], cloudDark: [0.13, 0.16, 0.26], cloudAmb: 0.62,
+    zenith: [0.130, 0.250, 0.580], skyBlue: 0.82,
     // Shadow fill. hemiSky is cool but not a pure blue — a saturated sky tint
     // over dark asphalt just paints it flat blue and eats the albedo. The
     // bounce term is deliberately warm: it stands in for sunlight coming back
     // off the lit brick, and being *directional* it is the only thing that puts
-    // normal-map relief on shadowed ground.
-    hemiSky: [0.52, 0.60, 0.78], hemiGround: [0.19, 0.17, 0.15], hemiInt: 1.00, envInt: 1.50,
-    bounce: [0.66, 0.52, 0.40], bounceInt: 0.85,
+    // normal-map relief on shadowed ground. Both are up hard from round 4:
+    // shadowed asphalt was landing at luma 20, where no albedo or normal detail
+    // can survive the grade, which is exactly why the shadow read as a decal.
+    hemiSky: [0.60, 0.68, 0.84], hemiGround: [0.21, 0.19, 0.17], hemiInt: 1.35, envInt: 2.05,
+    bounce: [0.68, 0.55, 0.44], bounceInt: 1.10,
     fog: { density: 0.0046, falloff: 15, base: -1, start: 18,
            color: [0.072, 0.098, 0.150], lowColor: [0.118, 0.122, 0.148],
            sunColor: [0.34, 0.20, 0.10], minT: 0.12, aniso: 0.72 },
     post: {
-      exposure: 1.30, contrast: 1.14, saturation: 1.00, toe: 0.014, split: 0.46, white: 0.912,
-      lift: [-0.004, 0.000, 0.008], gamma: [1.0, 1.0, 1.01], gain: [1.03, 1.0, 0.975],
-      shadowTint: [0.86, 0.95, 1.12], highTint: [1.12, 1.00, 0.84],
+      exposure: 1.30, contrast: 1.10, saturation: 1.02, toe: 0.010, split: 0.40, white: 0.925,
+      lift: [-0.002, 0.000, 0.006], gamma: [1.0, 1.0, 1.01], gain: [1.03, 1.0, 0.975],
+      shadowTint: [0.90, 0.97, 1.09], highTint: [1.12, 1.00, 0.84],
       vignette: 0.42, ca: 1.4, grain: 0.030, sharpen: 0.55,
       bloom: 0.28, bloomThreshold: 1.55, bloomRadius: 0.45,
       godrays: 0.30, godrayDensity: 0.52, godrayThreshold: 2.6, godrayTint: [1.0, 0.80, 0.55],
@@ -69,20 +79,20 @@ const PRESETS = {
   midday: {
     elev: 64, azim: -40,
     sunColor: [1.0, 0.96, 0.90], sunIntensity: 8.5,
-    skyLum: 7.0, turbidity: 3.0, rayleigh: 2.0, mie: 0.005, mieG: 0.80, skyGamma: 1.22, sunDisc: 55,
+    skyLum: 4.80, turbidity: 3.0, rayleigh: 2.0, mie: 0.005, mieG: 0.80, skyGamma: 1.22, sunDisc: 90,
     ground: [0.060, 0.058, 0.055],
-    cloudCover: 0.20, cloudSharp: 0.38, cloudScale: 1.15,
-    cloudLit: [1.00, 0.99, 0.97], cloudDark: [0.22, 0.26, 0.36], cloudAmb: 0.70,
-    zenith: [0.22, 0.40, 0.82], skyBlue: 0.72,
-    hemiSky: [0.46, 0.60, 0.86], hemiGround: [0.21, 0.19, 0.16], hemiInt: 0.90, envInt: 1.95,
-    bounce: [0.62, 0.58, 0.50], bounceInt: 0.70,
+    cloudCover: 0.22, cloudSharp: 0.15, cloudScale: 1.50,
+    cloudLit: [1.00, 0.99, 0.97], cloudDark: [0.20, 0.24, 0.34], cloudAmb: 0.72,
+    zenith: [0.22, 0.40, 0.86], skyBlue: 0.88,
+    hemiSky: [0.50, 0.62, 0.86], hemiGround: [0.22, 0.20, 0.17], hemiInt: 1.15, envInt: 2.55,
+    bounce: [0.62, 0.58, 0.50], bounceInt: 0.90,
     fog: { density: 0.0026, falloff: 30, base: -1, start: 26,
            color: [0.085, 0.105, 0.145], lowColor: [0.130, 0.140, 0.165],
            sunColor: [0.34, 0.34, 0.36], minT: 0.18, aniso: 0.60 },
     post: {
-      exposure: 1.20, contrast: 1.14, saturation: 1.02, toe: 0.026, split: 0.38, white: 0.940,
-      lift: [-0.010, 0.000, 0.006], gamma: [1.0, 1.0, 1.0], gain: [1.01, 1.0, 0.99],
-      shadowTint: [0.84, 0.95, 1.12], highTint: [1.05, 1.00, 0.93],
+      exposure: 1.20, contrast: 1.11, saturation: 1.03, toe: 0.016, split: 0.36, white: 0.940,
+      lift: [-0.006, 0.000, 0.005], gamma: [1.0, 1.0, 1.0], gain: [1.01, 1.0, 0.99],
+      shadowTint: [0.88, 0.96, 1.10], highTint: [1.05, 1.00, 0.93],
       vignette: 0.36, ca: 1.2, grain: 0.024, sharpen: 0.55,
       bloom: 0.22, bloomThreshold: 1.90, bloomRadius: 0.40,
       godrays: 0.18, godrayDensity: 0.45, godrayThreshold: 3.2, godrayTint: [1.0, 0.94, 0.82],
@@ -139,22 +149,21 @@ export class Sky {
     this.envDome.frustumCulled = false;
     this.envScene.add(this.envDome);
 
-    // --- sun rig: a tight near cascade plus a cheap wide one --------------
+    // --- sun rig: ONE fitted shadow cascade -------------------------------
+    // Round 4's "flat blue painted polygons" were a two-cascade artefact, not a
+    // grading problem. Two shadow-casting directionals each carrying half the
+    // sun's intensity means a pixel inside only one frustum is exactly half
+    // shadowed — so the near cascade's ortho box printed its own hard-edged
+    // quadrilateral across the road at 50 % grey. One map, wide enough to cover
+    // the whole visible street, has no seam anywhere; the softness the second
+    // cascade was buying is now bought properly by PCSS (render-shadows.js),
+    // which widens the penumbra with occluder height instead.
     const mapSize = ctx.config.shadowMapSize;
-    this.sunNear = new THREE.DirectionalLight(0xffffff, 1);
-    this.sunNear.castShadow = true;
-    this._setupShadow(this.sunNear, mapSize, 26, -0.0006, 0.030, 4.0);
-    scene.add(this.sunNear, this.sunNear.target);
-
-    this.sunFar = null;
-    if (tier >= 2) {
-      this.sunFar = new THREE.DirectionalLight(0xffffff, 1);
-      this.sunFar.castShadow = true;
-      this._setupShadow(this.sunFar, Math.min(mapSize, 1536), 95, -0.0014, 0.085, 5.0);
-      scene.add(this.sunFar, this.sunFar.target);
-    } else {
-      this._setupShadow(this.sunNear, mapSize, 70, -0.0012, 0.060, 3.0);
-    }
+    const size = Math.min(4096, Math.round(mapSize * (tier >= 3 ? 1.5 : 1)));
+    this.sun = new THREE.DirectionalLight(0xffffff, 1);
+    this.sun.castShadow = true;
+    this._setupShadow(this.sun, size, tier >= 2 ? 78 : 55);
+    scene.add(this.sun, this.sun.target);
 
     this.hemi = new THREE.HemisphereLight(0xffffff, 0xffffff, 0.25);
     scene.add(this.hemi);
@@ -195,24 +204,42 @@ export class Sky {
     this.setTimeOfDay(0.059);
   }
 
-  _setupShadow(light, size, radius, bias, normalBias, pcf) {
+  _setupShadow(light, size, radius) {
     const s = light.shadow;
     s.mapSize.set(size, size);
     s.camera.near = 0.5;
     s.camera.far = radius * 4 + 60;
     s.camera.left = -radius; s.camera.right = radius;
     s.camera.top = radius; s.camera.bottom = -radius;
-    s.bias = bias;
-    s.normalBias = normalBias;
-    // Penumbra width, in shadow texels, for the rotated-disk PCF installed by
-    // render-shadows.js. The near cascade has ~2.5 cm texels, so 2.5 texels is a
-    // ~6 cm penumbra — crisp contact. The far cascade has ~12 cm texels, so 4
-    // texels there is a ~50 cm penumbra: distance softens, as it should.
-    s.radius = pcf === undefined ? 2.5 : pcf;
+    // The receiver-plane bias in render-shadows.js does the heavy lifting, so
+    // these two only have to cover depth quantisation — keeping them small is
+    // what stops contact shadows detaching (peter-panning) from prop feet.
+    s.bias = -0.0002;
+    s.normalBias = 0.022;
+    // With PCSS, `radius` is the *maximum* penumbra (and the blocker-search
+    // disk), in shadow texels. At a ~5 cm texel, 15 texels is a ~0.75 m
+    // penumbra: what a parapet ten metres up should throw onto the road, while
+    // a kerb still lands a near-hard edge because its blocker depth is tiny.
+    s.radius = 15;
     s.blurSamples = 12;
+    // Let ~8 % of the sun through in shadow (three mixes this in getShadow()).
+    // This is the direct answer to "shadowed asphalt loses its albedo and normal
+    // detail": ambient fill alone is smooth, so it lifts the luminance without
+    // restoring any relief, and the shadow ends up a flat tinted plate. A small
+    // fraction of the *directional* term keeps the normal map, the albedo hue
+    // and the specular response alive inside the shadow — just eleven stops
+    // down — so the road in shade still reads as the same road.
+    s.intensity = 0.92;
     s.camera.updateProjectionMatrix();
     light.userData.fitRadius = radius;
-    light.userData.texel = (radius * 2) / size;
+    const texel = (radius * 2) / size;
+    light.userData.texel = texel;
+    // Penumbra growth handed to the shadow chunk, in texels per unit of
+    // normalised shadow-camera depth: SOFTEN metres of penumbra per metre of
+    // occluder height above the receiver. Physically the sun gives ~0.009;
+    // COD-ish softness wants an order more than that.
+    const SOFTEN = 0.075;
+    installSoftShadows({ growth: ((s.camera.far - s.camera.near) * SOFTEN) / texel, base: 1.1 });
   }
 
   // t01: 0 = sun on the horizon at dawn, 0.5 = zenith, 1 = horizon at dusk
@@ -257,12 +284,8 @@ export class Sky {
     u.uZenith.value.setRGB(p.zenith[0], p.zenith[1], p.zenith[2]);
     u.uSkyBlue.value = p.skyBlue;
 
-    // sun lights — intensity is split across the cascades so the total energy
-    // hitting a surface is unchanged
-    const n = this.sunFar ? 0.5 : 1.0;
     const col = new THREE.Color(p.sunColor[0], p.sunColor[1], p.sunColor[2]);
-    this.sunNear.color.copy(col); this.sunNear.intensity = p.sunIntensity * n;
-    if (this.sunFar) { this.sunFar.color.copy(col); this.sunFar.intensity = p.sunIntensity * n; }
+    this.sun.color.copy(col); this.sun.intensity = p.sunIntensity;
     this.hemi.color.setRGB(p.hemiSky[0], p.hemiSky[1], p.hemiSky[2]);
     this.hemi.groundColor.setRGB(p.hemiGround[0], p.hemiGround[1], p.hemiGround[2]);
     this.hemi.intensity = p.hemiInt;
@@ -337,12 +360,10 @@ export class Sky {
     if (p) c.copy(p); else c.copy(cam.position);
     c.y = Math.max(c.y, 0) + 1.0;
 
-    // push the near cascade forward so the budget is spent on what's on screen
+    // push the cascade forward so the texel budget is spent on what's on screen
     const fwd = new THREE.Vector3();
     cam.getWorldDirection(fwd); fwd.y = 0; fwd.normalize();
-    const nearCenter = c.clone().addScaledVector(fwd, this.sunFar ? 14 : 24);
-    this._fitCascade(this.sunNear, nearCenter);
-    if (this.sunFar) this._fitCascade(this.sunFar, c.clone().addScaledVector(fwd, 55));
+    this._fitCascade(this.sun, c.clone().addScaledVector(fwd, this.sun.userData.fitRadius * 0.42));
 
     // the sky dome rides with the camera so it never clips
     this.dome.position.copy(cam.position);

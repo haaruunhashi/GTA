@@ -83,22 +83,29 @@ export class Render {
     if (this.tier >= 2 && VIEW !== 'raw') {
       const gtao = new GTAOPass(ctx.scene, ctx.camera, w, h);
       gtao.output = VIEW === 'ao' ? GTAOPass.OUTPUT.Denoise : GTAOPass.OUTPUT.Default;
-      gtao.blendIntensity = 1.0;
-      // GTAOShader applies the visibility as `ao = pow(ao, scale)`, so `scale`
-      // is a *gamma*, not a multiplier: at the shipped 1.0 the raw buffer sits
-      // at 0.93-0.98 in contact areas and is invisible once it multiplies an
-      // already dark shadow. 4.5 maps 0.85 -> 0.50, which is what makes the
-      // kerbs, sandbags and lamp bases actually sit on the ground.
+      gtao.blendIntensity = 1.15;
+      // Why round 3 and round 4 both shipped with "no visible contact AO"
+      // despite this pass being enabled: the radius was 2.6 m. GTAO estimates
+      // the horizon angle over that radius, so at a 15 cm kerb the occluder
+      // subtends almost nothing of a 2.6 m hemisphere — the buffer comes back at
+      // 0.96-0.99 and even `pow(ao, 5)` only removes a few percent, spread so
+      // smoothly that it is invisible. Contact AO is a *small radius* effect:
+      // under a metre, so a kerb face, a lamp base or a sandbag foot fills a
+      // real fraction of the hemisphere and the buffer drops to 0.5-0.7.
+      // `scale` is a gamma on that (ao = pow(ao, scale)), so it only needs to be
+      // mild now, and blendIntensity slightly over 1 extrapolates the multiply.
       gtao.updateGtaoMaterial({
-        radius: 2.6,             // metres — the contact gradient, not a hairline
-        distanceExponent: 0.8,
-        thickness: 1.6,
-        scale: 5.0,
+        radius: 0.85,            // metres — contact scale, not a global bent-normal
+        distanceExponent: 1.0,
+        thickness: 0.9,
+        scale: 2.2,
         samples: this.tier >= 3 ? 16 : 8,
         distanceFallOff: 1.0,
         screenSpaceRadius: false,
       });
-      gtao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 5, radius: 3, radiusExponent: 1, rings: 2, samples: this.tier >= 3 ? 12 : 6 });
+      // Denoise has to be gentle or it smears the contact gradient back out:
+      // a 3 px radius over a half-metre feature is most of the feature.
+      gtao.updatePdMaterial({ lumaPhi: 6, depthPhi: 1.5, normalPhi: 4, radius: 1.6, radiusExponent: 1, rings: 2, samples: this.tier >= 3 ? 12 : 6 });
       composer.addPass(gtao);
       this.gtao = gtao;
     }

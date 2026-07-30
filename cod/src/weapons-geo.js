@@ -126,7 +126,7 @@ function bakeWear(g, amt) {
     // now a<=b<=c ; b is the second largest
     const edge = Math.max(0, Math.min(1, (b - 0.60) / 0.40));
     const corner = Math.max(0, Math.min(1, (a - 0.70) / 0.30));
-    const w = 1 + wear * (edge * 0.35 + corner * 0.28);
+    const w = 1 + wear * (edge * 0.30 + corner * 0.24);
     // slight downward-facing darkening so the underside reads as occluded
     const v = tone * w;
     col[i * 3] = v; col[i * 3 + 1] = v; col[i * 3 + 2] = v;

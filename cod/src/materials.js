@@ -1105,32 +1105,41 @@ vec3 winRoom(vec2 uv, vec3 rd, vec3 T, vec3 Bt, vec3 Nn, float id) {
     return m;
   }
 
-  // Baked contact occlusion: the dark, tight gradient that appears in the
-  // crease where an object meets the ground. Screen-space AO alone always
-  // misses this at grazing angles and under thin geometry, and without it every
-  // prop reads as a sticker floating a centimetre above the tarmac.
-  // Multiplicative, so it darkens whatever surface it lands on without tinting.
+  // Baked contact occlusion: the dark, tight gradient in the crease where an
+  // object meets the ground. Without it every prop reads as a sticker hovering
+  // a centimetre above the tarmac, and screen-space AO cannot be relied on to
+  // find it under thin geometry at grazing angles.
+  //
+  // Built on exactly the same footing as the dirt and grime decals — a lit
+  // standard material with a radial alpha — because that is the decal path this
+  // pipeline demonstrably renders. An unlit multiply-blended version looked
+  // correct on paper and came out completely invisible: a multiply source has
+  // to sit at 1.0 to be a no-op, and the scene's height fog rewrites
+  // gl_FragColor toward a bright inscatter, which drags the source to white.
+  // Being lit is also the more correct behaviour: occlusion should not make a
+  // surface darker than its own shadow.
   decalAO() {
     const rnd = seeded('contactao');
     const s = 128;
-    // MultiplyBlending ignores alpha entirely (dst * srcColour), so the
-    // falloff has to live in the colour: white at the rim = no change, grey in
-    // the core = darkening. White corners keep the quad invisible.
     const ac = CV(s), g = ac.getContext('2d', { willReadFrequently: true });
-    g.fillStyle = '#fff'; g.fillRect(0, 0, s, s);
+    g.fillStyle = '#0b0a09'; g.fillRect(0, 0, s, s);
+    fbm(g, s, rnd, { octaves: 3, cells: 3, amp: 0.22 });
+    const al = CV(s), ag = al.getContext('2d', { willReadFrequently: true });
+    ag.fillStyle = '#000'; ag.fillRect(0, 0, s, s);
     // tight core, long soft tail — the shape real contact occlusion has
-    const grd = g.createRadialGradient(s / 2, s / 2, 0, s / 2, s / 2, s / 2);
-    grd.addColorStop(0, '#9aa0a6');
-    grd.addColorStop(0.3, '#b8bcc0');
-    grd.addColorStop(0.62, '#e2e4e6');
-    grd.addColorStop(1, '#ffffff');
-    g.fillStyle = grd; g.fillRect(0, 0, s, s);
+    const grd = ag.createRadialGradient(s / 2, s / 2, 0, s / 2, s / 2, s / 2);
+    grd.addColorStop(0, 'rgba(255,255,255,1.0)');
+    grd.addColorStop(0.24, 'rgba(255,255,255,0.86)');
+    grd.addColorStop(0.52, 'rgba(255,255,255,0.42)');
+    grd.addColorStop(0.8, 'rgba(255,255,255,0.11)');
+    grd.addColorStop(1, 'rgba(255,255,255,0)');
+    ag.fillStyle = grd; ag.fillRect(0, 0, s, s);
     // break the perfect circle so it never reads as an airbrushed disc
-    g.save(); g.globalAlpha = 0.22; fbm(g, s, rnd, { octaves: 3, cells: 3, amp: 0.6, op: 'screen' }); g.restore();
-    const m = new THREE.MeshBasicMaterial({
-      map: texture(ac, true), transparent: true, depthWrite: false, fog: true,
-      blending: THREE.MultiplyBlending, premultipliedAlpha: true,
-      polygonOffset: true, polygonOffsetFactor: -8, polygonOffsetUnits: -8,
+    ag.save(); ag.globalAlpha = 0.2; fbm(ag, s, rnd, { octaves: 3, cells: 4, amp: 0.6, op: 'multiply' }); ag.restore();
+    const m = new THREE.MeshStandardMaterial({
+      map: texture(ac, true), alphaMap: texture(al, false), transparent: true,
+      roughness: 1.0, metalness: 0, depthWrite: false, vertexColors: true,
+      polygonOffset: true, polygonOffsetFactor: -6, polygonOffsetUnits: -6,
     });
     m.userData.tile = 0;
     return m;

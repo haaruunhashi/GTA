@@ -134,16 +134,16 @@ export function makeArm(mats, side, opt = {}) {
   fore.position.set(0, -0.044, 0.006);
   root.add(fore);
   // wrist ball hides the hand/forearm seam under any pose
-  const w = mesh(sph(0.030, 10, 7), gl, 0.4);
+  const w = mesh(sph(0.028, 10, 7), gl, 0.4);
   fore.add(w);
   // glove cuff, then the ripstop sleeve running off the bottom of the frame
-  const cuff = mesh(limb(0.031, 0.036, 0.070, 10), gl, 0.7);
+  const cuff = mesh(limb(0.029, 0.033, 0.060, 10), gl, 0.7);
   fore.add(cuff);
-  const cuffLip = mesh(limb(0.039, 0.037, 0.016, 10), sl, 0.8);
-  cuffLip.position.z = 0.064;
+  const cuffLip = mesh(limb(0.036, 0.034, 0.015, 10), sl, 0.8);
+  cuffLip.position.z = 0.055;
   fore.add(cuffLip);
-  const arm = mesh(limb(0.038, 0.052, 0.230, 10), sl, 0.5);
-  arm.position.z = 0.076;
+  const arm = mesh(limb(0.035, 0.045, 0.175, 10), sl, 0.5);
+  arm.position.z = 0.066;
   fore.add(arm);
 
   return { root, hand, fore };
