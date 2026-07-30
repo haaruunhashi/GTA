@@ -183,33 +183,61 @@ export function dumpster(B, o = {}) {
   }
 }
 
-export function crate(B, s = 0.9, mat = 'wood') {
-  B.box(mat, 0, s / 2, 0, s, s, s, { solid: false });
-  const b = 0.07;
+// A packing case: boards with visible gaps, corner posts and a lid rail.
+// `plank` rather than `wood` — see the note on that material; a 2.2 m timber
+// tile on a 700 mm box leaves it a featureless brown blob.
+export function crate(B, s = 0.72, mat = 'plank') {
+  const h = s * (0.72 + 0.12);            // cases are wider than they are tall
+  B.box(mat, 0, h / 2, 0, s, h, s, { solid: false });
+  const b = 0.06;
   for (const [ax, az] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-    B.box(mat, ax * s / 2, s / 2, az * s / 2, ax ? b : s, s, az ? b : s, { dirt: false, tint: 0xbfb4a2 });
+    B.box(mat, ax * s / 2, h / 2, az * s / 2, ax ? b : s, h, az ? b : s, { dirt: false, tint: 0xcbbda6 });
   }
-  B.box(mat, 0, s - 0.03, 0, s * 1.02, b, s * 1.02, { dirt: false, tint: 0xbfb4a2 });
-  B.collider(-s / 2, s / 2, 0, s, -s / 2, s / 2);
+  // corner posts and lid rail: the edges are what give a crate its silhouette
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+    B.box(mat, sx * (s / 2 - 0.02), h / 2, sz * (s / 2 - 0.02), 0.07, h, 0.07, { dirt: false, tint: 0xb0a48f });
+  }
+  B.box(mat, 0, h - 0.025, 0, s * 1.03, b, s * 1.03, { dirt: false, tint: 0xd0c2ab });
+  B.collider(-s / 2, s / 2, 0, h, -s / 2, s / 2);
+  return h;
 }
 
+// A dumped stack of cases. Deliberately WIDE rather than tall: the old version
+// piled up to four 1.1 m crates into a 3.3 m brown column that read as a
+// monolith in the middle of the street. Real stacks are chest height at most,
+// spread sideways, with the top case knocked askew.
 export function crateStack(B, rnd) {
-  contact(B, 0.85);
-  const n = 2 + ((rnd() * 3) | 0);
-  let y = 0;
-  for (let i = 0; i < n; i++) {
-    const s = 0.75 + rnd() * 0.35;
-    B.push((rnd() - 0.5) * 0.3, y, (rnd() - 0.5) * 0.3, rnd() * 0.6 - 0.3);
-    crate(B, s);
-    B.pop();
-    y += s - 0.02;
+  contact(B, 1.0, 0.9);
+  const cols = rnd() < 0.55 ? 2 : 1;
+  let maxH = 0, maxR = 0.45;
+  for (let c = 0; c < cols; c++) {
+    const ox = (c - (cols - 1) / 2) * 0.78 + (rnd() - 0.5) * 0.1;
+    const oz = (rnd() - 0.5) * 0.22;
+    const rows = 1 + ((rnd() * 2.4) | 0);              // 1..2, occasionally 3
+    let y = 0;
+    for (let i = 0; i < rows; i++) {
+      const s = 0.6 + rnd() * 0.2;
+      const lean = i === rows - 1 && rows > 1 ? (rnd() - 0.5) * 0.5 : (rnd() - 0.5) * 0.12;
+      B.push(ox + (rnd() - 0.5) * 0.12, y, oz + (rnd() - 0.5) * 0.12, lean);
+      const h = crate(B, s);
+      B.pop();
+      y += h - 0.02;
+      maxR = Math.max(maxR, Math.abs(ox) + s * 0.75);
+    }
+    maxH = Math.max(maxH, y);
   }
+  // a loose board or two leaning against the pile
+  if (rnd() < 0.6) {
+    B.box('plank', maxR * 0.9, 0.42, (rnd() - 0.5) * 0.4, 0.16, 0.9, 0.03,
+      { rotZ: 0.34, rotY: rnd() * 2, dirt: false });
+  }
+  return maxH;
 }
 
 export function pallet(B, rnd) {
   contact(B, 0.75, 0.7);
-  for (let i = 0; i < 6; i++) B.box('wood', 0, 0.11, -0.5 + i * 0.2, 1.2, 0.03, 0.11, { dirt: false });
-  for (let i = 0; i < 3; i++) B.box('wood', -0.45 + i * 0.45, 0.05, 0, 0.12, 0.1, 1.15, { dirt: false });
+  for (let i = 0; i < 6; i++) B.box('plank', 0, 0.11, -0.5 + i * 0.2, 1.2, 0.03, 0.11, { dirt: false });
+  for (let i = 0; i < 3; i++) B.box('plank', -0.45 + i * 0.45, 0.05, 0, 0.12, 0.1, 1.15, { dirt: false });
 }
 
 export function barrel(B, mat = 'rust') {
@@ -327,6 +355,7 @@ export function bollard(B) {
 
 export function acUnit(B, o = {}) {
   const w = o.w ?? 1.1, h = o.h ?? 0.85, d = o.d ?? 1.0;
+  contact(B, w * 0.72, d * 0.72);
   B.box('steel', 0, 0.06, 0, w + 0.2, 0.12, d + 0.2, { dirt: false });
   B.box('paint_white', 0, 0.1 + h / 2, 0, w, h, d, { tint: 0xd8d6cf });
   // louvre fins
@@ -488,22 +517,35 @@ export function debrisScatter(B, w, d, n, rnd) {
 
 export function wreckedCar(B, rnd, o = {}) {
   const burnt = o.burnt !== false;
-  const body = burnt ? 'rust' : (o.mat || 'paint_blue');
+  // A torched car is soot-black steel, not orange rust. `rust` on a 4 m body
+  // made the whole prop read as one corroded mass at the wrong scale.
+  const body = burnt ? 'charred' : (o.mat || 'paint_blue');
   const L = 4.3, W = 1.82;
   contact(B, L * 0.58, W * 0.85);
   // chassis / sills
   B.box(body, 0, 0.55, 0, L, 0.52, W, {});
   B.box('black', 0, 0.3, 0, L - 0.5, 0.28, W - 0.12, { dirt: false });
-  // bonnet & boot
-  B.box(body, L * 0.3, 0.86, 0, L * 0.36, 0.16, W - 0.16, { rotZ: 0.03 });
-  B.box(body, -L * 0.34, 0.88, 0, L * 0.3, 0.18, W - 0.16, { rotZ: -0.02 });
+  // bonnet & boot — each panel a shade off its neighbour so the form reads
+  B.box(body, L * 0.3, 0.86, 0, L * 0.36, 0.16, W - 0.16, { rotZ: 0.03, tint: burnt ? 0xb6b2ae : undefined });
+  B.box(body, -L * 0.34, 0.88, 0, L * 0.3, 0.18, W - 0.16, { rotZ: -0.02, tint: burnt ? 0xd2ccc4 : undefined });
   // cabin: A/C/B pillars + roof, roof crushed
-  B.box(body, -0.1, 1.32, 0, L * 0.42, 0.1, W - 0.2, { rotZ: o.crushed ? -0.08 : 0, rotX: 0.02 });
+  B.box(body, -0.1, 1.32, 0, L * 0.42, 0.1, W - 0.2,
+    { rotZ: o.crushed ? -0.08 : 0, rotX: 0.02, tint: burnt ? 0xc8c2ba : undefined });
   for (const sz of [-1, 1]) {
     B.box(body, L * 0.16, 1.1, sz * (W / 2 - 0.06), 0.12, 0.5, 0.1, { rotZ: 0.42 });
     B.box(body, -0.32, 1.1, sz * (W / 2 - 0.06), 0.1, 0.52, 0.1, {});
     B.box(body, -L * 0.28, 1.12, sz * (W / 2 - 0.06), 0.12, 0.48, 0.1, { rotZ: -0.35 });
     B.box(body, 0, 0.95, sz * (W / 2 - 0.02), L * 0.44, 0.28, 0.08, {}); // door tops
+  }
+  if (burnt) {
+    // gutted interior: seat frames and a bare wheel are what say "burnt out"
+    // rather than "brown box". They sit below the door line, in shadow.
+    B.box('black', 0, 0.82, 0, L * 0.4, 0.06, W - 0.3, { dirt: false });
+    for (const sz of [-1, 1]) {
+      B.box('rust', 0.25, 1.0, sz * 0.42, 0.5, 0.06, 0.42, { dirt: false });
+      B.box('rust', -0.02, 1.16, sz * 0.42, 0.06, 0.42, 0.4, { rotZ: -0.22, dirt: false });
+    }
+    B.cyl('rust', L * 0.2, 1.0, 0, 0.16, 0.16, 0.03, { rotX: 1.2, rc: 10, dirt: false });
   }
   // glass (mostly gone)
   B.quad('glass_broken', L * 0.17, 1.12, 0, 0.72, 1.5, { rotY: Math.PI / 2, rotZ: 0.42, dirt: false, shadow: false });
@@ -527,12 +569,13 @@ export function wreckedCar(B, rnd, o = {}) {
   // burn scarring / debris around it
   if (burnt) {
     B.quad('decal_dirt', 0, 0.012, 0, L * 1.6, W * 2.6, { rotX: -Math.PI / 2, dirt: false, shadow: false });
-    B.box('rust', -L * 0.5 - 0.6, 0.06, W * 0.4, 1.0, 0.08, 0.5, { rotY: 0.7, rotZ: 0.06 }); // torn-off door
+    B.box('charred', -L * 0.5 - 0.6, 0.06, W * 0.4, 1.0, 0.08, 0.5, { rotY: 0.7, rotZ: 0.06 }); // torn-off door
   }
   B.collider(-L / 2, L / 2, 0, 1.45, -W / 2, W / 2);
 }
 
 export function shoppingTrolley(B) {
+  contact(B, 0.42, 0.55);
   B.box('chainlink', 0, 0.6, 0, 0.55, 0.5, 0.8, { dirt: false });
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) B.cyl('steel', sx * 0.22, 0.06, sz * 0.3, 0.05, 0.05, 0.03, { rotZ: Math.PI / 2, rc: 6 });
   B.cyl('steel', 0, 0.9, -0.4, 0.02, 0.02, 0.55, { rotZ: Math.PI / 2, rc: 5 });

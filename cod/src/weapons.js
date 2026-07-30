@@ -36,8 +36,8 @@ export const WEAPONS = {
     rl: { out: 0.50, in: 1.15, ammo: 1.32, dur: 2.05, extra: 0.72, chargeDur: 0.34 },
     cycle: 0.062, ejectAt: 0.30, boltKind: 'auto',
     vmScale: 0.62,
-    hip: [0.144, -0.130, -0.352], hipRot: [0.052, 0.205, 0.068],
-    adsDist: 0.240, tracerEvery: 3,
+    hip: [0.170, -0.148, -0.404], hipRot: [0.058, 0.300, 0.140],
+    adsDist: 0.130, tracerEvery: 3,
   },
   smg: {
     name: 'VECTOR-9', model: 'smg', auto: true, sightNode: 'optic',
@@ -50,8 +50,8 @@ export const WEAPONS = {
     rl: { out: 0.44, in: 1.00, ammo: 1.16, dur: 1.85, extra: 0.62, chargeDur: 0.30 },
     cycle: 0.048, ejectAt: 0.30, boltKind: 'auto',
     vmScale: 0.66,
-    hip: [0.140, -0.124, -0.316], hipRot: [0.054, 0.215, 0.070],
-    adsDist: 0.225, tracerEvery: 3,
+    hip: [0.164, -0.142, -0.362], hipRot: [0.060, 0.310, 0.142],
+    adsDist: 0.135, tracerEvery: 3,
   },
   shotgun: {
     name: 'KS-12 BREACHER', model: 'shotgun', auto: false, sightNode: 'irons',
@@ -64,8 +64,8 @@ export const WEAPONS = {
     rl: { shell: true, start: 0.40, per: 0.44, end: 0.52 },
     cycle: 0.62, ejectAt: 0.42, boltKind: 'pump', pumpAfterShot: true,
     vmScale: 0.64,
-    hip: [0.145, -0.131, -0.332], hipRot: [0.052, 0.200, 0.066],
-    adsDist: 0.230, tracerEvery: 1, tracerWidth: 0.014,
+    hip: [0.170, -0.150, -0.386], hipRot: [0.058, 0.296, 0.138],
+    adsDist: 0.140, tracerEvery: 1, tracerWidth: 0.014,
   },
   sniper: {
     name: 'LR-338 BALLISTA', model: 'sniper', auto: false, sightNode: 'optic',
@@ -78,8 +78,8 @@ export const WEAPONS = {
     rl: { out: 0.62, in: 1.42, ammo: 1.60, dur: 2.70, extra: 0.60, chargeDur: 0.40 },
     cycle: 0.90, ejectAt: 0.38, boltKind: 'bolt', boltAfterShot: true,
     vmScale: 0.62,
-    hip: [0.147, -0.133, -0.358], hipRot: [0.048, 0.190, 0.060],
-    adsDist: 0.215, scope: true, scopeFov: 6.8, tracerEvery: 1, tracerWidth: 0.030,
+    hip: [0.172, -0.152, -0.412], hipRot: [0.054, 0.288, 0.132],
+    adsDist: 0.130, scope: true, scopeFov: 6.8, tracerEvery: 1, tracerWidth: 0.030,
   },
 };
 

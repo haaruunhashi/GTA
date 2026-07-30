@@ -320,8 +320,16 @@ export class Batcher {
         // The tight term is gated to near-vertical faces: contact occlusion
         // lives on the SIDES of an object where it meets the floor. Applying it
         // to up-facing faces would just dim every floor and pavement uniformly.
-        d = 1 - 0.22 * Math.exp(-yy / 1.2) - 0.40 * Math.exp(-yy / 0.22) * (1 - upness * upness);
-        if (d < 0.2) d = 0.2;
+        // Strengthened after four failed attempts to get screen-space AO to
+        // show up in a frame: this is now the ONLY contact occlusion in the
+        // map, so it has to carry the whole read. Three terms — a broad
+        // splash-back wash, a mid crease over the first ~600 mm, and a hard
+        // core in the last ~180 mm where the object actually touches.
+        d = 1
+          - 0.20 * Math.exp(-yy / 1.4)
+          - 0.26 * Math.exp(-yy / 0.55) * (1 - upness * upness)
+          - 0.44 * Math.exp(-yy / 0.18) * (1 - upness * upness);
+        if (d < 0.12) d = 0.12;
       }
       g.col.push(cr * d, cg * d, cb * d);
     }

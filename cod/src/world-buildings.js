@@ -37,6 +37,17 @@ export function wall(B, o) {
     B.box('concrete', 0, y0 + 0.6, t / 2 + 0.03, len, 0.09, 0.13, { dirt: false, tint: 0xa39d90 });
     B.quad('decal_grime', 0, y0 + 1.0, t / 2 + 0.06, len, 2.0,
       { uvRect: [0, 0, Math.max(1, len / 5), 1], dirt: false, shadow: false });
+    // Contact darkening on the PAVEMENT at the foot of the wall. The vertex
+    // term in the batcher darkens the wall's own base but cannot touch the
+    // ground beside it, and without this the wall still meets the paving in a
+    // clean line. Laid in overlapping segments so it reads continuous.
+    if (y0 < 0.1) {
+      const seg = Math.max(1, Math.round(len / 2.2));
+      for (let i = 0; i < seg; i++) {
+        B.quad('decal_ao', -len / 2 + (i + 0.5) * (len / seg), 0.02, t / 2 + 0.34, len / seg + 1.3, 1.5,
+          { rotX: -Math.PI / 2, dirt: false, shadow: false });
+      }
+    }
   }
 
   // furniture in the holes — pushed with rotY=PI because the prop factories

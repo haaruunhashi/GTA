@@ -16,7 +16,7 @@ import { Batcher } from './world-batch.js';
 import { wall, cornice, parapet, slab, stairs, fillerBlock } from './world-buildings.js';
 import {
   lampPost, hydrant, jerseyBarrier, dumpster, crate, crateStack, pallet, barrel,
-  tyreStack, sandbagWall, roadSign, trafficCone, bollard, acUnit, pipeRun,
+  tyreStack, sandbagWall, roadSign, trafficCone, bollard, acUnit, pipeRun, contact,
   fireEscape, awning, balcony, roofClutter, wire, rubblePile, debrisScatter,
   wreckedCar, shoppingTrolley,
 } from './world-props.js';
@@ -510,6 +510,7 @@ export class World {
     B.push(19.5, 0, 3.0, 0); bollard(B); B.pop();
     // attendant booth
     B.push(21.5, 0, 6.0, 0.2);
+    contact(B, 1.7, 1.6);
     B.box('plaster', 0, 1.4, 0, 2.4, 2.8, 2.2, {});
     B.collider(-1.2, 1.2, 0, 2.8, -1.1, 1.1);
     B.quad('glass', 0, 1.7, 1.12, 1.8, 1.1, { dirt: false, shadow: false });
@@ -571,6 +572,7 @@ export class World {
     // planters and a dead tree ring
     for (const p of [[-30, -34], [-17, -35]]) {
       B.push(p[0], 0, p[1], 0.2);
+      contact(B, 1.8);
       B.box('concrete', 0, 0.42, 0, 2.6, 0.84, 2.6, { solid: true });
       B.box('dirt', 0, 0.86, 0, 2.2, 0.12, 2.2, {});
       B.cyl('wood', 0, 1.6, 0, 0.11, 0.19, 1.5, { rc: 8 });
@@ -595,6 +597,7 @@ export class World {
     B.push(cx, 0, cz, 0); debrisScatter(B, 20, 20, 26, rng); B.pop();
     // shed against the north wall
     B.push(-29.0, 0, -37.5, 0.05);
+    contact(B, 2.6, 2.0);
     B.box('corrugated', 0, 1.35, 0, 4.2, 2.7, 3.0, { tint: 0xa8a49a });
     B.collider(-2.1, 2.1, 0, 2.7, -1.5, 1.5);
     B.box('corrugated', 0, 2.82, 0.1, 4.6, 0.14, 3.4, { rotX: -0.12, dirt: false });
@@ -732,8 +735,18 @@ export class World {
       // they get the full facade treatment. A 46 x 26 m wall also needs
       // vertical articulation (`bays`) or it reads as one dark slab whatever
       // detail is painted on it.
-      { x: -14, z: -76, w: 46, d: 18, h: 26, faces: 's', mat: 'brick_buff', tint: 0xd8cfb8, roof: 1, bays: 5 },
-      { x: 34, z: -78, w: 40, d: 18, h: 21, faces: 's', mat: 'brick_red', tint: 0xc6a08c, roof: 2, bays: 4 },
+      // The head of the street. This was ONE 46 x 26 m mass and it read as a
+      // dark slab whatever surface detail went on it: a single silhouette, a
+      // single roofline, a single tone, seen down a 90 m sightline for the whole
+      // match. It is now three separate buildings of different height, brick and
+      // roof style with their street faces aligned on z = -67, so the end of the
+      // street reads as a terrace stepping against the sky. Tints are pushed
+      // brighter than the side blocks because these elevations face south and
+      // are backlit by the low sun — a mid tone here goes to mud.
+      { x: -32, z: -75, w: 20, d: 16, h: 18, faces: 's', mat: 'brick_red', tint: 0xd6ab95, roof: 0, bays: 2 },
+      { x: -14, z: -78, w: 17, d: 22, h: 30, faces: 's', mat: 'brick_buff', tint: 0xe4dcc6, roof: 1, bays: 2 },
+      { x: 3.5, z: -74, w: 18, d: 14, h: 22, faces: 's', mat: 'brick_grey', tint: 0xd0ccc2, roof: 2, bays: 2 },
+      { x: 34, z: -78, w: 40, d: 18, h: 21, faces: 's', mat: 'brick_red', tint: 0xcfa894, roof: 2, bays: 4 },
       { x: -8, z: 76, w: 44, d: 18, h: 24, faces: 'n', mat: 'brick_tan', tint: 0xd2c9b0, roof: 2, bays: 4 },
       { x: 38, z: 78, w: 34, d: 18, h: 19, faces: 'n', mat: 'brick_grey', tint: 0xb8b6ae, roof: 0, bays: 3 },
       { x: -74, z: 0, w: 20, d: 80, h: 30, faces: 'e', mat: 'brick_grey', tint: 0xb8b4ac, roof: 1, far: true, bays: 6 },

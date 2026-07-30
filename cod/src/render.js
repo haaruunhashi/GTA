@@ -129,6 +129,7 @@ export class Render {
       if (!AOVIEW) {
         this.aoApply = new ShaderPass(AOApplyShader);
         this.aoApply.uniforms.tAO.value = gtao.pdRenderTarget.texture;
+        this.aoApply.uniforms.uTexel.value = [1 / w, 1 / h];
         composer.addPass(this.aoApply);
       }
     }
@@ -174,6 +175,7 @@ export class Render {
     if (!this.composer) return;
     this.composer.setSize(innerWidth, innerHeight);
     this.composite.uniforms.uResolution.value.set(innerWidth, innerHeight);
+    if (this.aoApply) this.aoApply.uniforms.uTexel.value = [1 / innerWidth, 1 / innerHeight];
     if (this.sharpen) this.sharpen.uniforms.uResolution.value.set(innerWidth, innerHeight);
     if (this.godrays) this.godrays.setSize(innerWidth, innerHeight);
   }
@@ -236,8 +238,31 @@ export class Render {
     if (this.composer) { this.composer.dispose?.(); this.composer = null; }
   }
 
+  // Anything parented to the camera is viewmodel space: it is drawn at a
+  // different effective FOV and sits ~40 cm from the eye, so it must never be
+  // rasterised into the world shadow map. It is worth enforcing here rather than
+  // trusting the flag at construction time, because the cost of getting it wrong
+  // is spectacular and was in fact the biggest single lighting defect in the
+  // round-4 frame: shots/lightdbg7/street-sunwhite.png shows a hard-edged black
+  // quadrilateral covering most of the road, stair-stepped in ~15 px blocks. That
+  // is a 40 cm object — eight shadow texels across a 156 m cascade — smeared by
+  // an 11-degree sun into a 30 m shadow on the tarmac. It is exactly what the
+  // critique called "flat blue painted polygons": not a grading failure and not a
+  // cascade failure, the gun's own shadow.
+  _noViewmodelShadows() {
+    const cam = this.ctx.camera;
+    if (!cam) return;
+    // cheap change detector so the traverse is not paid every frame
+    let n = 0;
+    for (const c of cam.children) n += 1 + (c.children ? c.children.length : 0);
+    if (n === this._vmCount) return;
+    this._vmCount = n;
+    for (const c of cam.children) c.traverse(o => { o.castShadow = false; });
+  }
+
   render(dt) {
     if (!this.composer) this._build();
+    this._noViewmodelShadows();
     this._sync(dt);
     DBG.apply(this.ctx);
     // The GTAO pass reallocates its targets on resize, so re-bind every frame

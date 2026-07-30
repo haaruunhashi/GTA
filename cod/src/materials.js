@@ -420,19 +420,51 @@ const DEFS = {
     },
   },
 
+  // Pavement. This is the top surface of every footway in the map, and it was
+  // a featureless grey wash at a 2 m repeat — which is why the walkways read as
+  // blown-out white ribbons. It is now laid as 600 mm slabs with real joints,
+  // slab-to-slab tonal variation, lifted and cracked units, and staining. The
+  // joint grid is the single most valuable cue: it gives the pavement scale.
   curb: {
-    tile: 2, size: 256, r0: 0.62, r1: 0.94, nrm: 1.0, ao: 0.3, metal: 0,
+    tile: 1.2, size: 512, r0: 0.66, r1: 0.96, nrm: 1.15, ao: 0.42, metal: 0, macro: { amt: 0.5, warm: 0.03 },
     albedo(g, s, rnd) {
-      g.fillStyle = '#9b988f'; g.fillRect(0, 0, s, s);
-      fbm(g, s, rnd, { octaves: 3, cells: 3, amp: 0.35 });
-      blotch(g, s, rnd, { n: 10, r0: 0.08, r1: 0.3, colors: ['#7a776f', '#a8a59b'], alpha: 0.3 });
-      // scuffed kerb paint
-      g.fillStyle = 'rgba(216,190,60,0.55)'; g.fillRect(0, s * 0.42, s, s * 0.16);
-      g.save(); g.globalCompositeOperation = 'destination-out';
-      for (let i = 0; i < 60; i++) { g.globalAlpha = rnd() * 0.8; g.fillRect(rnd() * s, s * 0.4 + rnd() * s * 0.2, rnd() * 22, rnd() * 8); }
-      g.restore();
-      cracks(g, s, rnd, { n: 3, steps: 16, len: 7, w: 1.1, color: 'rgba(50,48,44,0.6)' });
+      const n = 2, cw = s / n;                 // 2 slabs per 1.2 m tile = 600 mm
+      g.fillStyle = '#54514b'; g.fillRect(0, 0, s, s);   // mortar joint colour
+      for (let y = 0; y < n; y++) {
+        for (let x = 0; x < n; x++) {
+          const L = 44 + rnd() * 14;
+          g.fillStyle = `hsl(${36 + rnd() * 14} ${3 + rnd() * 6}% ${L}%)`;
+          const j = 3.5;
+          g.fillRect(x * cw + j, y * cw + j, cw - j * 2, cw - j * 2);
+          // a chipped corner or a sunken edge on some units
+          if (rnd() < 0.5) {
+            g.fillStyle = `rgba(70,66,60,${0.2 + rnd() * 0.3})`;
+            const e = rnd() < 0.5;
+            g.fillRect(x * cw + j, y * cw + (e ? j : cw - j - 9), cw - j * 2, 9);
+          }
+        }
+      }
+      fbm(g, s, rnd, { octaves: 4, cells: 4, amp: 0.26 });
+      blotch(g, s, rnd, { n: 16, r0: 0.04, r1: 0.2, colors: ['#6a675f', '#8e8b82', '#4e4a43'], alpha: 0.28 });
+      // grit and gum spots trodden into the surface
+      speckle(g, s, rnd, { n: 2600, r: 1.2, light: 0.16, dark: 0.24 });
+      for (let i = 0; i < 26; i++) {
+        g.fillStyle = `rgba(52,50,46,${0.2 + rnd() * 0.35})`;
+        g.beginPath(); g.arc(rnd() * s, rnd() * s, 1.5 + rnd() * 4, 0, 7); g.fill();
+      }
+      cracks(g, s, rnd, { n: 4, steps: 18, len: 9, w: 1.2, color: 'rgba(46,44,40,0.6)' });
       grain(g, s, rnd, 18);
+    },
+    height(g, s, rnd) {
+      const n = 2, cw = s / n;
+      g.fillStyle = '#3c3c3c'; g.fillRect(0, 0, s, s);
+      for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
+        const j = 3.5;
+        g.fillStyle = `rgb(${196 + (rnd() * 50 | 0)},210,210)`;
+        g.fillRect(x * cw + j, y * cw + j, cw - j * 2, cw - j * 2);
+      }
+      fbm(g, s, rnd, { octaves: 3, cells: 8, amp: 0.22 });
+      cracks(g, s, rnd, { n: 4, steps: 18, len: 9, w: 1.8, color: 'rgba(0,0,0,0.8)' });
     },
   },
 
@@ -561,21 +593,64 @@ const DEFS = {
     },
   },
 
+  // Corroded steel — railings, fire escapes, drainpipes, water tanks.
+  // NOTE on scale: this was previously a 1.8 m tile with a 1.6 normal and pits
+  // up to 3.4 px across, which put 3 cm blisters over every surface it touched
+  // and made a car-sized object read as a boulder of cast iron. Rust pitting is
+  // millimetres deep: the tile is now 0.9 m, the pits are fine, and the normal
+  // is barely there. It is the colour mottling that should read, not relief.
   rust: {
-    tile: 1.8, size: 256, r0: 0.55, r1: 0.95, nrm: 1.6, ao: 0.5, metal: 0.55,
+    tile: 0.9, size: 256, r0: 0.6, r1: 0.95, nrm: 0.45, ao: 0.28, metal: 0.5,
     albedo(g, s, rnd) {
-      g.fillStyle = '#6d4526'; g.fillRect(0, 0, s, s);
-      fbm(g, s, rnd, { octaves: 5, cells: 2, amp: 0.6 });
-      blotch(g, s, rnd, { n: 26, r0: 0.04, r1: 0.24, colors: ['#8a5a24', '#4a2c16', '#a8712f', '#3a3632'], alpha: 0.45 });
-      speckle(g, s, rnd, { n: 2200, r: 1.5, light: 0.18, dark: 0.35 });
-      grain(g, s, rnd, 22);
+      g.fillStyle = '#6a4b32'; g.fillRect(0, 0, s, s);
+      fbm(g, s, rnd, { octaves: 5, cells: 4, amp: 0.42 });
+      blotch(g, s, rnd, { n: 30, r0: 0.02, r1: 0.13, colors: ['#7d5528', '#4a3220', '#8f6535', '#3e3a34'], alpha: 0.32 });
+      speckle(g, s, rnd, { n: 3200, r: 1.1, light: 0.14, dark: 0.26 });
+      grain(g, s, rnd, 20);
     },
     height(g, s, rnd) {
       g.fillStyle = '#909090'; g.fillRect(0, 0, s, s);
-      fbm(g, s, rnd, { octaves: 5, cells: 3, amp: 0.6 });
-      for (let i = 0; i < 700; i++) {
-        g.fillStyle = `rgba(0,0,0,${0.3 + rnd() * 0.6})`;
-        g.beginPath(); g.arc(rnd() * s, rnd() * s, 1 + rnd() * 3.4, 0, 7); g.fill();
+      fbm(g, s, rnd, { octaves: 4, cells: 6, amp: 0.3 });
+      for (let i = 0; i < 900; i++) {
+        g.fillStyle = `rgba(0,0,0,${0.12 + rnd() * 0.3})`;
+        g.beginPath(); g.arc(rnd() * s, rnd() * s, 0.5 + rnd() * 1.3, 0, 7); g.fill();
+      }
+    },
+  },
+
+  // Burnt-out vehicle bodywork. A torched car is NOT rust-orange: the paint has
+  // gone to soot and bare blued steel, and the corrosion that follows is a thin
+  // brown bloom in the seams, not the whole panel. Kept nearly flat — sheet
+  // metal has no relief beyond its own buckling, which is geometry's job.
+  // NOTE on values: the first version of this was #232120 at metalness 0.62,
+  // which rendered as a featureless black box — a dark albedo under high
+  // metalness has almost no diffuse response, so nothing but the environment
+  // lights it. Burnt panels are dark but they are still visibly LIT in raking
+  // sun: mid-dark grey-brown albedo, mostly dielectric, and rough.
+  charred: {
+    tile: 1.4, size: 256, r0: 0.5, r1: 0.88, nrm: 0.3, ao: 0.22, metal: 0.28,
+    albedo(g, s, rnd) {
+      g.fillStyle = '#39352f'; g.fillRect(0, 0, s, s);
+      fbm(g, s, rnd, { octaves: 4, cells: 4, amp: 0.3 });
+      // soot bloom and heat-bleached patches where the paint burned off
+      blotch(g, s, rnd, { n: 22, r0: 0.05, r1: 0.26, colors: ['#0d0c0c', '#3a3734', '#2b2622'], alpha: 0.38 });
+      // sparse rust bleed — restricted so it never dominates
+      blotch(g, s, rnd, { n: 9, r0: 0.02, r1: 0.09, colors: ['#5c3c22', '#6b4526'], alpha: 0.3 });
+      // blistered paint flakes lifting off
+      for (let i = 0; i < 260; i++) {
+        const x = rnd() * s, y = rnd() * s, r = 1 + rnd() * 3.5;
+        g.fillStyle = rnd() < 0.5 ? 'rgba(96,90,84,0.35)' : 'rgba(14,13,12,0.5)';
+        g.beginPath(); g.ellipse(x, y, r, r * (0.5 + rnd()), rnd() * 3, 0, 7); g.fill();
+      }
+      speckle(g, s, rnd, { n: 2000, r: 1.0, light: 0.12, dark: 0.22 });
+      grain(g, s, rnd, 14);
+    },
+    height(g, s, rnd) {
+      g.fillStyle = '#8c8c8c'; g.fillRect(0, 0, s, s);
+      fbm(g, s, rnd, { octaves: 4, cells: 6, amp: 0.22 });
+      for (let i = 0; i < 260; i++) {
+        g.fillStyle = `rgba(255,255,255,${0.1 + rnd() * 0.2})`;
+        g.beginPath(); g.arc(rnd() * s, rnd() * s, 1 + rnd() * 2.5, 0, 7); g.fill();
       }
     },
   },
@@ -643,6 +718,54 @@ const DEFS = {
         g.fillStyle = '#101010'; g.fillRect(0, p * ph, s, 3);
       }
       fbm(g, s, rnd, { octaves: 3, cells: 8, amp: 0.35 });
+    },
+  },
+
+  // Crate / pallet timber. `wood` is a 2.2 m tile, which on a 700 mm crate face
+  // shows a third of one plank — the crate ends up a flat brown blob with no
+  // readable detail, and a stack of them reads as a monolith. This is the same
+  // timber at 0.55 m so a crate face carries four boards, visible gaps and
+  // stencilled markings.
+  plank: {
+    tile: 0.55, size: 256, r0: 0.6, r1: 0.94, nrm: 1.0, ao: 0.45, metal: 0,
+    albedo(g, s, rnd) {
+      const boards = 4, ph = s / boards;
+      for (let p = 0; p < boards; p++) {
+        const base = 30 + rnd() * 12, L = 34 + rnd() * 14;
+        g.fillStyle = `hsl(${base} ${22 + rnd() * 12}% ${L}%)`;
+        g.fillRect(0, p * ph, s, ph);
+        g.save(); g.globalAlpha = 0.3;
+        for (let i = 0; i < 20; i++) {
+          g.strokeStyle = `hsl(${base} ${18 + rnd() * 18}% ${L + (rnd() < 0.5 ? -12 : 10)}%)`;
+          g.lineWidth = 0.6 + rnd() * 1.6;
+          const y = p * ph + rnd() * ph;
+          g.beginPath(); g.moveTo(0, y);
+          for (let x = 0; x < s; x += 16) g.lineTo(x, y + Math.sin(x * 0.05 + i) * 1.4);
+          g.stroke();
+        }
+        g.restore();
+        // sawn ends, splits and the dark gap between boards
+        g.fillStyle = 'rgba(24,17,10,0.8)'; g.fillRect(0, p * ph, s, 2.2);
+        g.fillStyle = 'rgba(210,196,168,0.25)'; g.fillRect(0, p * ph + 2.2, s, 1.2);
+      }
+      // stencilled shipping marks
+      g.save();
+      g.globalAlpha = 0.3; g.fillStyle = '#241a10';
+      g.font = `bold ${s * 0.11}px sans-serif`; g.textAlign = 'center';
+      g.fillText('4/7', s * 0.5, s * 0.42);
+      g.strokeStyle = '#241a10'; g.lineWidth = 2.4;
+      g.strokeRect(s * 0.24, s * 0.56, s * 0.5, s * 0.26);
+      g.restore();
+      blotch(g, s, rnd, { n: 12, r0: 0.04, r1: 0.18, colors: ['#2f2114', '#7a6242', '#4b3a24'], alpha: 0.26 });
+      grain(g, s, rnd, 16);
+    },
+    height(g, s, rnd) {
+      const boards = 4, ph = s / boards;
+      for (let p = 0; p < boards; p++) {
+        g.fillStyle = `rgb(${168 + (rnd() * 46 | 0)},170,170)`; g.fillRect(0, p * ph, s, ph);
+        g.fillStyle = '#101010'; g.fillRect(0, p * ph, s, 2.6);
+      }
+      fbm(g, s, rnd, { octaves: 3, cells: 10, amp: 0.28 });
     },
   },
 

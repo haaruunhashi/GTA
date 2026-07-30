@@ -40,12 +40,30 @@ const PRESETS = {
   // the default: low warm sun, long shadows, deep contrast
   golden: {
     elev: 11, azim: -124,
-    sunColor: [1.0, 0.74, 0.47], sunIntensity: 12.6,
+    // ROUND 5, MEASURED. tools/_cmp.mjs classifies every road pixel as lit or
+    // shaded using the ?view=sun,white mask and then reports the beauty frame in
+    // each class. On shots/lightdbg7 that came back at **1.95:1**. That single
+    // number is the whole of defects 11 and 12 and it explains why four rounds of
+    // shape/penumbra/hue tuning did nothing: at a two-stop-total key:fill ratio a
+    // shadow *cannot* read as a shadow, only as a tint, no matter how well its
+    // edge is filtered. A golden-hour street is 4-6:1 on the display and more in
+    // linear. The lit road was also simply dark (luma 90 where COD sits 110-150)
+    // and the shade bright (luma 46 where it should be high 20s).
+    //
+    // The second half of the measurement: shaded road came back R53 G45 B39 —
+    // *warm*, red above blue. Round 4 was told the shadows were too blue and the
+    // fix over-shot into the opposite failure, which is the monochrome-amber
+    // frame of defect 12. The warm term doing it is `bounce`: unshadowed, and at
+    // bounceInt 1.70 x sunIntensity it was putting more energy into shaded tarmac
+    // than the sky was. So: sun up 1.75x, the two warm fill terms down hard, the
+    // cool sky term back up in chroma, and the sun leak through the shadow cut
+    // from 8 % to 3.5 %.
+    sunColor: [1.0, 0.74, 0.47], sunIntensity: 22.0,
     // skyLum was 5.2, which drove the whole sky dome past the ACES shoulder:
     // every azimuth of the horizon saturated to uSunColor and the upper frame
     // clipped to a flat 225-luma amber wash. Lower luminance is what lets the
     // Rayleigh blue and the cloud form survive the tonemapper.
-    skyLum: 3.30, turbidity: 3.4, rayleigh: 3.6, mie: 0.0055, mieG: 0.86, skyGamma: 1.20, sunDisc: 78,
+    skyLum: 3.10, turbidity: 3.4, rayleigh: 3.6, mie: 0.0055, mieG: 0.86, skyGamma: 1.20, sunDisc: 78,
     ground: [0.040, 0.038, 0.036],
     // cloudSharp is the smoothstep half-width on coverage: 0.34 was so wide
     // that every cloud was a 60 %-of-frame gradient, i.e. haze. 0.13 gives an
@@ -71,15 +89,20 @@ const PRESETS = {
     // facade opposite. So: desaturate the hemisphere, cut the over-amplified
     // IBL, and put the missing energy into the *warm, directional* bounce, which
     // is also the only term that gives shadowed ground any normal-map relief.
-    hemiSky: [0.62, 0.67, 0.78], hemiGround: [0.22, 0.20, 0.18], hemiInt: 1.50, envInt: 1.55,
-    bounce: [0.88, 0.64, 0.43], bounceInt: 1.70,
+    // Target: shaded tarmac around luma 28 with blue ~1.35x red, sunlit tarmac
+    // around 120. hemiSky carries the chroma (it is the only term that is cool
+    // *and* unshadowed), bounce keeps its hue but a third of its energy so it
+    // still lifts shadow-side walls and gives shaded ground some directional
+    // relief without repainting the shade amber.
+    hemiSky: [0.52, 0.64, 0.90], hemiGround: [0.22, 0.20, 0.18], hemiInt: 1.05, envInt: 1.35,
+    bounce: [1.00, 0.72, 0.48], bounceInt: 0.60,
     fog: { density: 0.0046, falloff: 15, base: -1, start: 18,
            color: [0.072, 0.098, 0.150], lowColor: [0.118, 0.122, 0.148],
            sunColor: [0.34, 0.20, 0.10], minT: 0.12, aniso: 0.72 },
     post: {
-      exposure: 1.30, contrast: 1.10, saturation: 1.02, toe: 0.010, split: 0.40, white: 0.925,
+      exposure: 1.38, contrast: 1.12, saturation: 1.06, toe: 0.010, split: 0.46, white: 0.925,
       lift: [-0.002, 0.000, 0.006], gamma: [1.0, 1.0, 1.01], gain: [1.03, 1.0, 0.975],
-      shadowTint: [0.94, 0.99, 1.05], highTint: [1.12, 1.00, 0.84],
+      shadowTint: [0.90, 0.98, 1.10], highTint: [1.12, 1.00, 0.84],
       vignette: 0.42, ca: 1.4, grain: 0.030, sharpen: 0.55,
       bloom: 0.28, bloomThreshold: 1.55, bloomRadius: 0.45,
       godrays: 0.30, godrayDensity: 0.52, godrayThreshold: 2.6, godrayTint: [1.0, 0.80, 0.55],
@@ -240,7 +263,10 @@ export class Sky {
     // fraction of the *directional* term keeps the normal map, the albedo hue
     // and the specular response alive inside the shadow — just eleven stops
     // down — so the road in shade still reads as the same road.
-    s.intensity = 0.92;
+    // ...but 8 % of a 22-unit warm sun is more warm light than the whole sky puts
+    // into the shade, which is half of why the shadows measured amber. 3.5 % is
+    // enough to keep the normal map and the specular alive without tinting.
+    s.intensity = 0.965;
     s.camera.updateProjectionMatrix();
     light.userData.fitRadius = radius;
     const texel = (radius * 2) / size;
@@ -250,7 +276,11 @@ export class Sky {
     // occluder height above the receiver. Physically the sun gives ~0.009;
     // COD-ish softness wants an order more than that.
     const SOFTEN = 0.075;
-    installSoftShadows({ growth: ((s.camera.far - s.camera.near) * SOFTEN) / texel, base: 1.1 });
+    // base is the contact penumbra floor in texels. 1.1 left the texel grid
+    // visible as ~15 px stair-steps on near-field tarmac (measurable on the
+    // ?view=sun,white mask); 1.8 hides the grid while a kerb still lands inside
+    // ~9 cm of the geometry.
+    installSoftShadows({ growth: ((s.camera.far - s.camera.near) * SOFTEN) / texel, base: 1.8 });
   }
 
   // t01: 0 = sun on the horizon at dawn, 0.5 = zenith, 1 = horizon at dusk
