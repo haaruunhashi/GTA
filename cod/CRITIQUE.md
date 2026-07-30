@@ -174,3 +174,31 @@ the timeout raised to 7 minutes.
 **Harness note:** the page load itself now exceeds playwright's default 30s
 budget (texture generation), which crashed the capture run. Load timeout raised
 to 5 minutes with a soft failure that still captures a frame.
+
+---
+
+## Round 5 — `shots/critic5/squad.png` (first frame containing the AI)
+
+Verified structurally with the new `tools/statecheck.mjs` rather than by eye
+alone: 12/12 subsystems live, 8 bots in scene at 20 meshes each, all in-frustum
+and unoccluded, 430 colliders, 50 nav points, 14 spawn points, match state
+running, **zero console errors**. The soldiers were rendering all along — the
+first `squad` capture just looked empty because they are small at 16-30 m and the
+frame was busy.
+
+**New defects found by zooming into the soldiers:**
+1. **Soldiers read as pale mannequins.** Mid-green fatigues wash out under the
+   golden-hour key plus sky fill. FIXED this round: uniforms taken much darker
+   and lower-chroma, plate carrier to near-black.
+2. **No readable weapon at range** — the rifle hid inside the body silhouette.
+   FIXED: larger rifle held across the chest and angled out, plus a helmet brim
+   so facing is readable at distance.
+3. **A large rust-textured mass sits bottom-right of frame at the map centre**,
+   plus a tall brown cylinder mid-left. Both look like props at wrong scale or
+   wrong material — WORLD AGENT, not yet assigned.
+4. The weapon viewmodel is still oversized, still armless, still pale grey —
+   defects 1-4 of round 2, now five rounds open. The bisection strategy
+   (pose → arms → strip textures → re-add one map at a time) is in progress.
+
+**Harness note:** the screenshot step itself was timing out at playwright's 30 s
+default under three concurrent agents. All page timeouts now 10 minutes.
