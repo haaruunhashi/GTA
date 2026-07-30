@@ -46,6 +46,13 @@ const CSS = `
 #compass em { position:absolute; top:9px; width:1px; height:5px; background:#8a97a4; }
 #compass .n { position:absolute; left:50%; top:0; width:1px; height:9px; background:#c9a24d; }
 
+#match { left:50%; top:48px; transform:translateX(-50%); display:flex; align-items:center;
+  gap:16px; font-variant-numeric:tabular-nums; text-shadow:0 2px 8px #000c; }
+#match .s { font-size:22px; font-weight:700; min-width:46px; text-align:center; }
+#match .us { color:#7fd3ff; } #match .them { color:#ff8a7a; }
+#match .clk { font-size:14px; letter-spacing:.16em; color:#c2ced9; }
+#match .lim { font-size:10px; letter-spacing:.22em; color:#7d8b99; text-align:center; }
+
 #pops { left:50%; top:56%; transform:translateX(-50%); text-align:center; }
 #pops div { font-size:19px; font-weight:700; color:#ffd76a; text-shadow:0 2px 10px #000d;
   animation:pop 1.1s ease-out forwards; }
@@ -91,6 +98,11 @@ export class UI {
       <div class="hud" id="compass"><div class="strip"></div><div class="n"></div></div>
       <div class="hud" id="xh"></div>
       <div class="hud" id="hm"></div>
+      <div class="hud" id="match">
+        <div class="s us">0</div>
+        <div><div class="clk">0:00</div><div class="lim">TEAM DEATHMATCH</div></div>
+        <div class="s them">0</div>
+      </div>
       <div class="hud" id="banner"><div class="t"></div><div class="s"></div></div>
       <div class="hud" id="pops"></div>
       <div class="hud" id="ammo">
@@ -264,6 +276,15 @@ export class UI {
         let d = parseFloat(m.dataset.deg) - deg;
         m.style.left = 210 + d * 3.2 + 'px';
       }
+    }
+
+    const m = this.ctx.match;
+    if (m) {
+      this.q('#match .us').textContent = m.score | 0;
+      this.q('#match .them').textContent = m.enemyScore | 0;
+      const left = Math.max(0, m.timeLeft | 0);
+      this.q('#match .clk').textContent = `${(left / 60) | 0}:${String(left % 60).padStart(2, '0')}`;
+      this.q('#match .lim').textContent = (m.mode && m.mode.name) || '';
     }
 
     if (this.hmT > 0) {

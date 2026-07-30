@@ -20,14 +20,14 @@ import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { CompositeShader, SharpenShader } from './render-shaders.js';
 import { installSoftShadows } from './render-shadows.js';
 import { GodRayPass } from './render-godrays.js';
+import { RenderDebug, AOStretchShader } from './render-debug.js';
+import { AOApplyShader } from './render-ao.js';
 
 const TIER = { low: 0, medium: 1, high: 2, ultra: 3 };
 
-// Diagnostic switches, query-string only (?view=ao | raw). Not part of config.js
-// because they exist purely so the lighting can be inspected in isolation:
-//   ?view=ao   -> GTAO buffer only (is ambient occlusion actually contributing?)
-//   ?view=raw  -> skip the grade/AA/sharpen chain (what is the render really doing?)
-const VIEW = new URLSearchParams(location.search).get('view') || '';
+// Diagnostic switches, query-string only. See render-debug.js for the token list.
+const DBG = new RenderDebug((new URLSearchParams(location.search).get('view') || '').split(','));
+const AOVIEW = DBG.has('ao') || DBG.has('aox');
 
 export class Render {
   constructor(ctx) {
@@ -80,10 +80,14 @@ export class Render {
 
     composer.addPass(new RenderPass(ctx.scene, ctx.camera));
 
-    if (this.tier >= 2 && VIEW !== 'raw') {
+    if (this.tier >= 2 && !DBG.has('raw') && !DBG.has('noao')) {
       const gtao = new GTAOPass(ctx.scene, ctx.camera, w, h);
-      gtao.output = VIEW === 'ao' ? GTAOPass.OUTPUT.Denoise : GTAOPass.OUTPUT.Default;
-      gtao.blendIntensity = 1.15;
+      // Off + needsSwap=false: the pass computes the AO buffer and leaves the
+      // beauty alone; AOApplyShader below does the compositing, because three's
+      // flat multiply is the wrong operator here (see render-ao.js).
+      gtao.output = AOVIEW ? GTAOPass.OUTPUT.Denoise : GTAOPass.OUTPUT.Off;
+      gtao.needsSwap = AOVIEW;
+      gtao.blendIntensity = 1.0;
       // Why round 3 and round 4 both shipped with "no visible contact AO"
       // despite this pass being enabled: the radius was 2.6 m. GTAO estimates
       // the horizon angle over that radius, so at a 15 cm kerb the occluder
@@ -94,39 +98,60 @@ export class Render {
       // real fraction of the hemisphere and the buffer drops to 0.5-0.7.
       // `scale` is a gamma on that (ao = pow(ao, scale)), so it only needs to be
       // mild now, and blendIntensity slightly over 1 extrapolates the multiply.
+      // Round 3 and round 4 both shipped "no visible contact AO" with this pass
+      // enabled. Two separate causes, both now addressed:
+      //   * the blend (see render-ao.js), and
+      //   * the radius. 2.6 m was too *large* — a 15 cm kerb subtends almost
+      //     nothing of a 2.6 m hemisphere, so the buffer came back at 0.97 and no
+      //     gamma on that is visible. 0.85 m then overshot the other way: the
+      //     darkening was real but only ~10 screen pixels tall at a sandbag foot,
+      //     which is invisible at a glance. 1.6 m is the scale that actually
+      //     reads: it puts a ~0.5 m gradient of shade on the ground around a
+      //     prop, which is what the eye uses to seat an object on a surface.
       gtao.updateGtaoMaterial({
-        radius: 0.85,            // metres — contact scale, not a global bent-normal
-        distanceExponent: 1.0,
-        thickness: 0.9,
-        scale: 2.2,
+        radius: 1.6,
+        distanceExponent: 1.1,
+        thickness: 0.7,
+        scale: 1.4,
         samples: this.tier >= 3 ? 16 : 8,
         distanceFallOff: 1.0,
         screenSpaceRadius: false,
       });
       // Denoise has to be gentle or it smears the contact gradient back out:
       // a 3 px radius over a half-metre feature is most of the feature.
-      gtao.updatePdMaterial({ lumaPhi: 6, depthPhi: 1.5, normalPhi: 4, radius: 1.6, radiusExponent: 1, rings: 2, samples: this.tier >= 3 ? 12 : 6 });
+      gtao.updatePdMaterial({ lumaPhi: 8, depthPhi: 2.0, normalPhi: 5, radius: 2.2, radiusExponent: 1, rings: 2, samples: this.tier >= 3 ? 12 : 6 });
       composer.addPass(gtao);
       this.gtao = gtao;
+
+      if (!AOVIEW) {
+        this.aoApply = new ShaderPass(AOApplyShader);
+        this.aoApply.uniforms.tAO.value = gtao.pdRenderTarget.texture;
+        composer.addPass(this.aoApply);
+      }
     }
 
-    if (this.tier >= 2 && VIEW !== 'ao') {
+    if (DBG.has('aox')) {
+      const st = new ShaderPass(AOStretchShader);
+      composer.addPass(st);
+    }
+
+    if (this.tier >= 2 && !AOVIEW) {
       this.godrays = new GodRayPass(w, h, 0.25);
       composer.addPass(this.godrays);
     }
 
-    if (!VIEW) {
+    if (!DBG.any) {
       this.bloom = new UnrealBloomPass(new THREE.Vector2(w, h), 0.28, 0.45, 1.55);
       composer.addPass(this.bloom);
     }
 
     this.composite = new ShaderPass(CompositeShader);
     this.composite.uniforms.uResolution.value.set(w, h);
-    if (VIEW !== 'ao') composer.addPass(this.composite);
+    if (!AOVIEW && !DBG.has('raw')) composer.addPass(this.composite);
 
-    if (this.tier >= 1 && !VIEW) composer.addPass(new SMAAPass());
+    if (this.tier >= 1 && !DBG.any) composer.addPass(new SMAAPass());
 
-    if (this.tier >= 2 && !VIEW) {
+    if (this.tier >= 2 && !DBG.any) {
       this.sharpen = new ShaderPass(SharpenShader);
       this.sharpen.uniforms.uResolution.value.set(w, h);
       composer.addPass(this.sharpen);
@@ -211,6 +236,10 @@ export class Render {
   render(dt) {
     if (!this.composer) this._build();
     this._sync(dt);
+    DBG.apply(this.ctx);
+    // The GTAO pass reallocates its targets on resize, so re-bind every frame
+    // rather than caching a texture that can go stale.
+    if (this.aoApply && this.gtao) this.aoApply.uniforms.tAO.value = this.gtao.pdRenderTarget.texture;
     this.composer.render(dt);
   }
 }

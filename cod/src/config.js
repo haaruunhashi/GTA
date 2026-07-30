@@ -12,5 +12,6 @@ export const CONFIG = {
   shot: q.get('shot'),          // pose name, e.g. "street"
   shotFrames: num('frames', 60), // fixed-step frames simulated before the capture is taken
   quality: q.get('q') || 'ultra',
+  mode: q.get('mode') || 'tdm',   // match.js game mode: tdm | attrition
   debug: q.has('debug'),
 };

@@ -11,14 +11,17 @@ function shared() {
   if (SHARED) return SHARED;
   const mk = (color, rough, metal = 0) =>
     new THREE.MeshStandardMaterial({ color, roughness: rough, metalness: metal });
+  // Kept deliberately dark and low-chroma: under the golden-hour key plus the
+  // sky-ambient fill these read as soldiers, whereas mid-tone greens wash out to
+  // pale mannequins at 20m — which is exactly what critique round 5 caught.
   SHARED = {
-    fatigue: mk(0x4a4f3a, 0.92),      // uniform
-    vest: mk(0x33362c, 0.78),         // plate carrier
-    skin: mk(0x9a7355, 0.72),
-    helmet: mk(0x3b3f33, 0.62),
-    boot: mk(0x241f1a, 0.85),
-    gun: mk(0x22242a, 0.45, 0.75),
-    strap: mk(0x2a2b26, 0.9),
+    fatigue: mk(0x2c3124, 0.94),      // uniform
+    vest: mk(0x1b1d17, 0.72),         // plate carrier — near-black, reads as mass
+    skin: mk(0x7d5b41, 0.74),
+    helmet: mk(0x232619, 0.58),
+    boot: mk(0x15120f, 0.86),
+    gun: mk(0x14161a, 0.40, 0.85),
+    strap: mk(0x191a15, 0.9),
     geo: {
       torso: new THREE.CapsuleGeometry(0.20, 0.34, 4, 10),
       vest: new THREE.BoxGeometry(0.44, 0.44, 0.28),
@@ -28,9 +31,11 @@ function shared() {
       limb: new THREE.CapsuleGeometry(0.062, 0.24, 3, 8),
       thigh: new THREE.CapsuleGeometry(0.082, 0.26, 3, 8),
       boot: new THREE.BoxGeometry(0.12, 0.08, 0.24),
-      body: new THREE.BoxGeometry(0.055, 0.07, 0.42),
-      mag: new THREE.BoxGeometry(0.035, 0.13, 0.06),
-      barrel: new THREE.CylinderGeometry(0.011, 0.011, 0.30, 8),
+      body: new THREE.BoxGeometry(0.075, 0.10, 0.52),
+      stock: new THREE.BoxGeometry(0.06, 0.11, 0.20),
+      mag: new THREE.BoxGeometry(0.045, 0.17, 0.07),
+      barrel: new THREE.CylinderGeometry(0.016, 0.016, 0.36, 8),
+      brim: new THREE.BoxGeometry(0.24, 0.03, 0.10),
     },
   };
   return SHARED;
@@ -74,6 +79,8 @@ export function makeSoldier(ctx, seed = Math.random()) {
   const helmet = M(S.geo.helmet, S.helmet, 0, 0.075, 0);
   helmet.rotation.x = -0.12;
   neck.add(helmet);
+  // brim: gives the head a directional silhouette so you can read facing at range
+  neck.add(M(S.geo.brim, S.helmet, 0, 0.055, -0.10));
 
   // --- arms: shoulder groups so the walk cycle and recoil can drive them --
   const armL = new THREE.Group(); armL.position.set(-0.235, 0.34, 0);
@@ -108,13 +115,17 @@ export function makeSoldier(ctx, seed = Math.random()) {
   }
 
   // --- rifle, held in both hands ----------------------------------------
+  // Held across the chest and angled outward, so the rifle breaks the body
+  // silhouette instead of hiding inside it — at 20m the gun is most of what
+  // tells you this shape is a soldier.
   const gun = new THREE.Group();
-  gun.position.set(0.16, 0.30, 0.22);
-  gun.rotation.set(0, -0.12, 0);
+  gun.position.set(0.13, 0.30, 0.26);
+  gun.rotation.set(-0.10, -0.22, 0.06);
   hips.add(gun);
   gun.add(M(S.geo.body, S.gun, 0, 0, 0));
-  gun.add(M(S.geo.mag, S.gun, 0, -0.09, 0.02));
-  const barrel = M(S.geo.barrel, S.gun, 0, 0.005, -0.34);
+  gun.add(M(S.geo.stock, S.gun, 0, -0.01, 0.32));
+  gun.add(M(S.geo.mag, S.gun, 0, -0.12, 0.03));
+  const barrel = M(S.geo.barrel, S.gun, 0, 0.01, -0.42);
   barrel.rotation.x = Math.PI / 2;
   gun.add(barrel);
 

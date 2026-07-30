@@ -46,23 +46,25 @@ function tex(key, size, draw) {
 // name -> [colour, roughness, metalness, envIntensity]
 // Chosen so no two adjacent parts share both value and gloss: the receiver reads
 // darker and flatter than the barrel, and the polymer furniture flatter still.
+// envIntensity is well under 1 on purpose — scene.environmentIntensity is ~2.9 at
+// golden hour, and a black rifle that reflects that at 1.0 turns into a sky mirror.
 const DEFS = {
   // furniture
-  polymer: [0x23252a, 0.70, 0.06, 1.00],
-  polymerTan: [0x6b5b3e, 0.74, 0.05, 1.00],
-  rubber: [0x191b1e, 0.90, 0.00, 0.80],
-  wood: [0x4f3520, 0.55, 0.00, 1.00],
+  polymer: [0x1e2024, 0.72, 0.03, 0.60],
+  polymerTan: [0x5d4f36, 0.75, 0.03, 0.60],
+  rubber: [0x151719, 0.90, 0.00, 0.50],
+  wood: [0x452e1b, 0.55, 0.00, 0.60],
   // metal
-  alu: [0x4a4e55, 0.44, 0.60, 1.25],   // anodised receiver, rails, handguard
-  steel: [0x676d75, 0.34, 0.88, 1.40],   // bare barrel / bolt
-  steelDark: [0x34373c, 0.48, 0.72, 1.15],   // phosphate: brake, sights, port cover
-  brass: [0xc9a349, 0.28, 1.00, 1.60],
-  optic: [0x2b2e33, 0.46, 0.30, 1.10],
+  alu: [0x3f434a, 0.50, 0.62, 0.60],   // anodised receiver, rails, handguard
+  steel: [0x565c64, 0.36, 0.84, 0.70],   // bare barrel / bolt
+  steelDark: [0x2f3237, 0.50, 0.70, 0.70],   // phosphate: brake, sights, port cover
+  brass: [0xb08a37, 0.30, 1.00, 0.90],
+  optic: [0x24272b, 0.44, 0.30, 0.60],
   // arms
-  glove: [0x24262b, 0.68, 0.03, 1.00],
-  gloveGrip: [0x2e3136, 0.50, 0.06, 1.15],   // rubberised knuckle plate: glossier, so
+  glove: [0x1d1f23, 0.70, 0.03, 0.60],
+  gloveGrip: [0x282b30, 0.52, 0.05, 0.75],   // rubberised knuckle plate: glossier, so
                                              // it catches a highlight and the hand reads
-  sleeve: [0x46422f, 0.85, 0.00, 1.00],
+  sleeve: [0x3c3928, 0.85, 0.00, 0.60],
 };
 
 export class GunMats {

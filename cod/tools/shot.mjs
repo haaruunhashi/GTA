@@ -41,6 +41,9 @@ const browser = await chromium.launch({
     '--ignore-gpu-blocklist', '--enable-webgl', '--disable-dev-shm-usage'],
 });
 const page = await browser.newPage({ viewport: { width: 1600, height: 900 }, deviceScaleFactor: 1 });
+// Every step here — load, eval, screenshot — can outrun playwright's 30s default
+// on a software rasteriser, especially with several agents sharing the machine.
+page.setDefaultTimeout(600000);
 const errors = [];
 const ignorable = t => /favicon/i.test(t) || /Failed to load resource/i.test(t);
 page.on('console', m => { if (m.type() === 'error' && !ignorable(m.text())) errors.push(m.text()); });
@@ -63,7 +66,7 @@ for (const pose of poses) {
   }
   await page.waitForTimeout(1200);
   const file = path.join(outDir, pose + '.png');
-  await page.screenshot({ path: file });
+  await page.screenshot({ path: file, timeout: 600000 });
   const bytes = fs.statSync(file).size;
   console.log(`[shot] ${pose} -> ${path.relative(process.cwd(), file)} (${(bytes / 1024).toFixed(0)} KB)` +
     (errors.length ? `\n  ERRORS: ${errors.slice(0, 5).join(' | ')}` : ''));
