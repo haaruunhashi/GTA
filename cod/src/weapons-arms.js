@@ -142,7 +142,11 @@ export function makeArm(mats, side, opt = {}) {
   const cuffLip = mesh(limb(0.033, 0.031, 0.014, 10), sl, 0.8);
   cuffLip.position.z = 0.053;
   fore.add(cuffLip);
-  const arm = mesh(limb(0.031, 0.041, 0.175, 10), sl, 0.5);
+  // The sleeve deliberately overshoots the elbow and runs off the bottom of the
+  // frame. A forearm that stops at a visible flat end cap reads as a floating pipe —
+  // that is what the round-6 review called "the forearm does not connect". Real
+  // viewmodel arms are always cropped by the frame edge, never terminated in view.
+  const arm = mesh(limb(0.031, 0.052, 0.520, 12), sl, 0.5);
   arm.position.z = 0.064;
   fore.add(arm);
 

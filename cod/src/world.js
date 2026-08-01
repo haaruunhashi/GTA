@@ -130,7 +130,12 @@ export class World {
       for (let z = Z0; z < Z1; z += 10) {
         const cz = z + 5;
         B.box('curb', sx * (ROAD_HW + WALK / 2), 0.08, cz, WALK, 0.16, 10, {});
-        B.box('concrete', sx * (ROAD_HW + 0.07), 0.085, cz, 0.16, 0.19, 10, { dirt: false, tint: 0xd0cabb });
+        // The kerb stone's road-facing arris. `dirt` is deliberately ON: the
+        // batcher's vertex term then runs down this 190 mm face from y=0.18 to
+        // y=0, which bakes the gutter gradient into the kerb itself instead of
+        // leaving a bright, evenly-lit band that made the pavement look pasted
+        // onto the road.
+        B.box('concrete', sx * (ROAD_HW + 0.07), 0.085, cz, 0.16, 0.19, 10, { tint: 0xc6c0b1 });
         B.collider(sx * (ROAD_HW) - 0.1, sx * (ROAD_HW + WALK) + 0.1 * sx, 0, 0.16, cz - 5, cz + 5);
         // The kerb is only 160 mm tall, so its own cast shadow is a hairline and
         // the pavement ends up looking pasted onto the road. Bake the gutter
@@ -140,11 +145,16 @@ export class World {
         // and a tight dark one hard against the kerb face for the crease itself.
         for (let i = 0; i < 5; i++) {
           const zz = cz - 4 + i * 2;
-          B.quad('decal_ao', sx * (ROAD_HW - 0.62), 0.012, zz, 2.6, 2.9,
-            { rotX: -Math.PI / 2, dirt: false, shadow: false, tint: 0xa8a8a8 });
-          B.quad('decal_ao', sx * (ROAD_HW - 0.16), 0.015, zz, 0.95, 2.9,
+          B.quad('decal_ao_soft', sx * (ROAD_HW - 0.85), 0.012, zz, 3.0, 3.2,
+            { rotX: -Math.PI / 2, dirt: false, shadow: false });
+          B.quad('decal_ao', sx * (ROAD_HW - 0.22), 0.015, zz, 1.0, 2.9,
             { rotX: -Math.PI / 2, dirt: false, shadow: false });
         }
+        // and the same crease on the pavement side, where the kerb stone butts
+        // into the flags — shallower, but the top arris is what tells you the
+        // kerb is a separate stone rather than a painted band
+        B.quad('decal_ao_soft', sx * (ROAD_HW + 0.55), 0.175, cz, 1.5, 10,
+          { rotX: -Math.PI / 2, dirt: false, shadow: false });
       }
     }
     // drains

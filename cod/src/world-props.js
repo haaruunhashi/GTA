@@ -101,11 +101,20 @@ export function shutter(B, w, h, o = {}) {
 
 // Baked contact occlusion under a prop. Screen-space AO cannot see the tight
 // crease where a thin object meets the ground, and without it every prop in
-// the map reads as a sticker hovering a centimetre above the tarmac. One
-// multiply-blended quad, laid flat, slightly larger than the footprint.
+// the map reads as a sticker hovering a centimetre above the tarmac.
+//
+// Two laid-flat quads: a tight core roughly the size of the footprint, and a
+// broad, much weaker wash around it. Real contact shading has both — the hard
+// line where the object touches, and the ambient dimming of the metre of floor
+// around it — and one gradient cannot be both without looking airbrushed.
 export function contact(B, rx, rz = rx, o = {}) {
-  B.quad('decal_ao', o.x ?? 0, o.y ?? 0.015, o.z ?? 0, rx * 2, rz * 2,
-    { rotX: -Math.PI / 2, rotZ: o.rot ?? 0, dirt: false, shadow: false });
+  const x = o.x ?? 0, y = o.y ?? 0.015, z = o.z ?? 0, rot = o.rot ?? 0;
+  if (o.soft !== false) {
+    B.quad('decal_ao_soft', x, y - 0.002, z, rx * 3.4, rz * 3.4,
+      { rotX: -Math.PI / 2, rotZ: rot, dirt: false, shadow: false });
+  }
+  B.quad('decal_ao', x, y, z, rx * 2, rz * 2,
+    { rotX: -Math.PI / 2, rotZ: rot, dirt: false, shadow: false });
 }
 
 /* -------------------------------------------------------- street furniture */
@@ -320,9 +329,13 @@ export function sandbagWall(B, len, rows, rnd, o = {}) {
   // bottom course. The dirt alone left the row looking laid on top of the road.
   B.quad('decal_dirt', 0, 0.014, 0, len + 0.9, dz * depth + 1.1,
     { rotX: -Math.PI / 2, dirt: false, shadow: false, tint: 0xbfae8c });
+  // one wash over the whole emplacement, then tight cores under each run of
+  // bags — overlapping washes would compound into a painted shadow
+  B.quad('decal_ao_soft', 0, 0.016, 0, len + 1.6, dz * depth + 1.9,
+    { rotX: -Math.PI / 2, dirt: false, shadow: false });
   const seg = Math.max(1, Math.round(len / 1.2));
   for (let i = 0; i < seg; i++) {
-    contact(B, 0.7, dz * depth * 0.5 + 0.42, { x: -len / 2 + (i + 0.5) * (len / seg), y: 0.018 });
+    contact(B, 0.7, dz * depth * 0.5 + 0.42, { x: -len / 2 + (i + 0.5) * (len / seg), y: 0.018, soft: false });
   }
   B.collider(-len / 2, len / 2, 0, rows * py + 0.05, -dz * depth * 0.5 - 0.14, dz * depth * 0.5 + 0.14);
 }
@@ -489,7 +502,9 @@ export function rubblePile(B, r, rnd, o = {}) {
   contact(B, r * 0.85);
   for (let i = 0; i < 3; i++) {
     const a = i * 2.1, rr = r * 0.55;
-    contact(B, r * 0.5, r * 0.45, { x: Math.cos(a) * rr, z: Math.sin(a) * rr, rot: a });
+    // core only — the outer wash is already covered by the pile-wide contact
+    // above, and three more of them stacked would read as a painted shadow
+    contact(B, r * 0.5, r * 0.45, { x: Math.cos(a) * rr, z: Math.sin(a) * rr, rot: a, soft: false });
   }
   for (let i = 0; i < n; i++) {
     const a = rnd() * 7, rr = Math.pow(rnd(), 0.6) * r;

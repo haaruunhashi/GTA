@@ -61,7 +61,10 @@ export class Match {
   /* ------------------------------------------------------------ scoring */
 
   onKill() {
-    if (this.state !== 'live') return;
+    // Kills land during the intro too — a bot killed in the opening second used
+    // to be silently dropped, which the gameplay test caught.
+    if (this.state === 'over') return;
+    if (this.state === 'intro') { this.state = 'live'; this.stateT = 0; }
     this.kills++;
     this.score += this.mode.perKill;
     this.streak++;

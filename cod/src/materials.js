@@ -966,6 +966,10 @@ export class Materials {
       case 'decal_grime': return this.decalGrime('base');
       case 'decal_drip': return this.decalGrime('drip');
       case 'decal_ao': return this.decalAO();
+      // Broad, weak version for the wash of soft occlusion that surrounds a
+      // contact crease. Strength has to come from a second material because the
+      // decal carries no vertex colour to modulate (its albedo is black).
+      case 'decal_ao_soft': return this.decalAO(0.34);
       case 'roadline': return this.roadline();
       case 'chainlink': return this.chainlink();
       case 'signs': return this.signs();
@@ -1241,35 +1245,47 @@ vec3 winRoom(vec2 uv, vec3 rd, vec3 T, vec3 Bt, vec3 Nn, float id) {
   // a centimetre above the tarmac, and screen-space AO cannot be relied on to
   // find it under thin geometry at grazing angles.
   //
-  // Built on exactly the same footing as the dirt and grime decals — a lit
-  // standard material with a radial alpha — because that is the decal path this
-  // pipeline demonstrably renders. An unlit multiply-blended version looked
-  // correct on paper and came out completely invisible: a multiply source has
-  // to sit at 1.0 to be a no-op, and the scene's height fog rewrites
-  // gl_FragColor toward a bright inscatter, which drags the source to white.
-  // Being lit is also the more correct behaviour: occlusion should not make a
-  // surface darker than its own shadow.
-  decalAO() {
+  // WHY THIS IS A BLACK, UNLIT-IN-PRACTICE MATERIAL, take three.
+  //
+  // Attempt 1 was multiply blending: invisible, because the scene's height fog
+  // rewrites the fragment toward a bright inscatter and a multiply source has
+  // to sit at 1.0 to be a no-op, so everything drifted to white.
+  //
+  // Attempt 2 was a normal lit decal with a very dark albedo, on the theory
+  // that "dark albedo over dark road" darkens. It does not, for two compounding
+  // reasons found by reading the frame: (a) the batcher gives every TRANSPARENT
+  // merged mesh `receiveShadow = false`, so a contact decal lying inside a
+  // building's shadow was being lit by the full golden-hour key while the road
+  // under it was not — the occlusion decals were rendering BRIGHTER than their
+  // surroundings; (b) even in sun, albedo 0.05 under a strong key and sky IBL
+  // is not dark, it is mid-grey, which is why the sibling dirt decal (#2c261d)
+  // reads as a PALE patch on the tarmac rather than a dark one.
+  //
+  // So: albedo exactly black with no map and no environment specular. Then the
+  // fragment carries no light of its own at any exposure, in sun or in shade,
+  // and alpha blending is doing pure "multiply toward black" — which is what
+  // ambient occlusion is. Fog still applies, so distant contact shadows lift
+  // into the haze on their own.
+  decalAO(peak = 0.86) {
     const rnd = seeded('contactao');
     const s = 128;
-    const ac = CV(s), g = ac.getContext('2d', { willReadFrequently: true });
-    g.fillStyle = '#0b0a09'; g.fillRect(0, 0, s, s);
-    fbm(g, s, rnd, { octaves: 3, cells: 3, amp: 0.22 });
     const al = CV(s), ag = al.getContext('2d', { willReadFrequently: true });
     ag.fillStyle = '#000'; ag.fillRect(0, 0, s, s);
-    // tight core, long soft tail — the shape real contact occlusion has
+    // tight core, long soft tail — the shape real contact occlusion has.
+    // Peak stops short of 1.0: even a hard contact crease is not a black hole.
     const grd = ag.createRadialGradient(s / 2, s / 2, 0, s / 2, s / 2, s / 2);
-    grd.addColorStop(0, 'rgba(255,255,255,1.0)');
-    grd.addColorStop(0.24, 'rgba(255,255,255,0.86)');
-    grd.addColorStop(0.52, 'rgba(255,255,255,0.42)');
-    grd.addColorStop(0.8, 'rgba(255,255,255,0.11)');
+    const A = k => `rgba(255,255,255,${(peak * k).toFixed(3)})`;
+    grd.addColorStop(0, A(1.0));
+    grd.addColorStop(0.26, A(0.77));
+    grd.addColorStop(0.54, A(0.35));
+    grd.addColorStop(0.8, A(0.09));
     grd.addColorStop(1, 'rgba(255,255,255,0)');
     ag.fillStyle = grd; ag.fillRect(0, 0, s, s);
     // break the perfect circle so it never reads as an airbrushed disc
-    ag.save(); ag.globalAlpha = 0.2; fbm(ag, s, rnd, { octaves: 3, cells: 4, amp: 0.6, op: 'multiply' }); ag.restore();
+    ag.save(); ag.globalAlpha = 0.22; fbm(ag, s, rnd, { octaves: 3, cells: 4, amp: 0.6, op: 'multiply' }); ag.restore();
     const m = new THREE.MeshStandardMaterial({
-      map: texture(ac, true), alphaMap: texture(al, false), transparent: true,
-      roughness: 1.0, metalness: 0, depthWrite: false, vertexColors: true,
+      color: 0x000000, alphaMap: texture(al, false), transparent: true,
+      roughness: 1.0, metalness: 0, envMapIntensity: 0, depthWrite: false,
       polygonOffset: true, polygonOffsetFactor: -6, polygonOffsetUnits: -6,
     });
     m.userData.tile = 0;

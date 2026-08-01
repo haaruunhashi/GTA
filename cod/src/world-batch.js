@@ -325,11 +325,15 @@ export class Batcher {
         // map, so it has to carry the whole read. Three terms — a broad
         // splash-back wash, a mid crease over the first ~600 mm, and a hard
         // core in the last ~180 mm where the object actually touches.
+        // Pulled back from 0.20/0.26/0.44 once the ground-side contact decals
+        // started rendering: with occlusion coming from both sides, the old
+        // curve stacked on top of it and took the bottom course of every
+        // sandbag emplacement to near-black.
         d = 1
-          - 0.20 * Math.exp(-yy / 1.4)
-          - 0.26 * Math.exp(-yy / 0.55) * (1 - upness * upness)
-          - 0.44 * Math.exp(-yy / 0.18) * (1 - upness * upness);
-        if (d < 0.12) d = 0.12;
+          - 0.13 * Math.exp(-yy / 1.4)
+          - 0.19 * Math.exp(-yy / 0.55) * (1 - upness * upness)
+          - 0.42 * Math.exp(-yy / 0.18) * (1 - upness * upness);
+        if (d < 0.18) d = 0.18;
       }
       g.col.push(cr * d, cg * d, cb * d);
     }
