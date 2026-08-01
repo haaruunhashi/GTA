@@ -484,6 +484,13 @@ function catenary(a, b, t, sag) {
 
 export function rubblePile(B, r, rnd, o = {}) {
   const n = o.n ?? 26;
+  // occlusion under the heap itself, plus the dust decal further down: the dirt
+  // alone left the pile looking scattered on top of the ground
+  contact(B, r * 0.85);
+  for (let i = 0; i < 3; i++) {
+    const a = i * 2.1, rr = r * 0.55;
+    contact(B, r * 0.5, r * 0.45, { x: Math.cos(a) * rr, z: Math.sin(a) * rr, rot: a });
+  }
   for (let i = 0; i < n; i++) {
     const a = rnd() * 7, rr = Math.pow(rnd(), 0.6) * r;
     const x = Math.cos(a) * rr, z = Math.sin(a) * rr;
@@ -525,9 +532,31 @@ export function wreckedCar(B, rnd, o = {}) {
   // chassis / sills
   B.box(body, 0, 0.55, 0, L, 0.52, W, {});
   B.box('black', 0, 0.3, 0, L - 0.5, 0.28, W - 0.12, { dirt: false });
-  // bonnet & boot — each panel a shade off its neighbour so the form reads
-  B.box(body, L * 0.3, 0.86, 0, L * 0.36, 0.16, W - 0.16, { rotZ: 0.03, tint: burnt ? 0xb6b2ae : undefined });
+  // Bonnet & boot. Split down the middle and each half tipped a different way:
+  // a burnt car's panels are always buckled, and one continuous flat plane the
+  // size of a bonnet is what made this prop read as a black slab at close range.
+  for (const sz of [-1, 1]) {
+    B.box(body, L * 0.3, 0.86 + (sz > 0 ? 0.02 : 0), sz * (W - 0.16) * 0.25,
+      L * 0.36, 0.15, (W - 0.16) * 0.5, {
+        rotZ: 0.03 + sz * 0.035, rotX: sz * 0.05,
+        tint: burnt ? (sz > 0 ? 0xb6b2ae : 0x8d8880) : undefined,
+      });
+  }
   B.box(body, -L * 0.34, 0.88, 0, L * 0.3, 0.18, W - 0.16, { rotZ: -0.02, tint: burnt ? 0xd2ccc4 : undefined });
+  // shut lines: bonnet/wing and door seams, as thin dark inserts
+  B.box('black', L * 0.11, 0.9, 0, 0.045, 0.1, W - 0.2, { dirt: false });
+  for (const sz of [-1, 1]) {
+    B.box('black', -0.06, 0.72, sz * (W / 2 + 0.005), 0.05, 0.44, 0.03, { dirt: false });
+    B.box('black', -L * 0.3, 0.72, sz * (W / 2 + 0.005), 0.05, 0.44, 0.03, { dirt: false });
+    // wheel arch lips — the curve over the tyre is most of a car's near silhouette
+    for (const sx of [-1, 1]) {
+      for (let k = 0; k < 5; k++) {
+        const a = -0.9 + k * 0.45;
+        B.box(body, sx * L * 0.32 + Math.sin(a) * 0.42, 0.58 + Math.cos(a) * 0.42, sz * (W / 2 - 0.01),
+          0.2, 0.09, 0.07, { rotZ: -a, tint: burnt ? 0x7c776f : undefined, dirt: false });
+      }
+    }
+  }
   // cabin: A/C/B pillars + roof, roof crushed
   B.box(body, -0.1, 1.32, 0, L * 0.42, 0.1, W - 0.2,
     { rotZ: o.crushed ? -0.08 : 0, rotX: 0.02, tint: burnt ? 0xc8c2ba : undefined });

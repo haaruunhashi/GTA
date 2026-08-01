@@ -628,18 +628,26 @@ const DEFS = {
   // lights it. Burnt panels are dark but they are still visibly LIT in raking
   // sun: mid-dark grey-brown albedo, mostly dielectric, and rough.
   charred: {
-    tile: 1.4, size: 256, r0: 0.5, r1: 0.88, nrm: 0.3, ao: 0.22, metal: 0.28,
+    tile: 1.4, size: 256, r0: 0.52, r1: 0.9, nrm: 0.3, ao: 0.22, metal: 0.16,
     albedo(g, s, rnd) {
-      g.fillStyle = '#39352f'; g.fillRect(0, 0, s, s);
+      // NOTE on value, take two: #39352f at metalness 0.28 came out as a
+      // featureless black slab the moment the wreck stood in shadow, which is
+      // where wrecks usually stand. Soot is a dielectric powder — it is dark but
+      // it still scatters skylight, and burnt panels always carry pale ash and
+      // heat-bleached patches. Base lifted to a mid grey-brown and the darks are
+      // now the *blotches*, not the base.
+      g.fillStyle = '#605a52'; g.fillRect(0, 0, s, s);
       fbm(g, s, rnd, { octaves: 4, cells: 4, amp: 0.3 });
       // soot bloom and heat-bleached patches where the paint burned off
-      blotch(g, s, rnd, { n: 22, r0: 0.05, r1: 0.26, colors: ['#0d0c0c', '#3a3734', '#2b2622'], alpha: 0.38 });
+      blotch(g, s, rnd, { n: 22, r0: 0.05, r1: 0.26, colors: ['#221f1d', '#4a453f', '#332f2b'], alpha: 0.4 });
+      // pale ash and bleached primer sitting on the panels
+      blotch(g, s, rnd, { n: 14, r0: 0.04, r1: 0.2, colors: ['#8e887c', '#a09a8e', '#77726a'], alpha: 0.26 });
       // sparse rust bleed — restricted so it never dominates
-      blotch(g, s, rnd, { n: 9, r0: 0.02, r1: 0.09, colors: ['#5c3c22', '#6b4526'], alpha: 0.3 });
+      blotch(g, s, rnd, { n: 9, r0: 0.02, r1: 0.09, colors: ['#6d4526', '#7d5230'], alpha: 0.3 });
       // blistered paint flakes lifting off
       for (let i = 0; i < 260; i++) {
         const x = rnd() * s, y = rnd() * s, r = 1 + rnd() * 3.5;
-        g.fillStyle = rnd() < 0.5 ? 'rgba(96,90,84,0.35)' : 'rgba(14,13,12,0.5)';
+        g.fillStyle = rnd() < 0.5 ? 'rgba(150,144,134,0.32)' : 'rgba(20,18,16,0.45)';
         g.beginPath(); g.ellipse(x, y, r, r * (0.5 + rnd()), rnd() * 3, 0, 7); g.fill();
       }
       speckle(g, s, rnd, { n: 2000, r: 1.0, light: 0.12, dark: 0.22 });

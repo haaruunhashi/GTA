@@ -663,8 +663,13 @@ export class World {
     B.push(-3.5, 0, -12, 0.06); jerseyBarrier(B, 3.0, { stripe: true }); B.pop(); this.cover(-3.5, -12);
     B.push(-0.4, 0, -12.4, -0.04); jerseyBarrier(B, 3.0, { stripe: true }); B.pop();
     B.push(4.2, 0, -13.5, 0.5); jerseyBarrier(B, 3.0, {}); B.pop(); this.cover(4.2, -13.5);
-    B.push(2.0, 0, 16.0, Math.PI / 2 + 0.1); wreckedCar(B, rng, { burnt: true, crushed: true, missing: 2 }); B.pop();
-    this.cover(2.0, 16.0);
+    // The burnt wreck used to sit at z=16, which is 2 m in front of the south
+    // half of the street — close enough that it filled a third of the frame as
+    // an unreadable dark mass and read as a bug rather than as cover. Moved up
+    // the lane and angled across it: at 12 m it reads as a car, and it blocks
+    // the sightline the way a piece of mid-street cover should.
+    B.push(3.4, 0, 7.5, Math.PI / 2 - 0.34); wreckedCar(B, rng, { burnt: true, crushed: true, missing: 2 }); B.pop();
+    this.cover(3.4, 7.5);
     B.push(-5.0, 0, 24.0, Math.PI / 2 - 0.25); wreckedCar(B, rng, { burnt: false, mat: 'paint_green' }); B.pop();
     this.cover(-5.0, 24.0);
     B.push(5.5, 0, -32.0, 0.0); sandbagWall(B, 4.0, 3, rng, { depth: 2 }); B.pop(); this.cover(5.5, -32);
