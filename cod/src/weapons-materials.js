@@ -43,29 +43,91 @@ function tex(key, size, draw) {
   return t;
 }
 
-// name -> [colour, roughness, metalness, envIntensity]
-// Chosen so no two adjacent parts share both value and gloss: the receiver reads
-// darker and flatter than the barrel, and the polymer furniture flatter still.
-// envIntensity is well under 1 on purpose — scene.environmentIntensity is ~2.9 at
-// golden hour, and a black rifle that reflects that at 1.0 turns into a sky mirror.
+// name -> [colour, roughness, metalness, envIntensity, anisotropy]
+//
+// VALUES ARE CALIBRATED, NOT PICKED BY EYE. Sampling the round-6 capture over the
+// weapon's screen region gave 12.5 % of pixels at luma < 3 (pure crushed black: the
+// magazine, the gloves, every surface facing away from the sun) against blown 254s on
+// the barrel and optic hood — a weapon with no mid-tones at all, which is what reads
+// as "flat". Two things caused it: albedos around 0.012 linear, which return nothing
+// under anything but direct sun, and metals at envIntensity 0.60 against a scene
+// environmentIntensity of 2.9, which clipped. So albedos come up into the 0.025-0.05
+// linear band real gun polymer actually sits in, metal envIntensity comes down, and
+// weapons.js lights the viewmodel with its own small rig so form survives world shadow.
+//
+// The gunmetal/polymer distinction is carried by GLOSS, not by value — they sit at
+// similar darkness, but anodised aluminium has a tight anisotropic highlight streaked
+// along the bore axis (the UV bake in weapons-geo.js puts U along Z for exactly this)
+// while polymer is broad and matte. That contrast is what makes a gun read as a gun.
+// [colour, roughness, metalness, envIntensity, anisotropy, detailMap]
+// `roughness` is the EFFECTIVE value wanted on screen; where detailMap is set the
+// stored roughness is divided by the map's 0.80 mean so the two agree.
 const DEFS = {
-  // furniture
-  polymer: [0x1e2024, 0.72, 0.03, 0.60],
-  polymerTan: [0x5d4f36, 0.75, 0.03, 0.60],
-  rubber: [0x151719, 0.90, 0.00, 0.50],
-  wood: [0x452e1b, 0.55, 0.00, 0.60],
-  // metal
-  alu: [0x3f434a, 0.50, 0.62, 0.60],   // anodised receiver, rails, handguard
-  steel: [0x565c64, 0.36, 0.84, 0.70],   // bare barrel / bolt
-  steelDark: [0x2f3237, 0.50, 0.70, 0.70],   // phosphate: brake, sights, port cover
-  brass: [0xb08a37, 0.30, 1.00, 0.90],
-  optic: [0x24272b, 0.44, 0.30, 0.60],
+  // furniture — matte, low chroma, no anisotropy
+  polymer: [0x2f3136, 0.66, 0.02, 0.40, 0, 1],
+  polymerTan: [0x6a5c42, 0.70, 0.02, 0.40, 0, 1],
+  rubber: [0x232528, 0.88, 0.00, 0.30],
+  wood: [0x53381f, 0.52, 0.00, 0.45, 0, 1],
+  // metal — glossier, anisotropic along the bore. envIntensity is down from round 11:
+  // the up-facing top rail was clipping to 250 against a near-black receiver behind it.
+  alu: [0x4a4f57, 0.52, 0.88, 0.30, 0.55, 1],   // anodised receiver, rails, handguard
+  steel: [0x70777f, 0.34, 1.00, 0.38, 0.70, 1],   // bare barrel / bolt
+  steelDark: [0x2c2f34, 0.60, 0.86, 0.30, 0.45, 1],   // phosphate: brake, sights, port cover
+  brass: [0xb08a37, 0.30, 1.00, 0.70],
+  optic: [0x2a2d32, 0.38, 0.35, 0.30, 0.30, 1],
   // arms
-  glove: [0x1d1f23, 0.70, 0.03, 0.60],
-  gloveGrip: [0x282b30, 0.52, 0.05, 0.75],   // rubberised knuckle plate: glossier, so
+  glove: [0x2b2d31, 0.72, 0.02, 0.42, 0, 1],
+  gloveGrip: [0x3a3e44, 0.46, 0.06, 0.55],   // rubberised knuckle plate: glossier, so
                                              // it catches a highlight and the hand reads
-  sleeve: [0x3c3928, 0.85, 0.00, 0.60],
+  sleeve: [0x4a4634, 0.84, 0.00, 0.45, 0, 1],
 };
+const DETAIL_MEAN = 0.80;
+
+/* ------------------------------------------------------------- detail map */
+
+// ONE map, roughness only, and it is authored to the rule the header lays down: the
+// weapon covers ~1.4 mm of object per screen pixel, so at TEX_METRES = 0.5 a 512 px
+// tile is ~1 mm/texel — magnified about 1.4x on screen rather than minified. The
+// round-4 "pastel foil gift wrap" failure was not caused by having a map, it was
+// caused by high-frequency CONTENT being minified ~9x. So everything drawn here is
+// deliberately low frequency: the tightest feature is a ~13 mm brushing streak, which
+// is still ~9 screen pixels wide at the distance the viewmodel is actually rendered.
+//
+// Roughness only, because roughness is what separates gunmetal from polymer, and it
+// cannot shift hue — a bad roughness map looks slightly wrong, a bad albedo or normal
+// map looks like foil.
+let ROUGH = null;
+function roughnessDetail() {
+  if (ROUGH) return ROUGH;
+  const S = 512;
+  const c = canvas(S, (g) => {
+    g.fillStyle = '#cccccc'; g.fillRect(0, 0, S, S);       // mean 0.80
+    // brushing along U (the UV bake runs U down the bore), so streaks follow the barrel
+    for (let i = 0; i < 46; i++) {
+      const y = (i + Math.sin(i * 2.7) * 0.4) * (S / 46);
+      const v = 178 + Math.floor(Math.sin(i * 1.9) * 26 + Math.sin(i * 0.7) * 22);
+      g.strokeStyle = `rgb(${v},${v},${v})`;
+      g.lineWidth = S / 46 * (0.5 + 0.5 * Math.abs(Math.sin(i * 1.3)));
+      g.beginPath(); g.moveTo(0, y); g.lineTo(S, y); g.stroke();
+    }
+    // broad wear/oil blotches: polished patches where a hand or a sling rubs
+    for (let i = 0; i < 14; i++) {
+      const x = ((i * 137.5) % 360) / 360 * S, y = ((i * 71.3) % 360) / 360 * S;
+      const r = S * (0.07 + (i % 4) * 0.028);
+      const gr = g.createRadialGradient(x, y, 0, x, y, r);
+      const v = i % 3 === 0 ? 255 : 150;                    // duller grime / polished wear
+      gr.addColorStop(0, `rgba(${v},${v},${v},0.42)`);
+      gr.addColorStop(1, `rgba(${v},${v},${v},0)`);
+      g.fillStyle = gr; g.fillRect(x - r, y - r, r * 2, r * 2);
+    }
+  });
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;   // UVs are metres*2 and go negative
+  t.colorSpace = THREE.NoColorSpace;          // data, not colour
+  t.anisotropy = 8;                           // the grazing angles are the whole problem
+  ROUGH = t;
+  return t;
+}
 
 export class GunMats {
   constructor(ctx) { this.ctx = ctx; this.cache = new Map(); }
@@ -82,11 +144,24 @@ export class GunMats {
   _build(name) {
     const d = DEFS[name];
     if (d) {
-      return new THREE.MeshStandardMaterial({
+      // Anisotropic parts need MeshPhysicalMaterial; everything else stays on the
+      // cheaper Standard shader. Only three materials take the upgrade, so the
+      // viewmodel is still 3-6 draw calls and a handful of shader variants.
+      const p = {
         name: 'gun_' + name,
-        color: d[0], roughness: d[1], metalness: d[2], envMapIntensity: d[3],
-        vertexColors: true,
-      });
+        color: d[0], metalness: d[2], envMapIntensity: d[3], vertexColors: true,
+        roughness: d[5] ? d[1] / DETAIL_MEAN : d[1],
+      };
+      if (d[5]) p.roughnessMap = roughnessDetail();
+      // Anisotropic parts need MeshPhysicalMaterial; everything else stays on the
+      // cheaper Standard shader. Only four materials take the upgrade, so the
+      // viewmodel is still 3-6 draw calls and a handful of shader variants.
+      if (d[4]) {
+        p.anisotropy = d[4];      // U runs along the bore, so the streak follows
+        p.anisotropyRotation = 0; // the barrel
+        return new THREE.MeshPhysicalMaterial(p);
+      }
+      return new THREE.MeshStandardMaterial(p);
     }
     switch (name) {
       // Optic glass: a thin tinted pane. depthWrite off so the reticle behind it and

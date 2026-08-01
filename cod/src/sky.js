@@ -58,7 +58,21 @@ const PRESETS = {
     // than the sky was. So: sun up 1.75x, the two warm fill terms down hard, the
     // cool sky term back up in chroma, and the sun leak through the shadow cut
     // from 8 % to 3.5 %.
-    sunColor: [1.0, 0.74, 0.47], sunIntensity: 22.0,
+    // ROUND 7, MEASURED on shots/lightao1 (tools/_cmp.mjs): sunlit road came
+    // back at **luma 200, sd 21** and shaded road at 56 with B/R 0.77. Both
+    // halves of that are defects. 200 is deep into the ACES shoulder plus the
+    // 0.925 white-point stretch, so the asphalt albedo and normal map are being
+    // compressed out of existence — that is the "flat pale wash" on the lit road
+    // and the reason the shadow boundary reads as a painted edge rather than a
+    // tonal step on one continuous material. And B/R 0.77 means the *shade* is
+    // warmer than the key, i.e. defect 12 had come back: a one-hue image.
+    // Round 5 cut the warm fills but left envInt high, and the PMREM of a
+    // golden-hour sky is dominated by the amber horizon, not the blue zenith —
+    // so "sky ambient" was the warm term all along. The fix is to take the key
+    // down out of the shoulder and the fill down further still (fill -45 %, key
+    // -30 %), and to move what is left of the fill from the amber IBL into the
+    // hemisphere, which is the only cool term in the rig.
+    sunColor: [1.0, 0.74, 0.47], sunIntensity: 16.5,
     // skyLum was 5.2, which drove the whole sky dome past the ACES shoulder:
     // every azimuth of the horizon saturated to uSunColor and the upper frame
     // clipped to a flat 225-luma amber wash. Lower luminance is what lets the
@@ -94,13 +108,29 @@ const PRESETS = {
     // *and* unshadowed), bounce keeps its hue but a third of its energy so it
     // still lifts shadow-side walls and gives shaded ground some directional
     // relief without repainting the shade amber.
-    hemiSky: [0.52, 0.64, 0.90], hemiGround: [0.22, 0.20, 0.18], hemiInt: 1.05, envInt: 1.35,
-    bounce: [1.00, 0.72, 0.48], bounceInt: 0.60,
+    // Fill budget, round 7. Probing matched road patches through the sun mask
+    // (tools/_hist.mjs on street-sunwhite vs street-base) gives the honest
+    // numbers: fully sunlit mid-road luma 163, fully shadowed mid-road luma 28
+    // with B/R 1.04 — a 5.8:1 key:fill on a cool shade, which is the two-colour
+    // golden hour the critique asked for. But the same cut put shadowed *props*
+    // at luma 14: the sandbag stack went to a black silhouette, which is the
+    // round-3 "loses its albedo in shade" failure moved onto the props. So the
+    // fill goes back up — but all of the increase lands on the hemisphere, the
+    // one term that is both cool and unshadowed, rather than on the amber IBL or
+    // the warm bounce that made the image monochrome in the first place.
+    // hemiGround is warmed slightly: it is what lifts the undersides of stacked
+    // props, and bounce off sunlit tarmac really is warm.
+    hemiSky: [0.42, 0.58, 0.95], hemiGround: [0.28, 0.24, 0.20], hemiInt: 1.70, envInt: 1.05,
+    bounce: [1.00, 0.84, 0.70], bounceInt: 0.52,
     fog: { density: 0.0046, falloff: 15, base: -1, start: 18,
            color: [0.072, 0.098, 0.150], lowColor: [0.118, 0.122, 0.148],
            sunColor: [0.34, 0.20, 0.10], minT: 0.12, aniso: 0.72 },
     post: {
-      exposure: 1.38, contrast: 1.12, saturation: 1.06, toe: 0.010, split: 0.46, white: 0.925,
+      // white 0.925 was stretching an already-shouldered highlight another 8 %
+      // toward clipping; 0.965 keeps the sun disc and specular clipping (true
+      // whites are still present, verified by histogram) while giving the lit
+      // asphalt back its texture.
+      exposure: 1.34, contrast: 1.13, saturation: 1.07, toe: 0.012, split: 0.50, white: 0.965,
       lift: [-0.002, 0.000, 0.006], gamma: [1.0, 1.0, 1.01], gain: [1.03, 1.0, 0.975],
       shadowTint: [0.90, 0.98, 1.10], highTint: [1.12, 1.00, 0.84],
       vignette: 0.42, ca: 1.4, grain: 0.030, sharpen: 0.55,

@@ -70,8 +70,19 @@ function redDot(r, mats, z, y, style = 'dot') {
   return sight;
 }
 
-function ironSights(r, mats, zFront, zRear, y) {
+// Backup irons. `folded` draws them lying flat along the rail, which is how a rifle
+// wearing a red dot actually carries them — left upright they stand between the eye
+// and the optic and put a second, misaligned aperture ring directly under the dot in
+// the ADS frame, which is what the round-2 review read as "the sight is not aligned".
+function ironSights(r, mats, zFront, zRear, y, folded) {
   const st = mats.get('steelDark');
+  if (folded) {
+    r.s(box(0.026, 0.009, 0.040), st, [0, y + 0.004, zFront]);
+    r.s(box(0.020, 0.007, 0.030), st, [0, y + 0.010, zFront - 0.004], [0.10, 0, 0]);
+    r.s(box(0.026, 0.009, 0.038), st, [0, y + 0.004, zRear]);
+    r.s(box(0.019, 0.007, 0.028), st, [0, y + 0.010, zRear + 0.004], [-0.10, 0, 0]);
+    return r.anchor([0, y + 0.010, zRear]);
+  }
   // front post in its wings
   r.s(box(0.004, 0.020, 0.006), st, [0, y + 0.014, zFront]);
   r.s(box(0.004, 0.024, 0.006), st, [0.010, y + 0.016, zFront]);
@@ -170,7 +181,7 @@ function buildAR(mats) {
   r.s(ring(0.011, 0.0025, 10), sd, [0.028, -0.014, -0.330], [0, Math.PI / 2, 0]);
   r.s(ring(0.011, 0.0025, 10), sd, [0.020, -0.024, 0.056], [0, Math.PI / 2, 0]);
   // folded backup irons on the rail (behind the optic)
-  ironSights(r, mats, -0.320, -0.075, 0.036);
+  ironSights(r, mats, -0.320, -0.075, 0.036, true);
 
   const optic = redDot(r, mats, -0.185, 0.075, 'dot');
 
@@ -186,11 +197,11 @@ function buildAR(mats) {
   const arms = attachArms(root, mats, {
     grip: {
       pos: [0.019, -0.086, 0.029], seq: [['x', 0.30], ['z', Math.PI / 2]],
-      curl: 1.12, index: 0.78, thumb: 0.55, elbow: [0.15, -0.40, 0.30],
+      curl: 1.12, index: 0.78, thumb: 0.55, elbow: [0.10, -0.46, 0.13],
     },
     support: {
       pos: [-0.043, -0.010, -0.338], seq: [['z', -0.62], ['y', -Math.PI / 2], ['z', 0.30]],
-      curl: 1.08, thumb: 0.15, elbow: [-0.19, -0.42, 0.06],
+      curl: 1.08, thumb: 0.15, elbow: [-0.17, -0.50, -0.03],
       mag: {
         pos: [0.000, -0.212, -0.118], seq: [['z', -0.15], ['y', -Math.PI / 2], ['z', 2.00]],
         elbow: [-0.20, -0.44, 0.16],
@@ -251,11 +262,11 @@ function buildSMG(mats) {
   const arms = attachArms(root, mats, {
     grip: {
       pos: [0.019, -0.070, -0.030], seq: [['x', 0.16], ['z', Math.PI / 2]],
-      curl: 1.12, index: 0.78, thumb: 0.55, elbow: [0.15, -0.38, 0.26],
+      curl: 1.12, index: 0.78, thumb: 0.55, elbow: [0.10, -0.44, 0.11],
     },
     support: {
       pos: [-0.012, -0.102, -0.294], seq: [['z', -0.10], ['y', -Math.PI / 2], ['z', 1.35]],
-      curl: 1.05, thumb: 0.55, elbow: [-0.17, -0.40, -0.02],
+      curl: 1.05, thumb: 0.55, elbow: [-0.16, -0.48, -0.10],
       mag: {
         pos: [0.000, -0.206, -0.052], seq: [['z', -0.15], ['y', -Math.PI / 2], ['z', 2.00]],
         elbow: [-0.20, -0.42, 0.16],
@@ -318,13 +329,13 @@ function buildShotgun(mats) {
   const arms = attachArms(root, mats, {
     grip: {
       pos: [0.019, -0.074, 0.012], seq: [['x', 0.28], ['z', Math.PI / 2]],
-      curl: 1.12, index: 0.78, thumb: 0.55, elbow: [0.15, -0.40, 0.28],
+      curl: 1.12, index: 0.78, thumb: 0.55, elbow: [0.10, -0.46, 0.12],
     },
     support: null,
   });
   const armL = makeArm(mats, -1, { curl: 1.05, thumb: 0.25 });
   place(armL.root, [-0.046, -0.030, -0.300], [['z', -0.60], ['y', -Math.PI / 2], ['z', 0.20]]);
-  aimFore(armL.root, armL.fore, [-0.24, -0.34, -0.06]);
+  aimFore(armL.root, armL.fore, [-0.22, -0.46, -0.14]);
   armL.root.traverse(o => { if (o.isMesh) o.renderOrder = 11; });
   pump.add(armL.root);
   armL.rest = { pos: armL.root.position.clone(), quat: armL.root.quaternion.clone() };
@@ -424,11 +435,11 @@ function buildSniper(mats) {
   const arms = attachArms(root, mats, {
     grip: {
       pos: [0.019, -0.084, -0.016], seq: [['x', 0.26], ['z', Math.PI / 2]],
-      curl: 1.12, index: 0.78, thumb: 0.55, elbow: [0.15, -0.40, 0.28],
+      curl: 1.12, index: 0.78, thumb: 0.55, elbow: [0.10, -0.46, 0.12],
     },
     support: {
       pos: [-0.045, -0.014, -0.352], seq: [['z', -0.60], ['y', -Math.PI / 2], ['z', 0.28]],
-      curl: 1.08, thumb: 0.15, elbow: [-0.19, -0.42, 0.06],
+      curl: 1.08, thumb: 0.15, elbow: [-0.17, -0.50, -0.03],
       mag: {
         pos: [0.000, -0.208, -0.150], seq: [['z', -0.15], ['y', -Math.PI / 2], ['z', 2.00]],
         elbow: [-0.20, -0.44, 0.14],

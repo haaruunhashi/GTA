@@ -138,15 +138,39 @@ export class Weapons {
     this.rig.add(this.gun);
     ctx.camera.add(this.rig);
 
-    // A soft skylight fill so the viewmodel never sinks into shadow. Intensity has to
-    // be tiny: this is an inverse-square point light sitting ~0.3 m from the geometry,
-    // so irradiance is intensity/0.09 — the old value of 2.2 delivered ~24, several
-    // times the sun's 2.6-12.6, which is why the weapon rendered as a blown-out pale
-    // blue mass in every review round regardless of what the materials said.
-    this.fill = new THREE.PointLight(0xd2e0f2, 0.13, 2.2, 2);
-    this.fill.position.set(0.26, 0.20, 0.08);
-    this.fill.castShadow = false;
-    this.rig.add(this.fill);
+    // ---- viewmodel light rig -------------------------------------------------
+    // The viewmodel cannot be lit by the world alone. It receives world shadow, so
+    // whenever the player stands in shade the gun loses the sun entirely and every
+    // dark material collapses to zero — measured at 12.5 % pure-black pixels over the
+    // weapon in the round-6 capture, against clipped 254s where the sun did land.
+    // Every real FPS solves this the same way: the viewmodel gets its own small rig.
+    //
+    // These are point lights, not directionals, precisely so they cannot leak onto the
+    // world: three windows a point light hard to zero at `distance`, and both are
+    // placed and ranged so their reach stops above the ground plane (the eye sits
+    // ~1.6 m up, so a light at camera-space y=+0.42 with distance 1.5 dies 0.5 m short
+    // of the road). Intensity is candela — irradiance is I/d², and the gun sits ~0.6-
+    // 0.7 m away, so these deliver ~1.7 each, in the same band as the world hemisphere
+    // light rather than the 24 that once blew the weapon out to a pale blue mass.
+    // Both lights sit essentially AT the eye, offset up-left and down-right. Round 11
+    // put the key out in front of the weapon instead and it made things worse, not
+    // better: a light beyond the subject lights the subject's far side, so the
+    // camera-facing surfaces measured 0,0,0 while the up-facing top rail blew to 250.
+    // A viewmodel fill has to be a camera-mounted light — it exists to reveal the
+    // faces the player is actually looking at.
+    //
+    // decay is 1, not the physical 2, on purpose: the weapon sits 0.5 m from the eye
+    // when aiming and 1.0 m when hip-firing, and inverse-square across that range
+    // swings the exposure 4x between the two poses. Linear falloff halves that to 2x,
+    // which the pose blend can carry without the gun visibly changing brightness as
+    // it comes up. `distance` still hard-windows both lights to zero well before they
+    // could pool visibly on the road.
+    const key = new THREE.PointLight(0xccd7e8, 0.95, 2.2, 1);   // cool skylight, up-left
+    key.position.set(-0.30, 0.34, -0.14);
+    const rim = new THREE.PointLight(0xffd0a0, 0.50, 1.8, 1);   // warm kicker, low-right
+    rim.position.set(0.62, -0.26, -0.30);
+    for (const l of [key, rim]) { l.castShadow = false; this.rig.add(l); }
+    this.fill = key;
 
     this.models = {};
     this.store = {};

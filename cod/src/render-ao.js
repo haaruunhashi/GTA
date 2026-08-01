@@ -44,16 +44,25 @@ export const AOApplyShader = {
     tDiffuse: { value: null },
     tAO: { value: null },
     uTexel: { value: [1 / 1600, 1 / 900] },
-    uStrength: { value: 3.1 },   // occlusion applied in fully ambient-lit pixels
+    // ROUND 7 — the round-6 numbers were measured to work and still looked
+    // wrong, because the *broad* term had been pushed to 3.1 to make the effect
+    // show up in an A/B diff. An A/B diff is the wrong acceptance test on its
+    // own: at 3.1 a sandbag stack (buffer occlusion ~0.4) lands at k = 1.0 and
+    // is multiplied by uOccColor outright, so the props went to a uniform near
+    // black and lost their albedo — measurably "more AO", visibly less contact.
+    // Contact reads as a *gradient against the ground*, so the broad term has
+    // to stay quiet enough that the local term is the thing you see.
+    uStrength: { value: 0.85 },   // occlusion applied in fully ambient-lit pixels
     uLitFalloff: { value: 0.34 }, // ...scaled to this in fully sun-lit pixels
     uLitLo: { value: 0.35 },      // HDR luminance where the roll-off starts
     uLitHi: { value: 2.20 },      // ...and ends
-    uContact: { value: 3.4 },     // gain on the high-passed (local) occlusion
-    uContactLit: { value: 0.72 }, // contact term survives this much in sunlight
+    uContact: { value: 2.6 },     // gain on the high-passed (local) occlusion
+    uContactLit: { value: 0.88 }, // contact term survives this much in sunlight
     uContactR: { value: 5.0 },    // high-pass ring radius, pixels (innermost)
+    uContactMax: { value: 0.52 }, // ceiling on the local term, so it shades not silhouettes
     // colour multiplier at full occlusion: darkens, and takes the blue down
     // hardest because it is the sky contribution that is being blocked
-    uOccColor: { value: [0.34, 0.28, 0.24] },
+    uOccColor: { value: [0.46, 0.39, 0.34] },
   },
   vertexShader: /* glsl */`
     varying vec2 vUv;
@@ -63,7 +72,7 @@ export const AOApplyShader = {
     uniform sampler2D tAO;
     uniform vec2 uTexel;
     uniform float uStrength, uLitFalloff, uLitLo, uLitHi;
-    uniform float uContact, uContactLit, uContactR;
+    uniform float uContact, uContactLit, uContactR, uContactMax;
     uniform vec3 uOccColor;
     varying vec2 vUv;
     void main() {
@@ -102,7 +111,7 @@ export const AOApplyShader = {
       float L = dot( src.rgb, vec3( 0.2126, 0.7152, 0.0722 ) );
       float lit = smoothstep( uLitLo, uLitHi, L );
       float broad = occ * uStrength * mix( 1.0, uLitFalloff, lit );
-      float loc   = contact * mix( 1.0, uContactLit, lit );
+      float loc   = min( contact, uContactMax ) * mix( 1.0, uContactLit, lit );
       // union rather than sum: a pixel already fully shaded by the broad term
       // must not go negative-black just because it is also a contact pixel
       float k = clamp( 1.0 - ( 1.0 - clamp( broad, 0.0, 1.0 ) ) * ( 1.0 - loc ), 0.0, 1.0 );

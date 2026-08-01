@@ -42,9 +42,15 @@ export function wall(B, o) {
     // ground beside it, and without this the wall still meets the paving in a
     // clean line. Laid in overlapping segments so it reads continuous.
     if (y0 < 0.1) {
+      // A broad wash out across the paving, and a tight core whose peak sits ON
+      // the wall face — so the black centre of the gradient is hidden by the
+      // masonry and only the falloff lands on the pavement. Peaking it out in
+      // the open leaves a painted-looking dark stripe along every building.
+      B.quad('decal_ao_soft', 0, 0.018, t / 2 + 0.55, len + 1.0, 2.6,
+        { rotX: -Math.PI / 2, dirt: false, shadow: false });
       const seg = Math.max(1, Math.round(len / 2.2));
       for (let i = 0; i < seg; i++) {
-        B.quad('decal_ao', -len / 2 + (i + 0.5) * (len / seg), 0.02, t / 2 + 0.34, len / seg + 1.3, 1.5,
+        B.quad('decal_ao', -len / 2 + (i + 0.5) * (len / seg), 0.02, t / 2 + 0.02, len / seg + 1.3, 0.9,
           { rotX: -Math.PI / 2, dirt: false, shadow: false });
       }
     }

@@ -147,7 +147,10 @@ export class World {
           const zz = cz - 4 + i * 2;
           B.quad('decal_ao_soft', sx * (ROAD_HW - 0.85), 0.012, zz, 3.0, 3.2,
             { rotX: -Math.PI / 2, dirt: false, shadow: false });
-          B.quad('decal_ao', sx * (ROAD_HW - 0.22), 0.015, zz, 1.0, 2.9,
+          // the core is centred ON the kerb face, so its peak is half hidden by
+          // the kerb stone and what reaches the tarmac is the falloff, not the
+          // black centre of the gradient
+          B.quad('decal_ao', sx * (ROAD_HW - 0.02), 0.015, zz, 1.1, 2.9,
             { rotX: -Math.PI / 2, dirt: false, shadow: false });
         }
         // and the same crease on the pavement side, where the kerb stone butts
@@ -880,7 +883,9 @@ export const POSES = {
   rooftop: { pos: [-23, 9.2, 4], look: [10, 0.5, -28] },
   gunsight: { pos: [3, 1.62, 22], look: [-1, 1.9, -34], ads: true },
   interior: { pos: [-30, 1.68, -6], look: [-14, 1.6, -9] },
-  courtyard: { pos: [-30, 1.7, -35], look: [-15, 3.5, -18] },
+  // Was [-30,1.7,-35]: that is one metre from the planter at (-30,-34), so the
+  // whole right half of the review frame was the inside of a dead tree trunk.
+  courtyard: { pos: [-31.5, 1.7, -20.5], look: [-24, 2.2, -34] },
   parking: { pos: [33, 1.7, 30], look: [13, 3, 2] },
   // material-review poses: near-field detail on the two surfaces that carry the
   // map — the masonry/glazing of the HQ street elevation, and a sandbag emplacement.

@@ -139,16 +139,34 @@ export function makeArm(mats, side, opt = {}) {
   // glove cuff, then the ripstop sleeve running off the bottom of the frame
   const cuff = mesh(limb(0.026, 0.030, 0.058, 10), gl, 0.7);
   fore.add(cuff);
-  const cuffLip = mesh(limb(0.033, 0.031, 0.014, 10), sl, 0.8);
-  cuffLip.position.z = 0.053;
+  const cuffLip = mesh(limb(0.034, 0.032, 0.016, 10), sl, 0.8);
+  cuffLip.position.z = 0.052;
   fore.add(cuffLip);
-  // The sleeve deliberately overshoots the elbow and runs off the bottom of the
-  // frame. A forearm that stops at a visible flat end cap reads as a floating pipe —
-  // that is what the round-6 review called "the forearm does not connect". Real
-  // viewmodel arms are always cropped by the frame edge, never terminated in view.
-  const arm = mesh(limb(0.031, 0.052, 0.520, 12), sl, 0.5);
-  arm.position.z = 0.064;
-  fore.add(arm);
+
+  // The forearm is TWO segments with a bend between them, not one long cylinder.
+  // Round 10 proved why: a single straight limb aimed at the elbow rendered as a
+  // featureless black pipe running half the height of the frame — the silhouette of
+  // a scaffolding pole, because a constant-radius straight cylinder has no landmark
+  // anywhere along it. Splitting it at the forearm's belly and kinking the second
+  // half gives a changing outline, and the wrist strap gives one hard value break so
+  // the eye can find the wrist. The far end still overshoots the elbow and is cropped
+  // by the frame edge — viewmodel arms are never terminated in view.
+  const strap = mesh(limb(0.033, 0.033, 0.013, 10), mats.get('gloveGrip'), 0.9);
+  strap.position.z = 0.066;
+  fore.add(strap);
+
+  const upper = mesh(limb(0.030, 0.040, 0.150, 12), sl, 0.5);
+  upper.position.z = 0.074;
+  fore.add(upper);
+
+  const bend = new THREE.Group();
+  bend.position.z = 0.222;
+  bend.rotation.x = 0.20;                    // slight kink at the forearm's belly
+  fore.add(bend);
+  bend.add(mesh(limb(0.040, 0.047, 0.230, 12), sl, 0.4));
+  const seam = mesh(limb(0.042, 0.042, 0.012, 12), sl, 0.9);
+  seam.position.z = 0.030;
+  bend.add(seam);
 
   return { root, hand, fore };
 }
