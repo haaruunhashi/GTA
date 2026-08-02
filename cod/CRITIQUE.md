@@ -236,3 +236,32 @@ default under three concurrent agents. All page timeouts now 10 minutes.
 
 Everything else in the frame is now at or near the standard. The weapon is the
 single thing keeping this from passing a blind side-by-side.
+
+---
+
+## Round 7/8 — `shots/critic7/gunsight.png`, `shots/critic8/gunsight.png`
+
+**ADS is finally correct** (defect 3, open since round 2): the red dot is lit and
+sits on screen centre, the crosshair hides, and the optic no longer swallows the
+frame. The weapons agent's per-weapon sight-node maths puts the dot on the camera
+axis with no fudge factor.
+
+**Contact AO is visible** (defect 13, open since round 2): the road now has a
+gutter crease at the kerb and props are seated rather than floating. Two separate
+causes had to be found — the transparent-mesh shadow bug in world-batch.js, and
+three's GTAO rejecting samples via a depth-space `thickness` test that discarded
+almost everything on a camera looking *along* the road.
+
+**Fixed in round 8:** the ADS frame had a white slab across the bottom third. It
+was not lighting and not a material — it was the AR's own buffer tube and butt
+plate. With `adsDist` at 0.240, gun-space z +0.176 at 0.57 scale put the rearmost
+geometry about 5 cm in FRONT of the camera. Eye relief pushed out to 0.335 (and
+proportionally on the other three weapons); sight alignment is unaffected because
+the x/y offsets are negated exactly, so only apparent size changes.
+
+**Still open:**
+1. The receiver still reads pale grey-white rather than gunmetal — the material
+   work is the last unfinished step of the weapons bisection.
+2. Lighting was mid-tune at the cutoff and its own note says shade is now
+   over-darkened (sandbags crushed to luma 14). Fill energy needs restoring
+   without losing the cool shadow separation.

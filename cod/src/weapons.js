@@ -37,7 +37,7 @@ export const WEAPONS = {
     cycle: 0.062, ejectAt: 0.30, boltKind: 'auto',
     vmScale: 0.57,
     hip: [0.250, -0.215, -0.585], hipRot: [-0.020, 0.180, 0.260],
-    adsDist: 0.240, tracerEvery: 3,
+    adsDist: 0.335, tracerEvery: 3,
   },
   smg: {
     name: 'VECTOR-9', model: 'smg', auto: true, sightNode: 'optic',
@@ -51,7 +51,7 @@ export const WEAPONS = {
     cycle: 0.048, ejectAt: 0.30, boltKind: 'auto',
     vmScale: 0.64,
     hip: [0.248, -0.208, -0.540], hipRot: [-0.020, 0.180, 0.262],
-    adsDist: 0.235, tracerEvery: 3,
+    adsDist: 0.325, tracerEvery: 3,
   },
   shotgun: {
     name: 'KS-12 BREACHER', model: 'shotgun', auto: false, sightNode: 'irons',
@@ -65,7 +65,7 @@ export const WEAPONS = {
     cycle: 0.62, ejectAt: 0.42, boltKind: 'pump', pumpAfterShot: true,
     vmScale: 0.59,
     hip: [0.251, -0.216, -0.585], hipRot: [-0.020, 0.175, 0.255],
-    adsDist: 0.250, tracerEvery: 1, tracerWidth: 0.014,
+    adsDist: 0.335, tracerEvery: 1, tracerWidth: 0.014,
   },
   sniper: {
     name: 'LR-338 BALLISTA', model: 'sniper', auto: false, sightNode: 'optic',
@@ -79,7 +79,7 @@ export const WEAPONS = {
     cycle: 0.90, ejectAt: 0.38, boltKind: 'bolt', boltAfterShot: true,
     vmScale: 0.53,
     hip: [0.252, -0.217, -0.620], hipRot: [-0.020, 0.165, 0.250],
-    adsDist: 0.250, scope: true, scopeFov: 6.8, tracerEvery: 1, tracerWidth: 0.030,
+    adsDist: 0.345, scope: true, scopeFov: 6.8, tracerEvery: 1, tracerWidth: 0.030,
   },
 };
 
@@ -245,6 +245,12 @@ export class Weapons {
     const sp = sight ? sight.position : new THREE.Vector3(0, 0.04, -0.1);
     // scaled sight offset, negated: the optic lands exactly on the camera axis at the
     // correct eye relief, so the dot is on the crosshair with no fudge factor.
+    //
+    // adsDist must also keep the REARMOST geometry behind the eye. At 0.240 the
+    // AR's buffer tube and butt plate (gun-space z +0.176, x0.57 scale) landed
+    // ~5 cm in front of the camera and filled the bottom third of the ADS frame
+    // with a white slab. Alignment is unaffected by this distance — x and y are
+    // negated exactly — so pushing eye relief out only changes apparent size.
     m.adsPos = new THREE.Vector3(-sp.x * S, -sp.y * S, -def.adsDist - sp.z * S);
 
     // collimated dot for the non-magnified optics. Drawn without depth test and only
