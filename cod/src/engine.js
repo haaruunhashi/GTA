@@ -30,16 +30,25 @@ export class Input {
       if (!this.enabled) return;
       if (e.button === 0) this.mouse.left = true;
       if (e.button === 2) this.mouse.right = true;
-      if (!this.locked) dom.requestPointerLock();
+      this.dragging = true;
+      // Pointer lock is unavailable in some embeds (sandboxed iframes). Ask for
+      // it, but fall back to drag-to-look so the game is still playable there.
+      if (!this.locked && dom.requestPointerLock) {
+        const r = dom.requestPointerLock();
+        if (r && typeof r.catch === 'function') r.catch(() => { this.lockDenied = true; });
+      }
     });
     addEventListener('mouseup', e => {
       if (e.button === 0) this.mouse.left = false;
       if (e.button === 2) this.mouse.right = false;
+      this.dragging = false;
     });
     dom.addEventListener('contextmenu', e => e.preventDefault());
     addEventListener('mousemove', e => {
-      if (!this.locked || !this.enabled) return;
-      this.mouse.dx += e.movementX; this.mouse.dy += e.movementY;
+      if (!this.enabled) return;
+      if (this.locked) { this.mouse.dx += e.movementX; this.mouse.dy += e.movementY; return; }
+      // unlocked: only look while the button is held, so the cursor still works
+      if (this.dragging) { this.mouse.dx += e.movementX; this.mouse.dy += e.movementY; }
     });
     addEventListener('wheel', e => { this.mouse.wheel += Math.sign(e.deltaY); }, { passive: true });
     document.addEventListener('pointerlockchange', () => { this.locked = document.pointerLockElement === dom; });
